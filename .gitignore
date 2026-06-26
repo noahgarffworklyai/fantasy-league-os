@@ -1,0 +1,14 @@
+node_modules/
+.pnpm-store/
+dist/
+.expo/
+.turbo/
+*.log
+.env
+.env.local
+.env.*.local
+.DS_Store
+*.db
+coverage/
+.eas/
+apps/mobile/.env.development
