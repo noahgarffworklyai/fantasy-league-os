@@ -1,64 +1,60 @@
+import '../global.css';
+
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
-import { useAuthStore } from '@/lib/auth-store';
-import { colors } from '@/lib/theme';
+import { View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { BottomBar, TopChrome } from '@/components/AppChrome';
+import { CommissionerSheet } from '@/components/CommissionerSheet';
+import { CommissionerSheetProvider } from '@/lib/commissioner-sheet-context';
+import { LeagueProvider, useLeague } from '@/lib/league-context';
+import { ThemeProvider, useTheme } from '@/lib/theme';
 
 const queryClient = new QueryClient();
 
-function AuthGate({ children }: { children: React.ReactNode }) {
-  const { user, initialized, initialize } = useAuthStore();
-  const segments = useSegments();
-  const router = useRouter();
+const ONBOARDING_PATHS = ['/welcome', '/auth', '/onboarding'];
+function isOnboardingPath(p: string) {
+  return ONBOARDING_PATHS.some((x) => p === x || p.startsWith(x + '/'));
+}
 
-  useEffect(() => {
-    initialize();
-  }, [initialize]);
+function Shell() {
+  const pathname = usePathname();
+  const { user, leagues } = useLeague();
+  const { scheme } = useTheme();
+  const showChrome = !!user && leagues.length > 0 && !isOnboardingPath(pathname);
 
-  useEffect(() => {
-    if (!initialized) return;
-    const inAuth = segments[0] === '(auth)';
-    if (!user && !inAuth) {
-      router.replace('/(auth)/login');
-    } else if (user && inAuth) {
-      router.replace('/(tabs)');
-    }
-  }, [user, initialized, segments, router]);
-
-  return <>{children}</>;
+  return (
+    <View className="flex-1 bg-background">
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+      {showChrome ? <TopChrome /> : null}
+      <View className="flex-1">
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: 'transparent' },
+            animation: 'slide_from_right',
+          }}
+        />
+      </View>
+      {showChrome ? <BottomBar /> : null}
+      <CommissionerSheet />
+    </View>
+  );
 }
 
 export default function RootLayout() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthGate>
-        <StatusBar style="light" />
-        <Stack
-          screenOptions={{
-            headerStyle: { backgroundColor: colors.bg },
-            headerTintColor: colors.text,
-            contentStyle: { backgroundColor: colors.bg },
-          }}
-        >
-          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="create-league/index" options={{ title: 'Create League' }} />
-          <Stack.Screen name="invite/[token]" options={{ title: 'Join League' }} />
-          <Stack.Screen name="league/[id]/index" options={{ title: 'League' }} />
-          <Stack.Screen name="league/[id]/treasury" options={{ title: 'Treasury' }} />
-          <Stack.Screen name="league/[id]/standings" options={{ title: 'Standings' }} />
-          <Stack.Screen name="league/[id]/matchups" options={{ title: 'Matchups' }} />
-          <Stack.Screen name="league/[id]/feed" options={{ title: 'League Feed' }} />
-          <Stack.Screen name="league/[id]/community" options={{ title: 'Community' }} />
-          <Stack.Screen name="league/[id]/settings" options={{ title: 'Settings' }} />
-          <Stack.Screen name="league/[id]/invite" options={{ title: 'Invite Members' }} />
-          <Stack.Screen name="league/[id]/ai" options={{ title: 'AI Assistant' }} />
-          <Stack.Screen name="payment/success" options={{ title: 'Payment', headerShown: false }} />
-          <Stack.Screen name="payment/cancel" options={{ title: 'Payment Cancelled' }} />
-          <Stack.Screen name="health" options={{ title: 'Health Check' }} />
-        </Stack>
-      </AuthGate>
-    </QueryClientProvider>
+    <SafeAreaProvider>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <LeagueProvider>
+            <CommissionerSheetProvider>
+              <Shell />
+            </CommissionerSheetProvider>
+          </LeagueProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </SafeAreaProvider>
   );
 }

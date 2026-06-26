@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Commissioner design system (ported from web wireframe).
+ * Apple-inspired. Black / White / Green. Large corner radius. Liquid glass.
+ * OKLCH source tokens converted to HSL channels so opacity modifiers work in RN.
+ */
+
+:root {
+  --background: 0 0% 95%;
+  --foreground: 0 0% 5%;
+
+  --surface: 0 0% 99%;
+  --surface-elevated: 0 0% 100%;
+  --glass: 255 255 255;
+  --hairline: 0 0% 82%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 5%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 5%;
+
+  --primary: 0 0% 5%;
+  --primary-foreground: 0 0% 99%;
+  --secondary: 0 0% 94%;
+  --secondary-foreground: 0 0% 5%;
+  --muted: 0 0% 94%;
+  --muted-foreground: 0 0% 39%;
+  --accent: 142 65% 45%;
+  --accent-foreground: 0 0% 8%;
+
+  --success: 142 65% 45%;
+  --warning: 43 90% 50%;
+  --danger: 1 85% 57%;
+  --neutral: 0 0% 53%;
+
+  --destructive: 1 85% 57%;
+  --destructive-foreground: 0 0% 99%;
+
+  --border: 0 0% 87%;
+  --input: 0 0% 92%;
+  --ring: 142 65% 45%;
+}
+
+.dark {
+  --background: 0 0% 3%;
+  --foreground: 0 0% 97%;
+
+  --surface: 0 0% 8%;
+  --surface-elevated: 0 0% 12%;
+  --glass: 8 8 8;
+  --hairline: 0 0% 16%;
+
+  --card: 0 0% 8%;
+  --card-foreground: 0 0% 97%;
+  --popover: 0 0% 10%;
+  --popover-foreground: 0 0% 97%;
+
+  --primary: 0 0% 97%;
+  --primary-foreground: 0 0% 8%;
+  --secondary: 0 0% 14%;
+  --secondary-foreground: 0 0% 97%;
+  --muted: 0 0% 14%;
+  --muted-foreground: 0 0% 60%;
+  --accent: 142 67% 48%;
+  --accent-foreground: 0 0% 8%;
+
+  --success: 142 67% 48%;
+  --warning: 43 92% 60%;
+  --danger: 1 80% 60%;
+  --neutral: 0 0% 53%;
+
+  --destructive: 1 80% 60%;
+  --destructive-foreground: 0 0% 97%;
+
+  --border: 0 0% 16%;
+  --input: 0 0% 16%;
+  --ring: 142 67% 48%;
+}
