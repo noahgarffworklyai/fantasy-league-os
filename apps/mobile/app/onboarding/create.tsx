@@ -1,11 +1,11 @@
 import { useState, type ReactNode } from 'react';
-import { ScrollView } from 'react-native';
+import { Alert, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, ChevronLeft } from 'lucide-react-native';
 import { Pressable, Text, View } from '@/components/ui/primitives';
 import { Input } from '@/components/ui/Input';
 import { Divider } from '@/components/ui/Card';
-import { makeId, shortNameFor, useLeague, type League } from '@/lib/league-context';
+import { useLeague } from '@/lib/league-context';
 import { useNav } from '@/lib/nav';
 import { useTheme, useThemeTokens } from '@/lib/theme';
 
@@ -28,8 +28,9 @@ export default function CreateLeaguePage() {
   const insets = useSafeAreaInsets();
   const { hex, layout, surfaces } = useThemeTokens();
   const { scheme } = useTheme();
-  const { addLeague } = useLeague();
+  const { createHostedLeague } = useLeague();
   const [step, setStep] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
   const [d, setD] = useState<Draft>({
     name: '',
     size: 12,
@@ -49,30 +50,23 @@ export default function CreateLeaguePage() {
     (step === 3 && d.draftDate.length > 0) ||
     step === 4;
 
-  const create = () => {
-    const league: League = {
-      id: makeId(),
-      name: d.name,
-      shortName: shortNameFor(d.name),
-      type: 'hosted',
-      role: 'commissioner',
-      stage: 'preseason',
-      members: d.size,
-      potUsd: 0,
-      week: 0,
-      record: '—',
-      rank: 0,
-      size: d.size,
-      scoring: d.scoring,
-      buyIn: d.buyIn,
-      draftDate: d.draftDate,
-      draftType: d.draftType,
-      joined: 1,
-      paid: 0,
-      ready: false,
-    };
-    addLeague(league);
-    nav.replace('/readiness');
+  const create = async () => {
+    setSubmitting(true);
+    try {
+      await createHostedLeague({
+        name: d.name,
+        size: d.size,
+        buyIn: d.buyIn,
+        scoring: d.scoring,
+        draftType: d.draftType,
+        draftDate: d.draftDate || undefined,
+      });
+      nav.replace('/readiness');
+    } catch (e) {
+      Alert.alert('Could not create league', e instanceof Error ? e.message : 'Try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
@@ -124,9 +118,9 @@ export default function CreateLeaguePage() {
             </Text>
           </Pressable>
         ) : (
-          <Pressable onPress={create} style={surfaces.primaryButton}>
+          <Pressable onPress={create} disabled={submitting} style={[surfaces.primaryButton, submitting ? { opacity: 0.5 } : null]}>
             <Text variant="button" style={{ color: hex.primaryForeground, fontSize: 17 }}>
-              Create League
+              {submitting ? 'Creating…' : 'Create League'}
             </Text>
           </Pressable>
         )}

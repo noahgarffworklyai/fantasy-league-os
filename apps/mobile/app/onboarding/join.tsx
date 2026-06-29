@@ -1,66 +1,53 @@
 import { useState } from 'react';
+import { Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft } from 'lucide-react-native';
 import { Pressable, Text, View } from '@/components/ui/primitives';
 import { Input } from '@/components/ui/Input';
 import { Divider } from '@/components/ui/Card';
-import { makeId, shortNameFor, useLeague, type League } from '@/lib/league-context';
+import { useLeague } from '@/lib/league-context';
+import { parseInviteToken, previewInvite, redeemInvite } from '@/lib/league-api';
 import { useNav } from '@/lib/nav';
 import { useThemeTokens } from '@/lib/theme';
-
-interface Preview {
-  name: string;
-  commissioner: string;
-  size: number;
-  type: 'Hosted';
-  buyIn: number;
-  prize: string;
-  draftDate: string;
-}
+import type { InvitePreview } from '@flos/shared';
 
 export default function JoinPage() {
   const nav = useNav();
   const insets = useSafeAreaInsets();
   const { hex, layout, surfaces } = useThemeTokens();
-  const { addLeague } = useLeague();
+  const { refreshLeagues, setActiveId } = useLeague();
   const [code, setCode] = useState('');
-  const [preview, setPreview] = useState<Preview | null>(null);
+  const [preview, setPreview] = useState<InvitePreview | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [joining, setJoining] = useState(false);
 
-  const lookup = () => {
-    if (code.trim().length < 3) return;
-    setPreview({
-      name: 'Jackson Family League',
-      commissioner: 'Marcus J.',
-      size: 12,
-      type: 'Hosted',
-      buyIn: 100,
-      prize: '70 / 20 / 10',
-      draftDate: 'Sun, Sep 6 · 7:00 PM',
-    });
+  const lookup = async () => {
+    const token = parseInviteToken(code);
+    if (token.length < 3) return;
+    setLoading(true);
+    try {
+      setPreview(await previewInvite(token));
+    } catch (e) {
+      Alert.alert('Invite not found', e instanceof Error ? e.message : 'Check the code and try again.');
+      setPreview(null);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const join = () => {
+  const join = async () => {
     if (!preview) return;
-    const l: League = {
-      id: makeId(),
-      name: preview.name,
-      shortName: shortNameFor(preview.name),
-      type: 'hosted',
-      role: 'member',
-      stage: 'preseason',
-      members: preview.size,
-      potUsd: preview.buyIn * preview.size,
-      week: 0,
-      record: '—',
-      rank: 0,
-      size: preview.size,
-      buyIn: preview.buyIn,
-      draftDate: preview.draftDate,
-      joined: 8,
-      paid: 6,
-    };
-    addLeague(l);
-    nav.replace('/');
+    setJoining(true);
+    try {
+      const res = await redeemInvite(preview.token);
+      await refreshLeagues();
+      setActiveId(res.leagueId);
+      nav.replace('/');
+    } catch (e) {
+      Alert.alert('Could not join', e instanceof Error ? e.message : 'Try again.');
+    } finally {
+      setJoining(false);
+    }
   };
 
   return (
@@ -92,10 +79,14 @@ export default function JoinPage() {
         <Input value={code} onChangeText={setCode} placeholder="Invite code or link" autoCapitalize="none" />
         <Pressable
           onPress={lookup}
-          disabled={code.trim().length < 3}
-          style={[surfaces.secondaryButton, { height: 48 }, code.trim().length < 3 ? { opacity: 0.4 } : null]}
+          disabled={code.trim().length < 3 || loading}
+          style={[
+            surfaces.secondaryButton,
+            { height: 48 },
+            code.trim().length < 3 || loading ? { opacity: 0.4 } : null,
+          ]}
         >
-          <Text variant="bodySm">Look up league</Text>
+          <Text variant="bodySm">{loading ? 'Looking up…' : 'Look up league'}</Text>
         </Pressable>
       </View>
 
@@ -104,26 +95,30 @@ export default function JoinPage() {
           <View style={{ padding: 20 }}>
             <Text variant="eyebrow">League preview</Text>
             <Text variant="scoreLG" style={{ marginTop: 4, fontSize: 24 }}>
-              {preview.name}
+              {preview.leagueName}
             </Text>
             <Text variant="subtitle" style={{ marginTop: 4 }}>
-              Commissioner: {preview.commissioner}
+              Buy-in ${Math.round(preview.buyInCents / 100)} · {preview.memberCount} members
             </Text>
           </View>
-          <PreviewRow label="League size" value={`${preview.size} teams`} />
-          <PreviewRow label="League type" value={preview.type} />
-          <PreviewRow label="Buy in" value={`$${preview.buyIn}`} />
-          <PreviewRow label="Prize" value={preview.prize} />
-          <PreviewRow label="Draft" value={preview.draftDate} />
-          <PreviewRow label="Your role" value="Member" />
+          <PreviewRow label="Platform fee" value={`$${Math.round(preview.platformFeeCents / 100)}`} />
+          <PreviewRow label="Members" value={`${preview.memberCount}`} />
+          <PreviewRow
+            label="Expires"
+            value={new Date(preview.expiresAt).toLocaleDateString()}
+          />
         </View>
       ) : null}
 
       <View style={layout.fill} />
       {preview ? (
-        <Pressable onPress={join} style={[surfaces.primaryButton, { marginTop: 24 }]}>
+        <Pressable
+          onPress={join}
+          disabled={joining}
+          style={[surfaces.primaryButton, { marginTop: 24 }, joining ? { opacity: 0.5 } : null]}
+        >
           <Text variant="button" style={{ color: hex.primaryForeground, fontSize: 17 }}>
-            Join League
+            {joining ? 'Joining…' : 'Join League'}
           </Text>
         </Pressable>
       ) : null}

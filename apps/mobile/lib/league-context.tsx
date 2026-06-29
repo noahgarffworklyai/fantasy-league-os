@@ -1,12 +1,20 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { LeagueListItem, User as ApiUser } from '@flos/shared';
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from 'react';
+import { useAuthStore } from './auth-store';
+import {
+  createHostedLeagueOnApi,
+  fetchLeaguesFromApi,
+  type CreateHostedLeagueInput,
+} from './league-api';
 
 export type LeagueType = 'hosted' | 'synced';
 export type SyncPlatform = 'ESPN' | 'Sleeper' | 'Yahoo';
@@ -60,8 +68,6 @@ export interface User {
   provider: AuthProvider;
 }
 
-/* ------------------------- Permission model ------------------------- */
-
 export type Permission =
   | 'manageTeam'
   | 'setLineup'
@@ -81,6 +87,59 @@ export type Permission =
   | 'manageDraftSetup'
   | 'sendPaymentReminders'
   | 'refreshSync';
+
+const PROVIDER_LABEL: Record<string, SyncPlatform> = {
+  sleeper: 'Sleeper',
+  espn: 'ESPN',
+  yahoo: 'Yahoo',
+};
+
+const ACTIVE_ID_KEY = 'commissioner.activeLeagueId';
+
+function stageForWeek(week: number): SeasonStage {
+  if (week <= 0) return 'preseason';
+  if (week >= 15) return 'playoffs';
+  return 'regular';
+}
+
+export function mapApiUser(user: ApiUser): User {
+  return {
+    name: user.displayName,
+    email: user.email,
+    provider: 'email',
+  };
+}
+
+export function mapApiLeague(row: LeagueListItem): League {
+  const provider = row.provider ? PROVIDER_LABEL[row.provider] : undefined;
+  const type = provider ? 'synced' : 'hosted';
+  const role: UserRole = row.role === 'commissioner' ? 'commissioner' : 'member';
+  const week = row.currentWeek ?? 0;
+  const buyIn = Math.round(row.buyInCents / 100);
+  const members = row.memberCount || 1;
+
+  return {
+    id: row.id,
+    name: row.name,
+    shortName: shortNameFor(row.name),
+    type,
+    platform: provider,
+    role,
+    stage: stageForWeek(week),
+    members,
+    size: members,
+    joined: members,
+    potUsd: buyIn * members,
+    buyIn,
+    platformFee: Math.round(row.platformFeeCents / 100),
+    week,
+    record: week > 0 ? '0-0' : '—',
+    rank: 0,
+    teamName: row.teamName ?? undefined,
+    paymentStatus: row.paid ? 'paid' : 'unpaid',
+    paid: row.paid ? 1 : 0,
+  };
+}
 
 export function permissionsFor(l: League): Set<Permission> {
   const set = new Set<Permission>([
@@ -115,7 +174,6 @@ export function can(l: League | null | undefined, p: Permission) {
   return permissionsFor(l).has(p);
 }
 
-/** True when fantasy actions should deep-link to the connected platform. */
 export function isFantasyExternal(l: League | null | undefined) {
   return !!l && l.type === 'synced';
 }
@@ -127,11 +185,14 @@ export function platformActionLabel(l: League | null | undefined, verb = 'Open')
 
 interface AppContextValue {
   user: User | null;
-  signIn: (u: User) => void;
-  signOut: () => void;
+  authInitialized: boolean;
+  leaguesLoading: boolean;
+  signOut: () => Promise<void>;
   leagues: League[];
   active: League | null;
   setActiveId: (id: string) => void;
+  refreshLeagues: () => Promise<League[]>;
+  createHostedLeague: (input: CreateHostedLeagueInput) => Promise<League>;
   addLeague: (l: League) => void;
   updateLeague: (id: string, patch: Partial<League>) => void;
   can: (p: Permission) => boolean;
@@ -139,201 +200,128 @@ interface AppContextValue {
 
 const Ctx = createContext<AppContextValue | null>(null);
 
-const STORAGE_KEY = 'commissioner.v3';
-
-interface Persisted {
-  user: User | null;
-  leagues: League[];
-  activeId: string | null;
-}
-
-/* --------------------------- Demo data --------------------------- */
-
-const DEMO_USER: User = {
-  name: 'Marc Jackson',
-  email: 'demo@commissioner.app',
-  provider: 'apple',
-};
-
-const DEMO_LEAGUES: League[] = [
-  {
-    id: 'demo-1',
-    name: 'Jackson Family League',
-    shortName: 'JF',
-    type: 'hosted',
-    role: 'commissioner',
-    stage: 'preseason',
-    members: 12,
-    size: 12,
-    joined: 10,
-    paid: 9,
-    potUsd: 900,
-    potCollected: 900,
-    potTotal: 1200,
-    buyIn: 100,
-    platformFee: 5,
-    scoring: 'Half PPR',
-    draftType: 'Snake',
-    draftSchedule: 'Sunday at 7:00 PM',
-    week: 0,
-    record: '0-0',
-    rank: 0,
-    teamName: 'Jackson Storm',
-    paymentStatus: 'paid',
-    paidCount: 9,
-    unpaidCount: 2,
-    pendingCount: 1,
-  },
-  {
-    id: 'demo-2',
-    name: 'Work League',
-    shortName: 'WL',
-    type: 'hosted',
-    role: 'member',
-    stage: 'regular',
-    members: 12,
-    size: 12,
-    joined: 12,
-    paid: 9,
-    potUsd: 675,
-    potCollected: 675,
-    potTotal: 900,
-    buyIn: 75,
-    platformFee: 4,
-    scoring: 'PPR',
-    draftType: 'Snake',
-    week: 7,
-    record: '4-3',
-    rank: 5,
-    teamName: 'Office Gridiron',
-    paymentStatus: 'unpaid',
-    paidCount: 9,
-    unpaidCount: 3,
-    pendingCount: 0,
-  },
-  {
-    id: 'demo-3',
-    name: 'College Friends',
-    shortName: 'CF',
-    type: 'synced',
-    platform: 'Sleeper',
-    role: 'commissioner',
-    stage: 'regular',
-    members: 12,
-    size: 12,
-    joined: 12,
-    paid: 12,
-    potUsd: 1200,
-    potCollected: 1200,
-    potTotal: 1200,
-    buyIn: 100,
-    platformFee: 5,
-    scoring: 'Half PPR',
-    draftType: 'Snake',
-    week: 7,
-    record: '5-2',
-    rank: 3,
-    teamName: 'Campus Crushers',
-    paymentStatus: 'paid',
-    paidCount: 12,
-    unpaidCount: 0,
-    pendingCount: 0,
-  },
-  {
-    id: 'demo-4',
-    name: 'Dynasty League',
-    shortName: 'DY',
-    type: 'synced',
-    platform: 'ESPN',
-    role: 'member',
-    stage: 'playoffs',
-    members: 12,
-    size: 12,
-    joined: 12,
-    paid: 12,
-    potUsd: 1800,
-    potCollected: 1800,
-    potTotal: 1800,
-    buyIn: 150,
-    platformFee: 7,
-    scoring: 'PPR',
-    draftType: 'Snake',
-    week: 15,
-    record: '9-5',
-    rank: 4,
-    teamName: 'Legacy Lineup',
-    paymentStatus: 'paid',
-    paidCount: 12,
-    unpaidCount: 0,
-    pendingCount: 0,
-  },
-];
-
-function defaultPersisted(): Persisted {
-  return {
-    user: DEMO_USER,
-    leagues: DEMO_LEAGUES,
-    activeId: DEMO_LEAGUES[0].id,
-  };
-}
-
-function save(p: Persisted) {
-  AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(p)).catch(() => {});
-}
-
 export function LeagueProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(DEMO_USER);
-  const [leagues, setLeagues] = useState<League[]>(DEMO_LEAGUES);
-  const [activeId, setActiveIdState] = useState<string | null>(DEMO_LEAGUES[0].id);
+  const apiUser = useAuthStore((s) => s.user);
+  const authInitialized = useAuthStore((s) => s.initialized);
+  const authLogout = useAuthStore((s) => s.logout);
+  const authInitialize = useAuthStore((s) => s.initialize);
+
+  const [leagues, setLeagues] = useState<League[]>([]);
+  const [activeId, setActiveIdState] = useState<string | null>(null);
+  const [leaguesLoading, setLeaguesLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
+  const user = apiUser ? mapApiUser(apiUser) : null;
+
   useEffect(() => {
-    (async () => {
-      try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw) as Persisted;
-          if (parsed.user && parsed.leagues && parsed.leagues.length > 0) {
-            setUser(parsed.user);
-            setLeagues(parsed.leagues);
-            setActiveIdState(parsed.activeId ?? parsed.leagues[0]?.id ?? null);
-          }
-        }
-      } catch {
-        /* ignore */
-      } finally {
-        setHydrated(true);
-      }
-    })();
+    authInitialize().catch(() => {});
+  }, [authInitialize]);
+
+  useEffect(() => {
+    AsyncStorage.getItem(ACTIVE_ID_KEY)
+      .then((id) => {
+        if (id) setActiveIdState(id);
+      })
+      .finally(() => setHydrated(true));
   }, []);
+
+  const refreshLeagues = useCallback(async () => {
+    if (!apiUser) {
+      setLeagues([]);
+      return [];
+    }
+    setLeaguesLoading(true);
+    try {
+      const rows = await fetchLeaguesFromApi();
+      const mapped = rows.map(mapApiLeague);
+      setLeagues(mapped);
+      setActiveIdState((current) => {
+        if (mapped.length === 0) return null;
+        if (current && mapped.some((l) => l.id === current)) return current;
+        return mapped[0].id;
+      });
+      return mapped;
+    } finally {
+      setLeaguesLoading(false);
+    }
+  }, [apiUser]);
+
+  useEffect(() => {
+    if (!authInitialized || !hydrated) return;
+    if (apiUser) {
+      refreshLeagues().catch(() => setLeagues([]));
+    } else {
+      setLeagues([]);
+      setActiveIdState(null);
+    }
+  }, [apiUser, authInitialized, hydrated, refreshLeagues]);
 
   useEffect(() => {
     if (!hydrated) return;
-    save({ user, leagues, activeId });
-  }, [user, leagues, activeId, hydrated]);
+    if (activeId) AsyncStorage.setItem(ACTIVE_ID_KEY, activeId).catch(() => {});
+    else AsyncStorage.removeItem(ACTIVE_ID_KEY).catch(() => {});
+  }, [activeId, hydrated]);
 
   const value = useMemo<AppContextValue>(() => {
     const active = leagues.find((l) => l.id === activeId) ?? leagues[0] ?? null;
     return {
       user,
-      signIn: (u) => setUser(u),
-      signOut: () => {
-        setUser(DEMO_USER);
-        setLeagues(DEMO_LEAGUES);
-        setActiveIdState(DEMO_LEAGUES[0].id);
+      authInitialized,
+      leaguesLoading,
+      signOut: async () => {
+        await authLogout();
+        setLeagues([]);
+        setActiveIdState(null);
       },
       leagues,
       active,
       setActiveId: (id) => setActiveIdState(id),
+      refreshLeagues,
+      createHostedLeague: async (input) => {
+        const res = await createHostedLeagueOnApi(input);
+        await refreshLeagues();
+        setActiveIdState(res.league.id);
+        const created = mapApiLeague({
+          id: res.league.id,
+          name: res.league.name,
+          season: new Date().getFullYear(),
+          role: 'commissioner',
+          paid: true,
+          buyInCents: res.league.buyInCents,
+          platformFeeCents: res.league.platformFeeCents,
+          memberCount: 1,
+          provider: null,
+          currentWeek: 0,
+          teamName: null,
+        });
+        return {
+          ...created,
+          size: input.size,
+          members: input.size,
+          scoring: input.scoring as League['scoring'],
+          draftType: input.draftType as League['draftType'],
+          draftDate: input.draftDate,
+          joined: 1,
+          ready: false,
+        };
+      },
       addLeague: (l) => {
-        setLeagues((prev) => [...prev, l]);
+        setLeagues((prev) => [...prev.filter((x) => x.id !== l.id), l]);
         setActiveIdState(l.id);
       },
       updateLeague: (id, patch) =>
         setLeagues((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l))),
       can: (p) => can(active, p),
     };
-  }, [user, leagues, activeId]);
+  }, [
+    user,
+    authInitialized,
+    leaguesLoading,
+    authLogout,
+    leagues,
+    activeId,
+    refreshLeagues,
+  ]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

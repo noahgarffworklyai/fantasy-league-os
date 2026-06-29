@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { BottomBar, TopChrome } from '@/components/AppChrome';
+import { AuthGate } from '@/components/AuthGate';
 import { CommissionerSheet } from '@/components/CommissionerSheet';
 import { CommissionerSheetProvider } from '@/lib/commissioner-sheet-context';
 import { LeagueProvider, useLeague } from '@/lib/league-context';
@@ -23,13 +24,19 @@ const TAB_SCREEN_OPTIONS = { animation: 'none' as const };
 
 function Shell() {
   const pathname = usePathname();
-  const { user, leagues } = useLeague();
+  const { user, leagues, authInitialized, leaguesLoading } = useLeague();
   const { scheme } = useTheme();
   const hex = useHex();
-  const showChrome = !!user && leagues.length > 0 && !isOnboardingPath(pathname);
+  const showChrome =
+    authInitialized &&
+    !leaguesLoading &&
+    !!user &&
+    leagues.length > 0 &&
+    !isOnboardingPath(pathname);
 
   return (
-    <View style={{ flex: 1, backgroundColor: hex.background }}>
+    <AuthGate>
+      <View style={{ flex: 1, backgroundColor: hex.background }}>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       {showChrome ? <TopChrome /> : null}
       <View style={{ flex: 1 }}>
@@ -48,7 +55,8 @@ function Shell() {
       </View>
       {showChrome ? <BottomBar /> : null}
       <CommissionerSheet />
-    </View>
+      </View>
+    </AuthGate>
   );
 }
 

@@ -63,17 +63,26 @@ export const leagueSummarySchema = z.object({
   teamCount: z.number().optional(),
 });
 
-export const createLeagueSchema = z.object({
-  provider: providerSchema,
-  externalLeagueId: z.string(),
-  name: z.string().min(1),
-  season: z.number(),
-  buyInCents: z.number().int().min(0).default(10000),
-  platformFeeCents: z.number().int().min(0).default(500),
-  payoutTemplate: z.string().default('standard'),
-  draftDate: z.string().datetime().optional(),
-  customRules: z.string().optional(),
-});
+export const createLeagueSchema = z
+  .object({
+    provider: providerSchema.optional(),
+    externalLeagueId: z.string().optional(),
+    name: z.string().min(1),
+    season: z.number(),
+    buyInCents: z.number().int().min(0).default(10000),
+    platformFeeCents: z.number().int().min(0).default(500),
+    payoutTemplate: z.string().default('standard'),
+    draftDate: z.string().datetime().optional(),
+    customRules: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      const hasProvider = !!data.provider || !!data.externalLeagueId;
+      if (!hasProvider) return true;
+      return !!(data.provider && data.externalLeagueId);
+    },
+    { message: 'provider and externalLeagueId must both be set for synced leagues' },
+  );
 
 export const updateLeagueSettingsSchema = z.object({
   buyInCents: z.number().int().min(0).optional(),
@@ -89,5 +98,19 @@ export type CanonicalMatchup = z.infer<typeof canonicalMatchupSchema>;
 export type CanonicalPlayer = z.infer<typeof canonicalPlayerSchema>;
 export type CanonicalLeague = z.infer<typeof canonicalLeagueSchema>;
 export type LeagueSummary = z.infer<typeof leagueSummarySchema>;
-export type CreateLeagueInput = z.infer<typeof createLeagueSchema>;
+export const leagueListItemSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  season: z.number(),
+  role: z.enum(['commissioner', 'member']),
+  paid: z.boolean(),
+  buyInCents: z.number(),
+  platformFeeCents: z.number(),
+  memberCount: z.number(),
+  provider: providerSchema.nullable().optional(),
+  currentWeek: z.number().optional(),
+  teamName: z.string().nullable().optional(),
+});
+
+export type LeagueListItem = z.infer<typeof leagueListItemSchema>;
 export type UpdateLeagueSettingsInput = z.infer<typeof updateLeagueSettingsSchema>;

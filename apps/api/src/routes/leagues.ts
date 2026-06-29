@@ -1,5 +1,5 @@
 import { createLeagueSchema, updateLeagueSettingsSchema } from '@flos/shared';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { db } from '../db/index.js';
 import { leagueMembers, leagueProviderLinks, leagues } from '../db/schema.js';
@@ -20,16 +20,46 @@ export async function leagueRoutes(app: FastifyInstance) {
       .innerJoin(leagues, eq(leagueMembers.leagueId, leagues.id))
       .where(eq(leagueMembers.userId, userId));
 
+    if (memberships.length === 0) {
+      return { leagues: [] };
+    }
+
+    const leagueIds = memberships.map(({ league }) => league.id);
+    const memberCounts = await db
+      .select({
+        leagueId: leagueMembers.leagueId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(leagueMembers)
+      .where(inArray(leagueMembers.leagueId, leagueIds))
+      .groupBy(leagueMembers.leagueId);
+
+    const countByLeague = new Map(memberCounts.map((row) => [row.leagueId, row.count]));
+
+    const links = await db
+      .select()
+      .from(leagueProviderLinks)
+      .where(inArray(leagueProviderLinks.leagueId, leagueIds));
+    const linkByLeague = new Map(links.map((link) => [link.leagueId, link]));
+
     return {
-      leagues: memberships.map(({ league, member }) => ({
-        id: league.id,
-        name: league.name,
-        season: league.season,
-        role: member.role,
-        paid: member.paid,
-        buyInCents: league.buyInCents,
-        platformFeeCents: league.platformFeeCents,
-      })),
+      leagues: memberships.map(({ league, member }) => {
+        const link = linkByLeague.get(league.id);
+        const snapshot = link?.snapshot as { currentWeek?: number } | null;
+        return {
+          id: league.id,
+          name: league.name,
+          season: league.season,
+          role: member.role,
+          paid: member.paid,
+          buyInCents: league.buyInCents,
+          platformFeeCents: league.platformFeeCents,
+          memberCount: countByLeague.get(league.id) ?? 1,
+          provider: link?.provider ?? null,
+          currentWeek: snapshot?.currentWeek ?? 0,
+          teamName: member.teamName,
+        };
+      }),
     };
   });
 
@@ -59,23 +89,25 @@ export async function leagueRoutes(app: FastifyInstance) {
       paidAt: new Date(),
     });
 
-    const credentials = (request.body as { credentials?: Record<string, unknown> }).credentials;
-    const [link] = await db
-      .insert(leagueProviderLinks)
-      .values({
-        leagueId: league.id,
-        provider: body.provider,
-        externalLeagueId: body.externalLeagueId,
-        encryptedCredentials: credentials ? encryptCredentials(credentials) : null,
-      })
-      .returning();
+    if (body.provider && body.externalLeagueId) {
+      const credentials = (request.body as { credentials?: Record<string, unknown> }).credentials;
+      const [link] = await db
+        .insert(leagueProviderLinks)
+        .values({
+          leagueId: league.id,
+          provider: body.provider,
+          externalLeagueId: body.externalLeagueId,
+          encryptedCredentials: credentials ? encryptCredentials(credentials) : null,
+        })
+        .returning();
 
-    try {
-      await syncLeagueByLeagueId(league.id);
-    } catch {
-      // sync may fail if provider unavailable; league still created
+      try {
+        await syncLeagueByLeagueId(league.id);
+      } catch {
+        // sync may fail if provider unavailable; league still created
+      }
+      await scheduleLeagueSync(link.id);
     }
-    await scheduleLeagueSync(link.id);
 
     return reply.status(201).send({ league });
   });

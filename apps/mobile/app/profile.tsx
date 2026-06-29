@@ -74,9 +74,9 @@ export default function ProfilePage() {
 
       <View style={[surfaces.card, { marginTop: 8, marginBottom: 20 }]}>
         <Pressable
-          onPress={() => {
-            signOut();
-            nav.replace('/');
+          onPress={async () => {
+            await signOut();
+            nav.replace('/welcome');
           }}
           style={[layout.row, { justifyContent: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 16 }]}
         >

@@ -226,7 +226,7 @@ function ProfileMenuSheet({
 }: {
   open: boolean;
   onClose: () => void;
-  signOut: () => void;
+  signOut: () => Promise<void>;
   name: string;
   email: string;
 }) {
@@ -246,9 +246,9 @@ function ProfileMenuSheet({
     {
       icon: LogOut,
       label: 'Logout',
-      onPress: () => {
+      onPress: async () => {
         onClose();
-        signOut();
+        await signOut();
       },
     },
   ];
