@@ -1,8 +1,9 @@
-import { createLeagueSchema, updateLeagueSettingsSchema } from '@flos/shared';
+import { fetchSleeperMyRoster, fetchSleeperOwnerAvatars, fetchSleeperWeekMatchups, resolveSleeperOwnerId } from '@flos/league-adapters';
+import { createLeagueSchema, updateLeagueSettingsSchema, type CanonicalLeague } from '@flos/shared';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { db } from '../db/index.js';
-import { leagueMembers, leagueProviderLinks, leagues } from '../db/schema.js';
+import { leagueMembers, leagueProviderLinks, leagues, users } from '../db/schema.js';
 import { authMiddleware, requireLeagueMembership, type AuthenticatedRequest } from '../lib/auth-middleware.js';
 import { encryptCredentials } from '../lib/crypto.js';
 import { scheduleLeagueSync } from '../services/sync-worker.js';
@@ -55,6 +56,10 @@ export async function leagueRoutes(app: FastifyInstance) {
           buyInCents: league.buyInCents,
           platformFeeCents: league.platformFeeCents,
           memberCount: countByLeague.get(league.id) ?? 1,
+          teamCount:
+            (link?.snapshot as { teams?: unknown[] } | null)?.teams?.length ??
+            countByLeague.get(league.id) ??
+            1,
           provider: link?.provider ?? null,
           currentWeek: snapshot?.currentWeek ?? 0,
           teamName: member.teamName,
@@ -137,7 +142,7 @@ export async function leagueRoutes(app: FastifyInstance) {
     return {
       league,
       membership: membership
-        ? { role: membership.role, paid: membership.paid }
+        ? { role: membership.role, paid: membership.paid, teamName: membership.teamName }
         : null,
       providerLink: link
         ? {
@@ -203,7 +208,7 @@ export async function leagueRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
 
     try {
-      await requireLeagueMembership(authReq, id, { paid: true });
+      await requireLeagueMembership(authReq, id);
     } catch (e) {
       return reply.status(403).send({ error: e instanceof Error ? e.message : 'Access denied' });
     }
@@ -214,8 +219,33 @@ export async function leagueRoutes(app: FastifyInstance) {
       .where(eq(leagueProviderLinks.leagueId, id))
       .limit(1);
 
-    const snapshot = link?.snapshot as { standings?: unknown[] } | null;
-    return { standings: snapshot?.standings ?? [] };
+    const snapshot = link?.snapshot as CanonicalLeague | null;
+    const teamMap = new Map((snapshot?.teams ?? []).map((t) => [t.externalTeamId, t]));
+
+    let liveOwnerAvatars = new Map<string, string>();
+    if (link?.provider === 'sleeper' && link.externalLeagueId) {
+      try {
+        liveOwnerAvatars = await fetchSleeperOwnerAvatars(link.externalLeagueId);
+      } catch {
+        // fall back to snapshot avatars only
+      }
+    }
+
+    const standings = (snapshot?.standings ?? []).map((row) => {
+      const team = teamMap.get(row.teamExternalId);
+      const ownerAvatarUrl =
+        team?.ownerAvatarUrl ??
+        (team?.ownerExternalId ? liveOwnerAvatars.get(team.ownerExternalId) ?? null : null);
+      return {
+        ...row,
+        teamName: team?.name ?? `Team ${row.teamExternalId}`,
+        ownerName: team?.ownerName ?? null,
+        ownerAvatarUrl,
+        pointsAgainst: row.pointsAgainst ?? team?.pointsAgainst ?? 0,
+      };
+    });
+
+    return { standings, currentWeek: snapshot?.currentWeek ?? 0 };
   });
 
   app.get('/leagues/:id/matchups', { preHandler: authMiddleware }, async (request, reply) => {
@@ -224,7 +254,7 @@ export async function leagueRoutes(app: FastifyInstance) {
     const { week } = request.query as { week?: string };
 
     try {
-      await requireLeagueMembership(authReq, id, { paid: true });
+      await requireLeagueMembership(authReq, id);
     } catch (e) {
       return reply.status(403).send({ error: e instanceof Error ? e.message : 'Access denied' });
     }
@@ -235,15 +265,100 @@ export async function leagueRoutes(app: FastifyInstance) {
       .where(eq(leagueProviderLinks.leagueId, id))
       .limit(1);
 
-    const snapshot = link?.snapshot as {
-      schedule?: Array<{ week: number }>;
-      currentWeek?: number;
-    } | null;
-
+    const snapshot = link?.snapshot as CanonicalLeague | null;
     const targetWeek = week ? Number(week) : snapshot?.currentWeek ?? 1;
-    const matchups = (snapshot?.schedule ?? []).filter((m) => m.week === targetWeek);
 
-    return { week: targetWeek, matchups };
+    if (link?.provider === 'sleeper' && link.externalLeagueId) {
+      try {
+        const matchups = await fetchSleeperWeekMatchups(link.externalLeagueId, targetWeek);
+        return { week: targetWeek, matchups, source: 'sleeper' as const };
+      } catch (err) {
+        return reply.status(400).send({
+          error: err instanceof Error ? err.message : 'Failed to load Sleeper matchups',
+        });
+      }
+    }
+
+    const teamMap = new Map((snapshot?.teams ?? []).map((t) => [t.externalTeamId, t]));
+    const matchups = (snapshot?.schedule ?? [])
+      .filter((m) => m.week === targetWeek)
+      .map((m) => {
+        const home = teamMap.get(m.homeTeamExternalId);
+        const away = teamMap.get(m.awayTeamExternalId);
+        return {
+          matchupId: m.matchupId,
+          week: m.week,
+          status: m.status,
+          home: {
+            rosterId: m.homeTeamExternalId,
+            teamName: home?.name ?? m.homeTeamExternalId,
+            ownerName: home?.ownerName ?? null,
+            points: m.homeScore ?? 0,
+            lineup: [],
+          },
+          away: {
+            rosterId: m.awayTeamExternalId,
+            teamName: away?.name ?? m.awayTeamExternalId,
+            ownerName: away?.ownerName ?? null,
+            points: m.awayScore ?? 0,
+            lineup: [],
+          },
+        };
+      });
+
+    return { week: targetWeek, matchups, source: 'snapshot' as const };
+  });
+
+  app.get('/leagues/:id/my-roster', { preHandler: authMiddleware }, async (request, reply) => {
+    const authReq = request as AuthenticatedRequest;
+    const { id } = request.params as { id: string };
+
+    try {
+      await requireLeagueMembership(authReq, id);
+    } catch (e) {
+      return reply.status(403).send({ error: e instanceof Error ? e.message : 'Access denied' });
+    }
+
+    const [membership] = await db
+      .select()
+      .from(leagueMembers)
+      .where(and(eq(leagueMembers.leagueId, id), eq(leagueMembers.userId, authReq.userId)))
+      .limit(1);
+
+    const [user] = await db.select().from(users).where(eq(users.id, authReq.userId)).limit(1);
+
+    const [link] = await db
+      .select()
+      .from(leagueProviderLinks)
+      .where(eq(leagueProviderLinks.leagueId, id))
+      .limit(1);
+
+    if (!link || link.provider !== 'sleeper' || !link.externalLeagueId) {
+      return reply.status(404).send({ error: 'No synced Sleeper league linked' });
+    }
+
+    const snapshot = link.snapshot as CanonicalLeague | null;
+    const teams = snapshot?.teams ?? [];
+    const ownerId = resolveSleeperOwnerId(teams, {
+      displayName: user?.displayName ?? undefined,
+      teamName: membership?.teamName,
+      providerTeamId: membership?.providerTeamId,
+    });
+
+    if (!ownerId) {
+      return reply.status(404).send({
+        error: 'Could not match your account to a Sleeper team. Try refreshing sync from Settings.',
+      });
+    }
+
+    try {
+      const roster = await fetchSleeperMyRoster(link.externalLeagueId, ownerId);
+      return { roster, source: 'sleeper' as const };
+    } catch (err) {
+      return reply.status(400).send({
+        error: err instanceof Error ? err.message : 'Failed to load roster',
+      });
+    }
   });
 
   app.get('/leagues/:id/members', { preHandler: authMiddleware }, async (request, reply) => {

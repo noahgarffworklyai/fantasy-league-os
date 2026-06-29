@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ActivityIndicator } from 'react-native';
 import { useNav } from '@/lib/nav';
 import {
   Activity,
@@ -19,6 +20,7 @@ import { AICard } from '@/components/ui/AICard';
 import { Card, Divider } from '@/components/ui/Card';
 import { useLeague, type League } from '@/lib/league-context';
 import { homePriorities } from '@/lib/ai-intelligence';
+import { formatScore, useHomeLeagueStats } from '@/lib/league-snapshot-api';
 import { useThemeTokens } from '@/lib/theme';
 
 type TabKey = 'priorities' | 'league' | 'news';
@@ -28,66 +30,50 @@ export default function HomePage() {
   const router = useNav();
   const [tab, setTab] = useState<TabKey>('priorities');
   const { hex, layout, surfaces } = useThemeTokens();
+  const { data: stats, isLoading, isError } = useHomeLeagueStats(
+    active?.id,
+    user?.name ?? '',
+    active?.teamName,
+  );
+
   if (!active) return null;
+
   const isSynced = active.type === 'synced';
   const firstName = (user?.name ?? 'Marc').split(/\s+/)[0];
+  const week = stats?.week || active.week || 1;
+  const teamCount = stats?.teamCount || active.members;
+  const rank = stats?.rank || active.rank;
+  const record = stats?.record && stats.record !== '—' ? stats.record : active.record;
+  const teamLabel = stats?.teamName ?? active.teamName;
+  const showLiveStats = !!stats?.hasSnapshot;
 
   return (
     <Screen>
       <View style={layout.screen}>
         <View style={layout.intro}>
-          <Text variant="eyebrow">Week {active.week || 1}</Text>
+          <Text variant="eyebrow">Week {week}</Text>
           <Text variant="hero" style={{ marginTop: 4 }}>
             Hi, {firstName}.
           </Text>
           <Text variant="subtitle" style={{ marginTop: 8 }}>
-            {active.teamName ? `${active.teamName} · ${active.record}` : active.record} ·{' '}
-            {active.members} teams · {active.rank > 0 ? `#${active.rank}` : '—'}
+            {teamLabel ? `${teamLabel} · ${record}` : record} · {teamCount} teams ·{' '}
+            {rank > 0 ? `#${rank}` : '—'}
           </Text>
+          {isSynced && stats?.syncStatus === 'error' ? (
+            <Text variant="caption" style={{ marginTop: 6, color: hex.warning }}>
+              Sync issue — open League settings to refresh.
+            </Text>
+          ) : null}
         </View>
 
-        <Pressable onPress={() => router.switchTab('/team')}>
-          <Card>
-            <View style={layout.cardPad}>
-              <View style={layout.rowBetween}>
-                <Text variant="eyebrow">
-                  Week {active.week || 1} · This week
-                </Text>
-                <View style={surfaces.pillSuccess}>
-                  <Text variant="captionSuccess">72% win</Text>
-                </View>
-              </View>
-              <View style={[layout.rowEnd, { marginTop: 20 }]}>
-                <View>
-                  <Text variant="bodyMuted">You</Text>
-                  <Text variant="scoreXL" style={{ marginTop: 4 }}>
-                    118.4
-                  </Text>
-                  <Text variant="bodyMuted" style={{ marginTop: 8 }}>
-                    Proj 126.2 · {active.record}
-                  </Text>
-                </View>
-                <Text variant="caption" style={{ paddingBottom: 4, textTransform: 'uppercase', letterSpacing: 2 }}>
-                  vs
-                </Text>
-                <View style={layout.alignEnd}>
-                  <Text variant="bodyMuted">The Steel Curtain</Text>
-                  <Text variant="scoreXL" style={{ marginTop: 4 }}>
-                    104.1
-                  </Text>
-                  <Text variant="bodyMuted" style={{ marginTop: 8 }}>
-                    Proj 112.4
-                  </Text>
-                </View>
-              </View>
-            </View>
-            <Divider />
-            <View style={layout.cardFooter}>
-              <Text variant="link">Open matchup</Text>
-              <ChevronRight size={16} color={hex.mutedForeground} />
-            </View>
-          </Card>
-        </Pressable>
+        <MatchupCard
+          active={active}
+          week={week}
+          stats={stats}
+          isLoading={isLoading}
+          showLiveStats={showLiveStats}
+          onOpen={() => router.switchTab('/league')}
+        />
 
         <Segmented
           tabs={[
@@ -102,12 +88,131 @@ export default function HomePage() {
         {tab === 'priorities' ? (
           <PrioritiesPane active={active} isSynced={isSynced} />
         ) : tab === 'league' ? (
-          <LeaguePane active={active} />
+          <LeaguePane
+            active={active}
+            stats={stats}
+            isLoading={isLoading}
+            isError={isError}
+            showLiveStats={showLiveStats}
+          />
         ) : (
-          <NewsPane />
+          <NewsPane showLiveStats={showLiveStats} />
         )}
       </View>
     </Screen>
+  );
+}
+
+function MatchupCard({
+  active,
+  week,
+  stats,
+  isLoading,
+  showLiveStats,
+  onOpen,
+}: {
+  active: League;
+  week: number;
+  stats: ReturnType<typeof useHomeLeagueStats>['data'];
+  isLoading: boolean;
+  showLiveStats: boolean;
+  onOpen: () => void;
+}) {
+  const { hex, layout, surfaces } = useThemeTokens();
+  const matchup = stats?.matchup;
+
+  if (isLoading && active.type === 'synced') {
+    return (
+      <Card>
+        <View style={[layout.cardPad, layout.centered, { minHeight: 140 }]}>
+          <ActivityIndicator color={hex.primary} />
+          <Text variant="bodyMuted" style={{ marginTop: 12 }}>
+            Loading league stats…
+          </Text>
+        </View>
+      </Card>
+    );
+  }
+
+  if (!showLiveStats || !matchup) {
+    return (
+      <Pressable onPress={onOpen}>
+        <Card>
+          <View style={layout.cardPad}>
+            <Text variant="eyebrow">Week {week}</Text>
+            <Text variant="titleMd" style={{ marginTop: 8 }}>
+              {active.type === 'synced' ? 'Standings & matchups' : 'Your matchup'}
+            </Text>
+            <Text variant="bodyMuted" style={{ marginTop: 6 }}>
+              {active.type === 'synced'
+                ? stats?.synced && !stats.hasSnapshot
+                  ? 'Waiting for first sync from your platform.'
+                  : 'Open the league tab for full standings.'
+                : 'Matchup details appear once your league is underway.'}
+            </Text>
+          </View>
+          <Divider />
+          <View style={layout.cardFooter}>
+            <Text variant="link">Open league</Text>
+            <ChevronRight size={16} color={hex.mutedForeground} />
+          </View>
+        </Card>
+      </Pressable>
+    );
+  }
+
+  const awayName = matchup.awayName;
+  const homeName = matchup.homeName;
+  const awayScore = formatScore(matchup.awayScore);
+  const homeScore = formatScore(matchup.homeScore);
+  const statusLabel =
+    matchup.status === 'final' ? 'Final' : matchup.status === 'in_progress' ? 'Live' : 'Scheduled';
+
+  return (
+    <Pressable onPress={onOpen}>
+      <Card>
+        <View style={layout.cardPad}>
+          <View style={layout.rowBetween}>
+            <Text variant="eyebrow">{matchup.label}</Text>
+            <View style={surfaces.pillSuccess}>
+              <Text variant="captionSuccess">{statusLabel}</Text>
+            </View>
+          </View>
+          <View style={[layout.rowEnd, { marginTop: 20 }]}>
+            <View style={{ flex: 1 }}>
+              <Text variant="bodyMuted" numberOfLines={1}>
+                {awayName}
+              </Text>
+              <Text variant="scoreXL" style={{ marginTop: 4 }}>
+                {awayScore}
+              </Text>
+              {matchup.isMine && stats?.record ? (
+                <Text variant="bodyMuted" style={{ marginTop: 8 }}>
+                  {stats.record}
+                  {stats.pointsFor > 0 ? ` · ${stats.pointsFor.toFixed(1)} PF` : ''}
+                </Text>
+              ) : null}
+            </View>
+            <Text variant="caption" style={{ paddingBottom: 4, paddingHorizontal: 8, textTransform: 'uppercase', letterSpacing: 2 }}>
+              vs
+            </Text>
+            <View style={[layout.alignEnd, { flex: 1 }]}>
+              <Text variant="bodyMuted" numberOfLines={1}>
+                {homeName}
+              </Text>
+              <Text variant="scoreXL" style={{ marginTop: 4 }}>
+                {homeScore}
+              </Text>
+            </View>
+          </View>
+        </View>
+        <Divider />
+        <View style={layout.cardFooter}>
+          <Text variant="link">Open league</Text>
+          <ChevronRight size={16} color={hex.mutedForeground} />
+        </View>
+      </Card>
+    </Pressable>
   );
 }
 
@@ -154,27 +259,43 @@ function PrioritiesPane({ active, isSynced }: { active: League; isSynced: boolea
   );
 }
 
-function LeaguePane({ active }: { active: League }) {
+function LeaguePane({
+  active,
+  stats,
+  isLoading,
+  isError,
+  showLiveStats,
+}: {
+  active: League;
+  stats: ReturnType<typeof useHomeLeagueStats>['data'];
+  isLoading: boolean;
+  isError: boolean;
+  showLiveStats: boolean;
+}) {
   const router = useNav();
   const { hex, layout, surfaces } = useThemeTokens();
+  const rank = stats?.rank || active.rank;
+  const teamCount = stats?.teamCount || active.members;
+  const playoffCutoff = Math.max(4, Math.ceil(teamCount / 2));
+
   return (
     <View style={layout.section}>
       <Card>
         <View style={[layout.rowWrap, layout.cardPad, { width: '100%' }]}>
           <View style={layout.half}>
-            <Stat label="Standing" value={active.rank > 0 ? `#${active.rank}` : '—'} />
+            <Stat label="Standing" value={rank > 0 ? `#${rank}` : '—'} />
           </View>
           <View style={layout.half}>
             <Stat
               label="Playoffs"
-              value={active.rank <= Math.ceil(active.members / 2) ? 'In' : 'Bubble'}
+              value={rank > 0 ? (rank <= playoffCutoff ? 'In' : 'Bubble') : '—'}
             />
           </View>
           <View style={layout.half}>
             <Stat label="Pot" value={`$${active.potUsd.toLocaleString()}`} />
           </View>
           <View style={layout.half}>
-            <Stat label="Activity" value="3 new" />
+            <Stat label="Teams" value={String(teamCount)} />
           </View>
         </View>
         <Divider />
@@ -183,6 +304,48 @@ function LeaguePane({ active }: { active: League }) {
           <ChevronRight size={16} color={hex.mutedForeground} />
         </Pressable>
       </Card>
+
+      {isLoading ? (
+        <Card>
+          <View style={[layout.cardPad, layout.centered, { paddingVertical: 24 }]}>
+            <ActivityIndicator color={hex.primary} />
+          </View>
+        </Card>
+      ) : isError ? (
+        <Card>
+          <View style={layout.cardPad}>
+            <Text variant="bodyMuted">Could not load standings.</Text>
+          </View>
+        </Card>
+      ) : showLiveStats && stats?.topStandings.length ? (
+        <Card>
+          <View style={layout.cardPad}>
+            <Text variant="eyebrow">Standings</Text>
+            <View style={{ marginTop: 12, gap: 10 }}>
+              {stats.topStandings.map((row) => (
+                <View key={row.rank} style={layout.rowBetween}>
+                  <View style={[layout.row, { gap: 10, flex: 1 }]}>
+                    <Text variant="caption" muted style={{ width: 22 }}>
+                      {row.rank}
+                    </Text>
+                    <Text variant="body" numberOfLines={1} style={{ flex: 1 }}>
+                      {row.name}
+                    </Text>
+                  </View>
+                  <Text variant="bodyMuted">
+                    {row.record} · {row.pointsFor.toFixed(1)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+          <Divider />
+          <Pressable onPress={() => router.switchTab('/league')} style={layout.cardFooter}>
+            <Text variant="link">Full standings</Text>
+            <ChevronRight size={16} color={hex.mutedForeground} />
+          </Pressable>
+        </Card>
+      ) : null}
 
       <Pressable onPress={() => router.switchTab('/team')}>
         <Card>
@@ -203,8 +366,21 @@ function LeaguePane({ active }: { active: League }) {
   );
 }
 
-function NewsPane() {
+function NewsPane({ showLiveStats }: { showLiveStats: boolean }) {
   const { layout } = useThemeTokens();
+  if (showLiveStats) {
+    return (
+      <View style={layout.section}>
+        <Card>
+          <View style={layout.cardPad}>
+            <Text variant="bodyMuted">
+              Player news and game tracking will pull from your synced league in a future update.
+            </Text>
+          </View>
+        </Card>
+      </View>
+    );
+  }
   return (
     <View style={layout.section}>
       <Card>

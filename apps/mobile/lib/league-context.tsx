@@ -12,8 +12,10 @@ import {
 import { useAuthStore } from './auth-store';
 import {
   createHostedLeagueOnApi,
+  createSyncedLeagueOnApi,
   fetchLeaguesFromApi,
   type CreateHostedLeagueInput,
+  type CreateSyncedLeagueInput,
 } from './league-api';
 
 export type LeagueType = 'hosted' | 'synced';
@@ -116,7 +118,7 @@ export function mapApiLeague(row: LeagueListItem): League {
   const role: UserRole = row.role === 'commissioner' ? 'commissioner' : 'member';
   const week = row.currentWeek ?? 0;
   const buyIn = Math.round(row.buyInCents / 100);
-  const members = row.memberCount || 1;
+  const members = row.teamCount ?? row.memberCount ?? 1;
 
   return {
     id: row.id,
@@ -193,6 +195,7 @@ interface AppContextValue {
   setActiveId: (id: string) => void;
   refreshLeagues: () => Promise<League[]>;
   createHostedLeague: (input: CreateHostedLeagueInput) => Promise<League>;
+  createSyncedLeague: (input: CreateSyncedLeagueInput) => Promise<League>;
   addLeague: (l: League) => void;
   updateLeague: (id: string, patch: Partial<League>) => void;
   can: (p: Permission) => boolean;
@@ -307,6 +310,26 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
           joined: 1,
           ready: false,
         };
+      },
+      createSyncedLeague: async (input) => {
+        const res = await createSyncedLeagueOnApi(input);
+        await refreshLeagues();
+        setActiveIdState(res.league.id);
+        const teamCount = input.teamCount ?? 12;
+        return mapApiLeague({
+          id: res.league.id,
+          name: res.league.name,
+          season: input.season,
+          role: 'commissioner',
+          paid: true,
+          buyInCents: res.league.buyInCents,
+          platformFeeCents: res.league.platformFeeCents,
+          memberCount: 1,
+          teamCount,
+          provider: input.provider,
+          currentWeek: 0,
+          teamName: null,
+        });
       },
       addLeague: (l) => {
         setLeagues((prev) => [...prev.filter((x) => x.id !== l.id), l]);

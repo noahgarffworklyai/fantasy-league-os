@@ -1,5 +1,5 @@
 import { useMemo, useState, type ComponentType, type ReactNode } from 'react';
-import { Image, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import Svg, { Circle, Line as SvgLine, Text as SvgText } from 'react-native-svg';
 import {
   Activity,
@@ -23,10 +23,21 @@ import {
   X,
 } from 'lucide-react-native';
 import { SearchInput } from '@/components/ui/Input';
+import { AvatarImage } from '@/components/ui/AvatarImage';
 import { Pressable, Text } from '@/components/ui/primitives';
 import { Screen } from '@/components/ui/Screen';
 import { Segmented } from '@/components/ui/Segmented';
 import { useLeague } from '@/lib/league-context';
+import {
+  formatAddedMetric,
+  formatDroppedMetric,
+  formatProj,
+  mapDetailToPlayer,
+  mapSearchRowToPlayer,
+  usePlayerDetail,
+  usePlayerSearch,
+  useWatchlistPlayers,
+} from '@/lib/players-api';
 import { playerAvatar } from '@/lib/avatars';
 import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
 
@@ -51,41 +62,12 @@ interface Player {
   avail?: number;
   added?: number;
   dropped?: number;
+  imageUrl?: string;
 }
 
-const PLAYERS: Player[] = [
-  { id: 'p1', name: 'Christian McCaffrey', pos: 'RB', team: 'SF', opp: 'vs SEA', bye: 9, rank: 4, proj: 19.8, trend: -1.4, ownership: 99, health: 'questionable', mine: true, watch: true },
-  { id: 'p2', name: 'Tyreek Hill', pos: 'WR', team: 'MIA', opp: '@ NYJ', bye: 6, rank: 6, proj: 18.4, trend: 1.8, ownership: 99 },
-  { id: 'p3', name: 'CeeDee Lamb', pos: 'WR', team: 'DAL', opp: 'vs PHI', bye: 7, rank: 5, proj: 19.1, trend: 0.4, ownership: 99, mine: true },
-  { id: 'p4', name: 'Bijan Robinson', pos: 'RB', team: 'ATL', opp: '@ TB', bye: 12, rank: 2, proj: 21.6, trend: 2.1, ownership: 97, health: 'healthy', mine: true },
-  { id: 'p5', name: 'Tyjae Spears', pos: 'RB', team: 'TEN', opp: 'vs JAX', bye: 5, rank: 38, proj: 12.4, trend: 5.4, ownership: 42, avail: 58, added: 34 },
-  { id: 'p6', name: 'Rashee Rice', pos: 'WR', team: 'KC', opp: '@ BUF', bye: 6, rank: 14, proj: 15.2, trend: 4.0, ownership: 88, added: 12 },
-  { id: 'p7', name: 'Jordan Addison', pos: 'WR', team: 'MIN', opp: 'vs GB', bye: 6, rank: 22, proj: 13.7, trend: 1.2, ownership: 76 },
-  { id: 'p8', name: 'Sam LaPorta', pos: 'TE', team: 'DET', opp: 'vs CHI', bye: 5, rank: 3, proj: 12.9, trend: 0.9, ownership: 95, mine: true },
-  { id: 'p9', name: 'Trey McBride', pos: 'TE', team: 'ARI', opp: '@ LAR', bye: 11, rank: 5, proj: 11.4, trend: 2.4, ownership: 81, watch: true },
-  { id: 'p10', name: 'Jordan Mason', pos: 'RB', team: 'SF', opp: 'vs SEA', bye: 9, rank: 41, proj: 10.8, trend: 6.1, ownership: 38, avail: 62, added: 41 },
-  { id: 'p11', name: 'Tank Dell', pos: 'WR', team: 'HOU', opp: 'vs IND', bye: 14, rank: 48, proj: 9.6, trend: -3.2, ownership: 71, dropped: 18, health: 'out' },
-  { id: 'p12', name: 'Najee Harris', pos: 'RB', team: 'PIT', opp: '@ CIN', bye: 9, rank: 28, proj: 11.2, trend: -2.4, ownership: 84, dropped: 9 },
-  { id: 'p13', name: 'Brock Bowers', pos: 'TE', team: 'LV', opp: 'vs DEN', bye: 10, rank: 4, proj: 12.1, trend: 3.7, ownership: 92, added: 6 },
-  { id: 'p14', name: 'Patrick Mahomes', pos: 'QB', team: 'KC', opp: '@ BUF', bye: 6, rank: 3, proj: 22.6, trend: 0.8, ownership: 99 },
-  { id: 'p15', name: 'Justin Tucker', pos: 'K', team: 'BAL', opp: 'vs CLE', bye: 14, rank: 6, proj: 8.2, trend: -1.1, ownership: 88 },
-];
-
 interface DoctorAlert { playerId: string; status: string; detail: string; prob: number }
-const ALERTS: DoctorAlert[] = [
-  { playerId: 'p1', status: 'Trending up', detail: 'Full practice Thursday — expected to play with monitored workload.', prob: 78 },
-  { playerId: 'p11', status: 'Likely inactive', detail: 'Did not practice all week. Backup expected to lead the room.', prob: 12 },
-  { playerId: 'p10', status: 'Snap count rising', detail: 'Workload trending toward 1A back if CMC is limited.', prob: 96 },
-];
 
 interface NewsItem { id: string; playerId: string; headline: string; source: string; when: string; tag: 'injury' | 'role' | 'depth' | 'coach' | 'trade' }
-const NEWS: NewsItem[] = [
-  { id: 'n1', playerId: 'p1', headline: 'McCaffrey listed as questionable, expected to play limited snaps', source: 'Adam Schefter', when: '2h', tag: 'injury' },
-  { id: 'n2', playerId: 'p5', headline: 'Spears taking over passing-down work in Tennessee', source: 'PFF', when: '5h', tag: 'role' },
-  { id: 'n3', playerId: 'p13', headline: 'Bowers leads all TEs in routes run last week', source: 'NextGen Stats', when: '1d', tag: 'role' },
-  { id: 'n4', playerId: 'p11', headline: 'Dell hits IR with foot injury', source: 'Ian Rapoport', when: '1d', tag: 'injury' },
-  { id: 'n5', playerId: 'p12', headline: 'Steelers shift to RBBC, Harris snaps trending down', source: 'Beat Reporter', when: '2d', tag: 'depth' },
-];
 
 interface Post { id: string; user: string; when: string; body: string; reactions: { likes: number; cheers: number; laughs: number }; comments: number; pinned?: boolean }
 const POSTS_BY_PLAYER: Record<string, Post[]> = {
@@ -117,10 +99,9 @@ const FILTERS = ['All', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 type DetailView = { kind: 'home' } | { kind: 'player'; id: string };
 
 export default function PlayersPage() {
-  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   const { active } = useLeague();
   const [view, setView] = useState<DetailView>({ kind: 'home' });
-  const [watchIds, setWatchIds] = useState<Set<string>>(() => new Set(PLAYERS.filter((p) => p.watch).map((p) => p.id)));
+  const [watchIds, setWatchIds] = useState<Set<string>>(() => new Set());
 
   const toggleWatch = (id: string) =>
     setWatchIds((prev) => {
@@ -130,20 +111,48 @@ export default function PlayersPage() {
       return next;
     });
 
+  const playerId = view.kind === 'player' ? view.id : undefined;
+  const { data: playerData, isLoading: playerLoading } = usePlayerDetail(playerId, active?.id);
+  const { data: relatedData } = usePlayerSearch(active?.id, { search: '', position: 'All', tab: 'all' });
+
   if (!active) return null;
 
   if (view.kind === 'player') {
-    const p = PLAYERS.find((x) => x.id === view.id)!;
+    const player = playerData?.player ? mapDetailToPlayer(playerData.player) : null;
+    const related = (relatedData?.players ?? [])
+      .map(mapSearchRowToPlayer)
+      .filter((r) => r.id !== playerId && player && (r.team === player.team || r.pos === player.pos))
+      .slice(0, 6);
+
+    if (playerLoading && !player) {
+      return (
+        <Screen>
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <ActivityIndicator />
+          </View>
+        </Screen>
+      );
+    }
+
+    if (!player) {
+      return (
+        <Screen>
+          <EmptyState icon={Search} title="Player not found" body="Try searching again from the player list." />
+        </Screen>
+      );
+    }
+
     return (
       <Screen>
         <PlayerDetail
-          player={p}
+          player={player}
+          related={related}
           isSynced={active.type === 'synced'}
           platform={active.platform}
           onBack={() => setView({ kind: 'home' })}
           onOpenPlayer={(id) => setView({ kind: 'player', id })}
-          watched={watchIds.has(p.id)}
-          onToggleWatch={() => toggleWatch(p.id)}
+          watched={watchIds.has(player.id)}
+          onToggleWatch={() => toggleWatch(player.id)}
         />
       </Screen>
     );
@@ -151,7 +160,14 @@ export default function PlayersPage() {
 
   return (
     <Screen>
-      <PlayersHome isSynced={active.type === 'synced'} platform={active.platform} onOpenPlayer={(id) => setView({ kind: 'player', id })} watchIds={watchIds} toggleWatch={toggleWatch} />
+      <PlayersHome
+        leagueId={active.id}
+        isSynced={active.type === 'synced'}
+        platform={active.platform}
+        onOpenPlayer={(id) => setView({ kind: 'player', id })}
+        watchIds={watchIds}
+        toggleWatch={toggleWatch}
+      />
     </Screen>
   );
 }
@@ -160,12 +176,14 @@ export default function PlayersPage() {
 type HomeTab = 'all' | 'available' | 'injured' | 'watchlist';
 
 function PlayersHome({
+  leagueId,
   isSynced,
   platform,
   onOpenPlayer,
   watchIds,
   toggleWatch,
 }: {
+  leagueId: string;
   isSynced: boolean;
   platform?: string;
   onOpenPlayer: (id: string) => void;
@@ -180,24 +198,72 @@ function PlayersHome({
   const [filterOpen, setFilterOpen] = useState(false);
   const searching = q.trim().length > 0;
 
+  const { data, isLoading, isError } = usePlayerSearch(leagueId, { search: q, position: pos, tab });
+  const { data: trendingData } = usePlayerSearch(
+    leagueId,
+    { search: '', position: pos, tab: 'all' },
+    { enabled: tab === 'available' && !searching },
+  );
+  const { players: watchlistRaw, isLoading: watchlistLoading } = useWatchlistPlayers(
+    leagueId,
+    tab === 'watchlist' ? [...watchIds] : [],
+  );
+
   const matchesPos = (p: Player) => pos === 'All' || p.pos === pos;
-  const matchesQ = (p: Player) => !q || p.name.toLowerCase().includes(q.toLowerCase());
   const isInjured = (p: Player) => p.health === 'questionable' || p.health === 'doubtful' || p.health === 'out' || p.health === 'ir';
   const isAvailable = (p: Player) => (p.avail ?? 100 - p.ownership) >= 20;
 
-  const searchResults = useMemo(() => PLAYERS.filter((p) => matchesPos(p) && matchesQ(p)), [q, pos]);
+  const apiPlayers = useMemo(() => (data?.players ?? []).map(mapSearchRowToPlayer), [data?.players]);
+  const trendingPool = useMemo(() => (trendingData?.players ?? []).map(mapSearchRowToPlayer), [trendingData?.players]);
+
+  const searchResults = useMemo(() => apiPlayers.filter(matchesPos), [apiPlayers, pos]);
   const tabPlayers = useMemo(() => {
-    const base = PLAYERS.filter(matchesPos);
+    if (tab === 'watchlist') {
+      return watchlistRaw.map(mapDetailToPlayer).filter(matchesPos);
+    }
+    const base = apiPlayers.filter(matchesPos);
     if (tab === 'all') return base;
     if (tab === 'available') return base.filter(isAvailable);
     if (tab === 'injured') return base.filter(isInjured);
-    return base.filter((p) => watchIds.has(p.id));
-  }, [tab, pos, watchIds]);
+    return base;
+  }, [tab, apiPlayers, pos, watchlistRaw]);
+
   const trending = useMemo(() => [...tabPlayers].sort((a, b) => b.trend - a.trend), [tabPlayers]);
 
-  const waivers = PLAYERS.filter((p) => (p.avail ?? 0) > 0).sort((a, b) => (b.avail ?? 0) - (a.avail ?? 0));
-  const mostAdded = PLAYERS.filter((p) => (p.added ?? 0) > 0).sort((a, b) => (b.added ?? 0) - (a.added ?? 0));
-  const mostDropped = PLAYERS.filter((p) => (p.dropped ?? 0) > 0).sort((a, b) => (b.dropped ?? 0) - (a.dropped ?? 0));
+  const waivers = tabPlayers.filter((p) => (p.avail ?? 0) > 0).sort((a, b) => (b.avail ?? 0) - (a.avail ?? 0));
+  const mostAdded = trendingPool.filter((p) => (p.added ?? 0) > 0).sort((a, b) => (b.added ?? 0) - (a.added ?? 0));
+  const mostDropped = trendingPool.filter((p) => (p.dropped ?? 0) > 0).sort((a, b) => (b.dropped ?? 0) - (a.dropped ?? 0));
+
+  const injuryAlerts = useMemo<DoctorAlert[]>(() => {
+    return tabPlayers
+      .filter(isInjured)
+      .slice(0, 6)
+      .map((p) => ({
+        playerId: p.id,
+        status: p.health === 'out' || p.health === 'ir' ? 'Likely inactive' : 'Monitoring',
+        detail:
+          p.health === 'out' || p.health === 'ir'
+            ? 'Listed on injury report — check practice participation before locking lineups.'
+            : 'Injury designation updated from Sleeper roster data.',
+        prob: p.health === 'out' || p.health === 'ir' ? 18 : p.health === 'doubtful' ? 42 : 72,
+      }));
+  }, [tabPlayers]);
+
+  const injuryNews = useMemo<NewsItem[]>(() => {
+    return tabPlayers
+      .filter(isInjured)
+      .slice(0, 5)
+      .map((p, i) => ({
+        id: `inj-${p.id}`,
+        playerId: p.id,
+        headline: `${p.name} — ${p.health ?? 'injury'} designation`,
+        source: 'Sleeper',
+        when: 'today',
+        tag: 'injury' as const,
+      }));
+  }, [tabPlayers]);
+
+  const loading = tab === 'watchlist' ? watchlistLoading : isLoading;
 
   const tabCopy: Record<HomeTab, { title: string; empty: string }> = {
     all: { title: 'Trending players', empty: 'No players match this filter.' },
@@ -269,7 +335,13 @@ function PlayersHome({
         ]}
       />
 
-      {searching ? (
+      {loading ? (
+        <View style={{ paddingVertical: 32, alignItems: 'center' }}>
+          <ActivityIndicator color={hex.primary} />
+        </View>
+      ) : isError ? (
+        <EmptyState icon={Search} title="Could not load players" body="Pull to refresh or try again in a moment." />
+      ) : searching ? (
         <Section title="Search results">
           <PlayerList players={searchResults} onOpen={onOpenPlayer} watchIds={watchIds} toggleWatch={toggleWatch} />
         </Section>
@@ -287,9 +359,9 @@ function PlayersHome({
                       <HealthDot health={p.health} />
                     </View>
                     <Text variant="bodySm" style={{ marginTop: 12 }} numberOfLines={1}>{p.name}</Text>
-                    <Text variant="caption" muted>{p.pos} · {p.team} · #{p.rank}</Text>
+                    <Text variant="caption" muted>{p.pos} · {p.team}{p.rank > 0 ? ` · #${p.rank}` : ''}</Text>
                     <View style={[layout.rowEnd, { marginTop: 8 }]}>
-                      <Text variant="titleLg" style={{ fontVariant: ['tabular-nums'] }}>{p.proj.toFixed(1)}</Text>
+                      <Text variant="titleLg" style={{ fontVariant: ['tabular-nums'] }}>{formatProj(p.proj)}</Text>
                       <TrendPill trend={p.trend} />
                     </View>
                   </Pressable>
@@ -308,14 +380,16 @@ function PlayersHome({
                         <HeadshotBubble player={p} />
                         <View style={[layout.flex1, { minWidth: 0 }]}>
                           <Text variant="body" numberOfLines={1}>{p.name}</Text>
-                          <Text variant="bodyMuted">{p.pos} · {p.team} · {p.avail}% available</Text>
+                          <Text variant="bodyMuted">{p.pos} · {p.team} · {p.avail ?? 0}% available</Text>
                         </View>
                         <View style={layout.alignEnd}>
-                          <Text variant="bodySm" style={{ fontVariant: ['tabular-nums'] }}>{p.proj.toFixed(1)}</Text>
+                          <Text variant="bodySm" style={{ fontVariant: ['tabular-nums'] }}>{formatProj(p.proj)}</Text>
                           <TrendPill trend={p.trend} small />
                         </View>
                       </Pressable>
-                      <Text variant="bodyMuted" style={{ marginTop: 8, lineHeight: 18 }}>Opportunity score 87 · projected role expanding through bye.</Text>
+                      <Text variant="bodyMuted" style={{ marginTop: 8, lineHeight: 18 }}>
+                        Trending add on Sleeper{p.added ? ` · ${formatAddedMetric(p.added)} adds (24h)` : ''}.
+                      </Text>
                       <View style={{ marginTop: 12 }}>
                         <PrimaryButton>{isSynced ? `Open waivers in ${platform}` : 'Add to waivers'}</PrimaryButton>
                       </View>
@@ -325,10 +399,10 @@ function PlayersHome({
               </Section>
 
               <Section title="Most added">
-                <CompactList players={mostAdded.filter(matchesPos)} metric={(p) => `+${p.added}%`} onOpen={onOpenPlayer} />
+                <CompactList players={mostAdded.filter(matchesPos)} metric={(p) => formatAddedMetric(p.added)} onOpen={onOpenPlayer} />
               </Section>
               <Section title="Most dropped">
-                <CompactList players={mostDropped.filter(matchesPos)} metric={(p) => `-${p.dropped}%`} metricNegative onOpen={onOpenPlayer} />
+                <CompactList players={mostDropped.filter(matchesPos)} metric={(p) => formatDroppedMetric(p.dropped)} metricNegative onOpen={onOpenPlayer} />
               </Section>
             </>
           ) : null}
@@ -337,8 +411,8 @@ function PlayersHome({
             <>
               <Section title="Fantasy doctor alerts">
                 <View style={{ gap: 8 }}>
-                  {ALERTS.map((a) => {
-                    const p = PLAYERS.find((x) => x.id === a.playerId);
+                  {injuryAlerts.map((a) => {
+                    const p = tabPlayers.find((x) => x.id === a.playerId);
                     if (!p || !matchesPos(p)) return null;
                     return (
                       <Pressable key={a.playerId} onPress={() => onOpenPlayer(p.id)} style={[surfaces.roundedCard, { padding: 16 }]}>
@@ -367,8 +441,12 @@ function PlayersHome({
 
               <Section title="Injury news">
                 <View style={surfaces.roundedCard}>
-                  {NEWS.filter((n) => n.tag === 'injury').map((n, i) => {
-                    const p = PLAYERS.find((x) => x.id === n.playerId);
+                  {injuryNews.length === 0 ? (
+                    <View style={{ padding: 16 }}>
+                      <Text variant="bodyMuted">No injury updates right now.</Text>
+                    </View>
+                  ) : injuryNews.map((n, i) => {
+                    const p = tabPlayers.find((x) => x.id === n.playerId);
                     return (
                       <Pressable key={n.id} onPress={() => p && onOpenPlayer(p.id)}>
                         <View style={[layout.rowStart, { paddingHorizontal: 16, paddingVertical: 12 }, i > 0 && layout.listRowBorder]}>
@@ -410,6 +488,7 @@ type Tab = 'overview' | 'performance' | 'health' | 'community';
 
 function PlayerDetail({
   player: p,
+  related,
   isSynced,
   platform,
   onBack,
@@ -418,6 +497,7 @@ function PlayerDetail({
   onToggleWatch,
 }: {
   player: Player;
+  related: Player[];
   isSynced: boolean;
   platform?: string;
   onBack: () => void;
@@ -428,7 +508,6 @@ function PlayerDetail({
   const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   const c = useColors();
   const [tab, setTab] = useState<Tab>('overview');
-  const related = PLAYERS.filter((x) => x.id !== p.id && (x.team === p.team || x.pos === p.pos)).slice(0, 6);
 
   return (
     <View style={[layout.screen, { gap: 20, paddingTop: 0 }]}>
@@ -451,15 +530,15 @@ function PlayerDetail({
         <View style={[layout.row, { gap: 16 }]}>
           <HeadshotBubble player={p} large />
           <View style={[layout.flex1, { minWidth: 0 }]}>
-            <Text variant="eyebrow">{p.pos} · {p.team} · Bye {p.bye}</Text>
+            <Text variant="eyebrow">{p.pos} · {p.team}{p.bye > 0 ? ` · Bye ${p.bye}` : ''}</Text>
             <Text variant="sectionTitle" style={{ fontSize: 22 }} numberOfLines={1}>{p.name}</Text>
             <View style={[layout.row, { marginTop: 4, gap: 8 }]}>
               <HealthBadge health={p.health} />
-              <Text variant="bodyMuted">Rank #{p.rank}</Text>
+              {p.rank > 0 ? <Text variant="bodyMuted">Rank #{p.rank}</Text> : null}
             </View>
           </View>
           <View style={layout.alignEnd}>
-            <Text variant="scoreLG" style={{ fontSize: 26, fontVariant: ['tabular-nums'] }}>{p.proj.toFixed(1)}</Text>
+            <Text variant="scoreLG" style={{ fontSize: 26, fontVariant: ['tabular-nums'] }}>{formatProj(p.proj)}</Text>
             <Text variant="eyebrow">proj</Text>
             <View style={{ marginTop: 4 }}><TrendPill trend={p.trend} small /></View>
           </View>
@@ -496,6 +575,9 @@ function PlayerDetail({
       {tab === 'community' ? <CommunityTab player={p} /> : null}
 
       <Section title="Related players">
+        {related.length === 0 ? (
+          <Text variant="bodyMuted" style={{ paddingHorizontal: 4 }}>No related players loaded yet.</Text>
+        ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
           {related.map((r) => (
             <Pressable key={r.id} onPress={() => onOpenPlayer(r.id)} style={[surfaces.roundedCard, { width: 150, padding: 12 }]}>
@@ -503,12 +585,13 @@ function PlayerDetail({
               <Text variant="bodySm" style={{ marginTop: 8 }} numberOfLines={1}>{r.name}</Text>
               <Text variant="caption" muted>{r.pos} · {r.team}</Text>
               <View style={[layout.rowBetween, { marginTop: 4 }]}>
-                <Text variant="caption" style={{ fontWeight: '600', fontVariant: ['tabular-nums'] }}>{r.proj.toFixed(1)}</Text>
+                <Text variant="caption" style={{ fontWeight: '600', fontVariant: ['tabular-nums'] }}>{formatProj(r.proj)}</Text>
                 <TrendPill trend={r.trend} small />
               </View>
             </Pressable>
           ))}
         </ScrollView>
+        )}
       </Section>
     </View>
   );
@@ -530,7 +613,7 @@ function OverviewTab({ player: p }: { player: Player }) {
               <Text variant="bodyMuted" style={{ marginTop: 2 }}>Strength of schedule · Favorable</Text>
             </View>
             <View style={layout.alignEnd}>
-              <Text variant="scoreLG" style={{ fontSize: 22, fontVariant: ['tabular-nums'] }}>{p.proj.toFixed(1)}</Text>
+              <Text variant="scoreLG" style={{ fontSize: 22, fontVariant: ['tabular-nums'] }}>{formatProj(p.proj)}</Text>
               <Text variant="eyebrow">proj pts</Text>
             </View>
           </View>
@@ -848,12 +931,11 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 function HeadshotBubble({ player, large }: { player: Player; large?: boolean }) {
   const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
-  const { scheme } = useTheme();
-  const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
   const size = large ? 64 : 40;
+  const src = playerAvatar({ playerId: player.id, name: player.name, team: player.team, imageUrl: player.imageUrl });
   return (
     <View style={{ width: size, height: size, flexShrink: 0 }}>
-      <Image source={{ uri: playerAvatar(player.name + player.team) }} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: `rgba(${ink},0.05)` }} />
+      <AvatarImage src={src} name={player.name} size={size} />
       <View style={{ position: 'absolute', bottom: -4, right: -4, borderRadius: 9999, backgroundColor: hex.foreground, paddingHorizontal: 6, paddingVertical: 2 }}>
         <Text variant="pill" style={{ fontSize: 9, fontWeight: '600', letterSpacing: 1, color: hex.background }}>{player.pos}</Text>
       </View>
@@ -935,10 +1017,10 @@ function PlayerList({ players, onOpen, watchIds, toggleWatch }: { players: Playe
             <HeadshotBubble player={p} />
             <View style={[layout.flex1, { minWidth: 0 }]}>
               <Text variant="body" numberOfLines={1}>{p.name}</Text>
-              <Text variant="bodyMuted" numberOfLines={1}>{p.team} {p.opp} · #{p.rank}</Text>
+              <Text variant="bodyMuted" numberOfLines={1}>{p.team} {p.opp}{p.rank > 0 ? ` · #${p.rank}` : ''}</Text>
             </View>
             <View style={layout.alignEnd}>
-              <Text variant="bodySm" style={{ fontVariant: ['tabular-nums'] }}>{p.proj.toFixed(1)}</Text>
+              <Text variant="bodySm" style={{ fontVariant: ['tabular-nums'] }}>{formatProj(p.proj)}</Text>
               <TrendPill trend={p.trend} small />
             </View>
           </Pressable>

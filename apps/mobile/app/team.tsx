@@ -1,5 +1,5 @@
 import { useState, type ReactNode, useMemo } from 'react';
-import { Modal, StyleSheet, TextInput } from 'react-native';
+import { ActivityIndicator, Modal, StyleSheet, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line as SvgLine, Text as SvgText } from 'react-native-svg';
 import {
@@ -36,11 +36,13 @@ import {
   type WaiverTarget,
 } from '@/lib/ai-intelligence';
 import { personAvatar, playerAvatar } from '@/lib/avatars';
+import { useMyTeamRoster } from '@/lib/team-roster-api';
 import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
 
 // ====================== Player data ======================
 type LiveStatus = 'field' | 'redzone' | 'scored';
 type PlayerDetail = {
+  id?: string;
   name: string;
   pos: string;
   team: string;
@@ -55,6 +57,9 @@ type PlayerDetail = {
   ownership?: string;
   live?: LiveStatus;
   liveNote?: string;
+  imageUrl?: string;
+  points?: number;
+  slot?: string;
 };
 
 const STARTERS: PlayerDetail[] = [
@@ -140,38 +145,53 @@ export default function TeamPage() {
   const { active } = useLeague();
   const [tab, setTab] = useState<TabKey>('lineup');
   const [player, setPlayer] = useState<PlayerDetail | null>(null);
-  const [starters, setStarters] = useState<PlayerDetail[]>(STARTERS);
-  const [bench, setBench] = useState<(PlayerDetail & { trend: string })[]>(BENCH);
+  const [localStarters, setLocalStarters] = useState<PlayerDetail[]>(STARTERS);
+  const [localBench, setLocalBench] = useState<(PlayerDetail & { trend: string })[]>(BENCH);
   const [confirmDrop, setConfirmDrop] = useState<PlayerDetail | null>(null);
   if (!active) return null;
   const isSynced = active.type === 'synced';
+  const { data: rosterData, isLoading: rosterLoading, isError: rosterError } = useMyTeamRoster(
+    active.id,
+    isSynced,
+  );
+
+  const starterSlots = isSynced && rosterData?.starterSlots?.length
+    ? rosterData.starterSlots
+    : STARTER_SLOTS;
+  const starters = isSynced ? (rosterData?.starters ?? []) : localStarters;
+  const bench = isSynced ? (rosterData?.bench ?? []) : localBench;
+  const ir = isSynced ? (rosterData?.reserve ?? []) : IR;
+  const teamName =
+    isSynced && rosterData?.teamName ? rosterData.teamName : active.teamName ?? `${active.shortName} Squad`;
 
   const onMyTeam = (p: PlayerDetail | null) =>
     !!p &&
-    (starters.some((x) => x.name === p.name) ||
-      bench.some((x) => x.name === p.name) ||
-      IR.some((x) => x.name === p.name));
+    (starters.some((x) => x.id === p.id || x.name === p.name) ||
+      bench.some((x) => x.id === p.id || x.name === p.name) ||
+      ir.some((x) => x.id === p.id || x.name === p.name));
 
   const handleDrop = (p: PlayerDetail) => {
-    setStarters((s) => s.filter((x) => x.name !== p.name));
-    setBench((b) => b.filter((x) => x.name !== p.name));
+    if (isSynced) return;
+    setLocalStarters((s) => s.filter((x) => x.name !== p.name));
+    setLocalBench((b) => b.filter((x) => x.name !== p.name));
     setConfirmDrop(null);
     setPlayer(null);
   };
 
   const swapStarter = (slotIdx: number, benchIdx: number) => {
-    const benchPlayer = bench[benchIdx];
-    const starter = starters[slotIdx];
+    if (isSynced) return;
+    const benchPlayer = localBench[benchIdx];
+    const starter = localStarters[slotIdx];
     const benchTrend = benchPlayer.trend;
-    setStarters((s) => s.map((x, i) => (i === slotIdx ? { ...benchPlayer } : x)));
-    setBench((b) => b.map((x, i) => (i === benchIdx ? { ...starter, trend: benchTrend } : x)));
+    setLocalStarters((s) => s.map((x, i) => (i === slotIdx ? { ...benchPlayer } : x)));
+    setLocalBench((b) => b.map((x, i) => (i === benchIdx ? { ...starter, trend: benchTrend } : x)));
   };
 
   return (
     <Screen>
       <View style={layout.screen}>
         <TeamHeader
-          teamName={active.teamName ?? `${active.shortName} Squad`}
+          teamName={teamName}
           record={active.record}
           projectedFinish={`Proj #${Math.max(1, Math.min(active.members, active.rank || 3))}`}
           rank={`#${active.rank || '—'} of ${active.members}`}
@@ -189,10 +209,45 @@ export default function TeamPage() {
           ]}
         />
 
-        {tab === 'lineup' ? (
-          <LineupPane isSynced={isSynced} platform={active.platform} leagueId={active.id} onPlayer={setPlayer} starters={starters} bench={bench} onSwap={swapStarter} />
+        {isSynced && rosterLoading && tab === 'lineup' ? (
+          <View style={{ paddingVertical: 48, alignItems: 'center' }}>
+            <ActivityIndicator color={hex.primary} />
+          </View>
         ) : null}
-        {tab === 'health' ? <HealthPane onPlayer={setPlayer} /> : null}
+
+        {isSynced && rosterError && tab === 'lineup' ? (
+          <View style={[surfaces.roundedCard, { padding: 16, marginTop: 8 }]}>
+            <Text variant="bodySm">Could not load your roster from Sleeper.</Text>
+            <Text variant="bodyMuted" style={{ marginTop: 4 }}>
+              Try refreshing sync from Commissioner → Settings.
+            </Text>
+          </View>
+        ) : null}
+
+        {tab === 'lineup' && !(isSynced && rosterLoading) ? (
+          <>
+            {isSynced && !rosterLoading && starters.length === 0 && !rosterError ? (
+              <View style={[surfaces.roundedCard, { padding: 16, marginTop: 8 }]}>
+                <Text variant="bodySm">No players on your roster yet.</Text>
+              </View>
+            ) : null}
+            {starters.length > 0 || !isSynced ? (
+          <LineupPane
+            isSynced={isSynced}
+            platform={active.platform}
+            leagueId={active.id}
+            onPlayer={setPlayer}
+            starters={starters}
+            bench={bench}
+            starterSlots={starterSlots}
+            onSwap={swapStarter}
+          />
+            ) : null}
+          </>
+        ) : null}
+        {tab === 'health' ? (
+          <HealthPane onPlayer={setPlayer} starters={starters} bench={bench} ir={ir} />
+        ) : null}
         {tab === 'trade' ? <TradePane synced={isSynced} platform={active.platform} onPlayer={setPlayer} /> : null}
         {tab === 'waivers' ? <WaiversPane synced={isSynced} platform={active.platform} onPlayer={setPlayer} /> : null}
       </View>
@@ -280,6 +335,7 @@ function LineupPane({
   onPlayer,
   starters,
   bench,
+  starterSlots,
   onSwap,
 }: {
   isSynced: boolean;
@@ -288,12 +344,13 @@ function LineupPane({
   onPlayer: (p: PlayerDetail) => void;
   starters: PlayerDetail[];
   bench: (PlayerDetail & { trend: string })[];
+  starterSlots: string[];
   onSwap: (slotIdx: number, benchIdx: number) => void;
 }) {
   const S = useTeamStyles();
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const { active } = useLeague();
-  const starterProj = starters.reduce((s, r) => s + (r.proj ?? 0), 0);
+  const starterProj = starters.reduce((s, r) => s + (r.proj ?? r.points ?? 0), 0);
   const coaching = teamCoaching(active!);
   const [editing, setEditing] = useState(false);
   const [swapSlot, setSwapSlot] = useState<number | null>(null);
@@ -351,12 +408,13 @@ function LineupPane({
           <View>
             {starters.map((r, i) => (
               <PlayerRow
-                key={STARTER_SLOTS[i] + r.name}
-                slot={STARTER_SLOTS[i]}
+                key={(r.id ?? r.name) + (starterSlots[i] ?? i)}
+                slot={starterSlots[i] ?? r.slot ?? r.pos}
                 player={r}
                 divided={i > 0}
                 editing={editing}
                 onPress={() => (editing ? setSwapSlot(i) : onPlayer(r))}
+                showPoints={isSynced}
               />
             ))}
           </View>
@@ -367,14 +425,14 @@ function LineupPane({
       <TeamSection title="Bench">
         <Card>
           {bench.map((p, i) => (
-            <BenchRow key={p.name} player={p} divided={i > 0} onPress={() => onPlayer(p)} />
+            <BenchRow key={p.id ?? p.name} player={p} divided={i > 0} onPress={() => onPlayer(p)} showPoints={isSynced} />
           ))}
         </Card>
       </TeamSection>
 
       <SwapSheet
         open={swapSlot !== null}
-        slot={swapSlot !== null ? STARTER_SLOTS[swapSlot] : ''}
+        slot={swapSlot !== null ? starterSlots[swapSlot] ?? '' : ''}
         currentStarter={swapSlot !== null ? starters[swapSlot] : null}
         bench={bench}
         onClose={() => setSwapSlot(null)}
@@ -429,12 +487,14 @@ function PlayerRow({
   divided,
   editing,
   onPress,
+  showPoints,
 }: {
   slot: string;
   player: PlayerDetail;
   divided?: boolean;
   editing?: boolean;
   onPress?: () => void;
+  showPoints?: boolean;
 }) {
   const S = useTeamStyles();
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
@@ -447,7 +507,11 @@ function PlayerRow({
           <Text variant="caption">{slot}</Text>
         </View>
         <View style={S.avatarWrap}>
-          <AvatarImage src={playerAvatar(player.name + player.team)} name={player.name} size={36} />
+          <AvatarImage
+            src={playerAvatar({ playerId: player.id, name: player.name, team: player.team, imageUrl: player.imageUrl })}
+            name={player.name}
+            size={36}
+          />
           {player.live ? (
             <View style={S.liveDotBadge}>
               <LiveDot status={player.live} />
@@ -470,14 +534,32 @@ function PlayerRow({
             <Text variant="caption" style={{ color: toneFg.danger }}>Out</Text>
           </View>
         ) : null}
-        <Text variant="body" style={S.scoreCol}>{player.proj?.toFixed(1)}</Text>
+        <Text variant="body" style={S.scoreCol}>
+          {showPoints
+            ? player.points != null
+              ? player.points.toFixed(1)
+              : '—'
+            : player.proj != null
+              ? player.proj.toFixed(1)
+              : '—'}
+        </Text>
         {editing ? <Repeat size={16} color={c.foreground} /> : <ChevronRight size={16} color={c.mutedForeground} />}
       </View>
     </Pressable>
   );
 }
 
-function BenchRow({ player, divided, onPress }: { player: PlayerDetail & { trend: string }; divided?: boolean; onPress?: () => void }) {
+function BenchRow({
+  player,
+  divided,
+  onPress,
+  showPoints,
+}: {
+  player: PlayerDetail & { trend: string };
+  divided?: boolean;
+  onPress?: () => void;
+  showPoints?: boolean;
+}) {
   const S = useTeamStyles();
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
@@ -491,7 +573,11 @@ function BenchRow({ player, divided, onPress }: { player: PlayerDetail & { trend
           <Text variant="caption">BN</Text>
         </View>
         <View style={S.avatarWrap}>
-          <AvatarImage src={playerAvatar(player.name + player.team)} name={player.name} size={36} />
+          <AvatarImage
+            src={playerAvatar({ playerId: player.id, name: player.name, team: player.team, imageUrl: player.imageUrl })}
+            name={player.name}
+            size={36}
+          />
           {player.live ? (
             <View style={S.liveDotBadge}>
               <LiveDot status={player.live} />
@@ -508,27 +594,48 @@ function BenchRow({ player, divided, onPress }: { player: PlayerDetail & { trend
             <Text variant="caption">Q</Text>
           </View>
         ) : null}
-        <Text variant="body" style={S.scoreCol}>{player.proj?.toFixed(1)}</Text>
+        <Text variant="body" style={S.scoreCol}>
+          {showPoints
+            ? player.points != null
+              ? player.points.toFixed(1)
+              : '—'
+            : player.proj != null
+              ? player.proj.toFixed(1)
+              : '—'}
+        </Text>
       </View>
     </Pressable>
   );
 }
 
 // ====================== Health pane ======================
-function HealthPane({ onPlayer }: { onPlayer: (p: PlayerDetail) => void }) {
+function HealthPane({
+  onPlayer,
+  starters,
+  bench,
+  ir,
+}: {
+  onPlayer: (p: PlayerDetail) => void;
+  starters: PlayerDetail[];
+  bench: (PlayerDetail & { trend: string })[];
+  ir: PlayerDetail[];
+}) {
   const S = useTeamStyles();
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
-  const injured = [...STARTERS, ...BENCH].filter((p) => p.status === 'q' || p.status === 'o');
+  const injured = [...starters, ...bench].filter((p) => p.status === 'q' || p.status === 'o');
+  const healthy = [...starters, ...bench].filter((p) => !p.status || p.status === 'ok').length;
+  const questionable = [...starters, ...bench].filter((p) => p.status === 'q').length;
+  const out = [...starters, ...bench].filter((p) => p.status === 'o').length;
   return (
     <View style={layout.section}>
       <TeamSection title="Roster health">
         <Card>
           <View style={layout.healthRow}>
-            <Tile value="11" label="Healthy" tone="success" first />
-            <Tile value="2" label="Quest." tone="warning" />
-            <Tile value="1" label="Out" tone="danger" />
-            <Tile value="1" label="IR" tone="muted" />
+            <Tile value={String(healthy)} label="Healthy" tone="success" first />
+            <Tile value={String(questionable)} label="Quest." tone="warning" />
+            <Tile value={String(out)} label="Out" tone="danger" />
+            <Tile value={String(ir.length)} label="IR" tone="muted" />
           </View>
           <Divider />
           <View style={layout.cardFooter}>
@@ -566,10 +673,10 @@ function HealthPane({ onPlayer }: { onPlayer: (p: PlayerDetail) => void }) {
 
       <TeamSection title="Injured reserve">
         <Card>
-          {IR.length === 0 ? (
+          {ir.length === 0 ? (
             <EmptyState icon={HeartPulse} title="No one on IR" sub="A healthy roster is a happy roster." />
           ) : (
-            IR.map((p, i) => (
+            ir.map((p, i) => (
               <Pressable key={p.name} onPress={() => onPlayer(p)}>
                 {i > 0 ? <Divider /> : null}
                 <View style={{ paddingHorizontal: 20, paddingVertical: 16 }}>
@@ -1522,7 +1629,11 @@ function PlayerSheet({
         <View style={S.sheetBody}>
           <View style={S.profileCard}>
             <View style={layout.rowStart}>
-              <AvatarImage src={playerAvatar(player.name + player.team)} name={player.name} size={56} />
+              <AvatarImage
+                src={playerAvatar({ playerId: player.id, name: player.name, team: player.team, imageUrl: player.imageUrl })}
+                name={player.name}
+                size={56}
+              />
               <View style={[layout.flex1, { minWidth: 0 }]}>
                 <Text variant="eyebrow">
                   {player.pos} · {player.team}{player.rank ? ` · ${player.rank}` : ''}

@@ -5,3 +5,4 @@ export * from './schemas/engagement.js';
 export * from './schemas/ai.js';
 export * from './constants.js';
 export * from './api-client.js';
+export * from './sleeper-images.js';

@@ -5,6 +5,7 @@ import type {
   CanonicalTeam,
   LeagueSummary,
 } from '@flos/shared';
+import { sleeperUserAvatarUrl } from '@flos/shared';
 import type { LeagueAdapter, SleeperCredentials } from './types.js';
 
 const BASE = 'https://api.sleeper.app/v1';
@@ -15,6 +16,10 @@ async function sleeperFetch<T>(path: string): Promise<T> {
     throw new Error(`Sleeper API error: ${res.status} ${path}`);
   }
   return res.json() as Promise<T>;
+}
+
+function normalizeUsername(username: string): string {
+  return username.trim().replace(/^@/, '');
 }
 
 type SleeperUser = { user_id: string; username: string; display_name: string };
@@ -34,6 +39,7 @@ type SleeperRoster = {
 type SleeperLeagueUser = {
   user_id: string;
   display_name: string;
+  avatar?: string;
   metadata?: { team_name?: string };
 };
 type SleeperMatchup = {
@@ -79,6 +85,7 @@ function buildTeams(
       name: user?.metadata?.team_name ?? user?.display_name ?? `Team ${r.roster_id}`,
       ownerName: user?.display_name,
       ownerExternalId: r.owner_id,
+      ownerAvatarUrl: user?.avatar ? sleeperUserAvatarUrl(user.avatar) : undefined,
       wins: r.settings.wins ?? 0,
       losses: r.settings.losses ?? 0,
       ties: r.settings.ties ?? 0,
@@ -94,28 +101,36 @@ export const sleeperAdapter: LeagueAdapter<SleeperCredentials> = {
   async discoverLeagues(credentials, season = new Date().getFullYear()) {
     let userId = credentials.userId;
     if (!userId && credentials.username) {
-      const user = await sleeperFetch<SleeperUser>(`/user/${credentials.username}`);
+      const handle = normalizeUsername(credentials.username);
+      const user = await sleeperFetch<SleeperUser | null>(`/user/${handle}`);
+      if (!user?.user_id) {
+        throw new Error(
+          `Sleeper user "@${handle}" not found. Use your @username handle from your Sleeper profile, not your display name.`,
+        );
+      }
       userId = user.user_id;
     }
     if (!userId) throw new Error('Sleeper username or userId required');
 
-    const fetchForSeason = (targetSeason: number) =>
-      sleeperFetch<SleeperLeague[]>(`/user/${userId}/leagues/nfl/${targetSeason}`);
+    const seasons = [season, season - 1, season - 2].filter((y) => y > 2018);
+    const byId = new Map<string, LeagueSummary>();
 
-    let leagues = await fetchForSeason(season);
-
-    // Off-season: most users' leagues are still on the previous NFL season year
-    if (leagues.length === 0 && season > 2020) {
-      leagues = await fetchForSeason(season - 1);
+    for (const targetSeason of seasons) {
+      const raw = await sleeperFetch<SleeperLeague[] | null>(
+        `/user/${userId}/leagues/nfl/${targetSeason}`,
+      );
+      for (const league of raw ?? []) {
+        byId.set(league.league_id, {
+          externalId: league.league_id,
+          provider: 'sleeper' as const,
+          name: league.name,
+          season: Number(league.season),
+          teamCount: league.total_rosters,
+        });
+      }
     }
 
-    return leagues.map((l) => ({
-      externalId: l.league_id,
-      provider: 'sleeper' as const,
-      name: l.name,
-      season: Number(l.season),
-      teamCount: l.total_rosters,
-    }));
+    return [...byId.values()].sort((a, b) => b.season - a.season);
   },
 
   async fetchLeague(externalLeagueId) {
@@ -185,8 +200,23 @@ export const sleeperAdapter: LeagueAdapter<SleeperCredentials> = {
 };
 
 export async function resolveSleeperUserId(username: string): Promise<string> {
-  const user = await sleeperFetch<SleeperUser>(`/user/${username}`);
+  const handle = normalizeUsername(username);
+  const user = await sleeperFetch<SleeperUser | null>(`/user/${handle}`);
+  if (!user?.user_id) {
+    throw new Error(`Sleeper user "@${handle}" not found`);
+  }
   return user.user_id;
+}
+
+export async function previewSleeperLeague(leagueId: string): Promise<LeagueSummary> {
+  const league = await sleeperAdapter.fetchLeague(leagueId.trim(), {});
+  return {
+    externalId: league.externalId,
+    provider: 'sleeper',
+    name: league.name,
+    season: league.season,
+    teamCount: league.teams.length,
+  };
 }
 
 export type { SleeperCredentials };

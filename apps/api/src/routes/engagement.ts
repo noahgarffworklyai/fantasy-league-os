@@ -26,7 +26,7 @@ export async function engagementRoutes(app: FastifyInstance) {
     const authReq = request as AuthenticatedRequest;
     const { id } = request.params as { id: string };
     try {
-      await requireLeagueMembership(authReq, id, { paid: true });
+      await requireLeagueMembership(authReq, id);
     } catch {
       return reply.status(403).send({ error: 'Access denied' });
     }
@@ -70,7 +70,7 @@ export async function engagementRoutes(app: FastifyInstance) {
     const body = createFeedPostSchema.parse(request.body);
 
     try {
-      await requireLeagueMembership(authReq, id, { paid: true });
+      await requireLeagueMembership(authReq, id);
     } catch {
       return reply.status(403).send({ error: 'Access denied' });
     }
@@ -113,7 +113,7 @@ export async function engagementRoutes(app: FastifyInstance) {
     const authReq = request as AuthenticatedRequest;
     const { id } = request.params as { id: string };
     try {
-      await requireLeagueMembership(authReq, id, { paid: true });
+      await requireLeagueMembership(authReq, id);
     } catch {
       return reply.status(403).send({ error: 'Access denied' });
     }

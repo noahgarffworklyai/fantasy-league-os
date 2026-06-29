@@ -1,17 +1,12 @@
 import { Fragment, useRef, useState, type ReactNode, useMemo } from 'react';
-import { Modal, ScrollView, StyleSheet, TextInput, useWindowDimensions, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
+import { ActivityIndicator, Modal, ScrollView, StyleSheet, TextInput, useWindowDimensions, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line as SvgLine, Rect, Text as SvgText } from 'react-native-svg';
 import {
   ChevronLeft,
   ChevronRight,
-  ChevronsUpDown,
-  Flame,
-  Heart,
-  Laugh,
   type LucideIcon,
   MessageCircle,
-  PartyPopper,
   Pin,
   Radio,
   ThumbsUp,
@@ -25,125 +20,44 @@ import { Segmented } from '@/components/ui/Segmented';
 import { AvatarImage } from '@/components/ui/AvatarImage';
 import { PageIntro } from '@/components/ui/PageIntro';
 import { useLeague, type League } from '@/lib/league-context';
-import { personAvatar } from '@/lib/avatars';
+import {
+  computeLeagueAwards,
+  useLeagueTabData,
+  type Matchup,
+  type TeamRow,
+  type LineupRow,
+} from '@/lib/league-tab-data';
+import { formatRelativeTime, useLeagueFeed, type LeagueFeedItem } from '@/lib/feed-api';
+import { personAvatar, playerAvatar } from '@/lib/avatars';
 import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
-
-/* ------------------------------ MOCK DATA ------------------------------ */
-interface TeamRow {
-  rank: number;
-  prev: number;
-  name: string;
-  owner: string;
-  wins: number;
-  losses: number;
-  pf: number;
-  pa: number;
-  streak: string;
-  seed?: number;
-  tag?: 'division' | 'playoff' | 'bubble' | 'last';
-}
-
-const TEAMS: TeamRow[] = [
-  { rank: 1, prev: 1, name: 'Dynasty Wolves', owner: 'Jackson', wins: 6, losses: 1, pf: 832.4, pa: 712.0, streak: 'W4', seed: 1, tag: 'division' },
-  { rank: 2, prev: 3, name: 'The Steel Curtain', owner: 'Mike', wins: 5, losses: 2, pf: 798.1, pa: 740.6, streak: 'W2', seed: 2, tag: 'division' },
-  { rank: 3, prev: 2, name: 'Brady Bunch', owner: 'Sarah', wins: 5, losses: 2, pf: 781.6, pa: 745.2, streak: 'L1', seed: 3, tag: 'playoff' },
-  { rank: 4, prev: 4, name: 'Punt God', owner: 'Devon', wins: 4, losses: 3, pf: 760.3, pa: 738.9, streak: 'W1', seed: 4, tag: 'playoff' },
-  { rank: 5, prev: 7, name: 'Audible', owner: 'Priya', wins: 4, losses: 3, pf: 742.0, pa: 751.4, streak: 'W3', seed: 5, tag: 'bubble' },
-  { rank: 6, prev: 5, name: 'Hail Mary', owner: 'Chris', wins: 3, losses: 4, pf: 715.5, pa: 766.1, streak: 'L2', seed: 6, tag: 'bubble' },
-  { rank: 7, prev: 6, name: 'Field Stretchers', owner: 'Lena', wins: 3, losses: 4, pf: 702.2, pa: 770.0, streak: 'L1' },
-  { rank: 8, prev: 8, name: 'Two Minute Drill', owner: 'Marcus', wins: 2, losses: 5, pf: 668.4, pa: 798.8, streak: 'L3' },
-  { rank: 9, prev: 9, name: 'Couch Coaches', owner: 'Eli', wins: 2, losses: 5, pf: 651.9, pa: 802.1, streak: 'L2' },
-  { rank: 10, prev: 10, name: 'Bottom Feeders', owner: 'Noah', wins: 1, losses: 6, pf: 612.3, pa: 819.5, streak: 'L4', tag: 'last' },
-];
-
-interface Matchup {
-  id: string;
-  home: TeamRow;
-  hp: number;
-  hproj: number;
-  away: TeamRow;
-  ap: number;
-  aproj: number;
-  state: 'pre' | 'live' | 'final';
-  kickoff?: string;
-  winProb: number;
-}
-
-const MATCHUPS: Matchup[] = [
-  { id: 'm1', home: TEAMS[0], hp: 78.2, hproj: 124.2, away: TEAMS[1], ap: 65.1, aproj: 112.4, state: 'live', winProb: 0.71 },
-  { id: 'm2', home: TEAMS[2], hp: 0, hproj: 98.1, away: TEAMS[4], ap: 0, aproj: 101.6, state: 'pre', kickoff: 'Sun 1:00pm', winProb: 0.46 },
-  { id: 'm3', home: TEAMS[3], hp: 115.7, hproj: 115.7, away: TEAMS[5], ap: 88.3, aproj: 88.3, state: 'final', winProb: 0.93 },
-  { id: 'm4', home: TEAMS[6], hp: 0, hproj: 104.5, away: TEAMS[7], ap: 0, aproj: 92.1, state: 'pre', kickoff: 'Sun 4:25pm', winProb: 0.62 },
-  { id: 'm5', home: TEAMS[8], hp: 0, hproj: 88.7, away: TEAMS[9], ap: 0, aproj: 81.2, state: 'pre', kickoff: 'Mon 8:15pm', winProb: 0.58 },
-];
-
-type FeedKind = 'moment' | 'trade' | 'waiver' | 'announcement' | 'poll' | 'report' | 'payment';
-interface FeedItem {
-  id: string;
-  kind: FeedKind;
-  who: string;
-  headline: string;
-  body?: string;
-  when: string;
-  pinned?: boolean;
-  reactions: { likes: number; cheers: number; laughs: number };
-  comments: number;
-  poll?: { question: string; options: { label: string; votes: number }[] };
-}
-
-const FEED: FeedItem[] = [
-  { id: 'f0', kind: 'announcement', who: 'Commissioner', headline: 'Trade deadline is Sunday at midnight', body: 'Get your final deals in before week 10 kickoff.', when: '1h', pinned: true, reactions: { likes: 4, cheers: 1, laughs: 0 }, comments: 2 },
-  { id: 'f1', kind: 'moment', who: 'League Moment', headline: 'Jackson upset Mike despite entering as an 18 point underdog.', when: '2h', reactions: { likes: 9, cheers: 3, laughs: 2 }, comments: 6 },
-  { id: 'f2', kind: 'trade', who: 'Audible ↔ Brady Bunch', headline: 'Trade completed', body: 'Audible receives K. Walker III. Brady Bunch receives D. London + 2027 3rd.', when: '4h', reactions: { likes: 5, cheers: 2, laughs: 0 }, comments: 4 },
-  { id: 'f3', kind: 'poll', who: 'Commissioner', headline: "Move next year's draft to a Saturday?", when: '6h', reactions: { likes: 2, cheers: 0, laughs: 0 }, comments: 1, poll: { question: "Move next year's draft to a Saturday?", options: [{ label: 'Yes, Saturday afternoon', votes: 6 }, { label: 'Keep it Thursday night', votes: 3 }, { label: 'Sunday morning', votes: 1 }] } },
-  { id: 'f4', kind: 'moment', who: 'League Moment', headline: 'Sarah moved into the final playoff spot.', when: '1d', reactions: { likes: 7, cheers: 4, laughs: 0 }, comments: 3 },
-  { id: 'f5', kind: 'waiver', who: 'Hail Mary', headline: 'Added Tyjae Spears (RB) — $14 FAAB', when: '1d', reactions: { likes: 1, cheers: 0, laughs: 1 }, comments: 0 },
-  { id: 'f6', kind: 'payment', who: 'League Pot', headline: 'The league pot is now fully funded.', when: '2d', reactions: { likes: 10, cheers: 6, laughs: 0 }, comments: 1 },
-  { id: 'f7', kind: 'report', who: 'Weekly Report', headline: 'Week 8 Power Rankings published', when: '3d', reactions: { likes: 4, cheers: 1, laughs: 0 }, comments: 2 },
-];
-
-const AWARDS = [
-  { id: 'a1', title: 'Highest Score', value: 'Dynasty Wolves', detail: '151.3 pts' },
-  { id: 'a2', title: 'Lowest Score', value: 'Bottom Feeders', detail: '62.4 pts' },
-  { id: 'a3', title: 'Closest Win', value: 'Audible', detail: 'by 1.2 pts' },
-  { id: 'a4', title: 'Biggest Blowout', value: 'Punt God', detail: '+38.5 pts' },
-  { id: 'a5', title: 'Manager of the Week', value: 'Jackson', detail: 'Started 9 of 9 optimal' },
-  { id: 'a6', title: 'League MVP', value: 'J. Jefferson', detail: '182.4 fantasy pts' },
-];
-
-const LINEUP_DEFAULT = [
-  { slot: 'QB', name: 'J. Allen', pts: 22.4, rem: 'Q4 5:12' },
-  { slot: 'RB', name: 'B. Robinson', pts: 16.1, rem: 'Final' },
-  { slot: 'RB', name: 'K. Walker', pts: 8.7, rem: 'Q3 0:42' },
-  { slot: 'WR', name: 'J. Jefferson', pts: 19.7, rem: 'Final' },
-  { slot: 'WR', name: 'P. Nacua', pts: 11.4, rem: 'Q4 8:30' },
-  { slot: 'TE', name: 'T. Kelce', pts: 0, rem: 'Sun 1:00' },
-  { slot: 'FLX', name: 'R. Odunze', pts: 0, rem: 'Sun 1:00' },
-  { slot: 'K', name: 'H. Butker', pts: 0, rem: 'Sun 1:00' },
-  { slot: 'DST', name: 'Bills', pts: 0, rem: 'Sun 1:00' },
-];
-
-function lineupFor(seed: number) {
-  const names = [
-    ['P. Mahomes', 'S. Barkley', 'D. Henry', 'C. Lamb', 'A. St. Brown', 'G. Kittle', 'C. Olave', 'B. Aubrey', 'Cowboys'],
-    ['J. Burrow', 'J. Taylor', 'J. Mixon', 'D. Adams', 'T. Hill', 'M. Andrews', 'Z. Flowers', 'J. Tucker', 'Ravens'],
-    ['L. Jackson', 'C. McCaffrey', 'J. Conner', 'D. Moore', 'G. Wilson', 'D. Goedert', 'K. Allen', 'J. Bates', '49ers'],
-    ['D. Prescott', 'T. Etienne', 'T. Pollard', 'M. Evans', 'C. Kupp', 'S. LaPorta', 'J. Smith-Njigba', 'C. McLaughlin', 'Steelers'],
-  ];
-  const arr = names[seed % names.length];
-  return LINEUP_DEFAULT.map((p, i) => ({ ...p, name: arr[i], pts: Math.max(0, p.pts - 2 + ((i + seed) % 3) * 1.6) }));
-}
 
 /* ------------------------------ PAGE ------------------------------ */
 type DetailView = { kind: 'league' } | { kind: 'matchup'; id: string } | { kind: 'team'; name: string };
 
 export default function LeaguePage() {
   const { active } = useLeague();
+  const { data, isLoading, isError, refetch } = useLeagueTabData(active?.id);
   const [view, setView] = useState<DetailView>({ kind: 'league' });
+  const teams = data?.teams ?? [];
+  const matchups = data?.matchups ?? [];
+  const week = data?.week ?? active?.week ?? 1;
+
   if (!active) return null;
 
   if (view.kind === 'matchup') {
-    const m = MATCHUPS.find((x) => x.id === (view as { id: string }).id)!;
+    const m = matchups.find((x) => x.id === view.id);
+    if (!m) {
+      return (
+        <Screen>
+          <View style={{ flex: 1, padding: 24 }}>
+            <Pressable onPress={() => setView({ kind: 'league' })}>
+              <Text variant="link">← Back to league</Text>
+            </Pressable>
+            <Text variant="bodyMuted" style={{ marginTop: 16 }}>Matchup not found.</Text>
+          </View>
+        </Screen>
+      );
+    }
     return (
       <Screen>
         <MatchupDetail matchup={m} onBack={() => setView({ kind: 'league' })} />
@@ -151,7 +65,18 @@ export default function LeaguePage() {
     );
   }
   if (view.kind === 'team') {
-    const t = TEAMS.find((x) => x.name === (view as { name: string }).name)!;
+    const t = teams.find((x) => x.name === view.name);
+    if (!t) {
+      return (
+        <Screen>
+          <View style={{ flex: 1, padding: 24 }}>
+            <Pressable onPress={() => setView({ kind: 'league' })}>
+              <Text variant="link">← Back to league</Text>
+            </Pressable>
+          </View>
+        </Screen>
+      );
+    }
     return (
       <Screen>
         <TeamOverview team={t} onBack={() => setView({ kind: 'league' })} />
@@ -161,86 +86,160 @@ export default function LeaguePage() {
 
   return (
     <Screen>
-      <LeagueHome active={active} onOpenMatchup={(id) => setView({ kind: 'matchup', id })} onOpenTeam={(name) => setView({ kind: 'team', name })} />
+      <LeagueHome
+        active={active}
+        week={week}
+        teams={teams}
+        matchups={matchups}
+        isLoading={isLoading}
+        isError={isError}
+        hasSnapshot={data?.hasSnapshot ?? false}
+        onRetry={() => refetch()}
+        onOpenMatchup={(id) => setView({ kind: 'matchup', id })}
+        onOpenTeam={(name) => setView({ kind: 'team', name })}
+      />
     </Screen>
   );
 }
 
 type LeagueTab = 'standings' | 'live' | 'analytics';
 
-function LeagueHome({ active, onOpenMatchup, onOpenTeam }: { active: League; onOpenMatchup: (id: string) => void; onOpenTeam: (name: string) => void }) {
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+function LeagueHome({
+  active,
+  week,
+  teams,
+  matchups,
+  isLoading,
+  isError,
+  hasSnapshot,
+  onRetry,
+  onOpenMatchup,
+  onOpenTeam,
+}: {
+  active: League;
+  week: number;
+  teams: TeamRow[];
+  matchups: Matchup[];
+  isLoading: boolean;
+  isError: boolean;
+  hasSnapshot: boolean;
+  onRetry: () => void;
+  onOpenMatchup: (id: string) => void;
+  onOpenTeam: (name: string) => void;
+}) {
+  const { hex, layout, surfaces } = useThemeTokens();
   const c = useColors();
   const [tab, setTab] = useState<LeagueTab>('standings');
   const [feedOpen, setFeedOpen] = useState(false);
-  const totalW = TEAMS.reduce((s, t) => s + t.wins, 0);
-  const totalL = TEAMS.reduce((s, t) => s + t.losses, 0);
+  const feed = useLeagueFeed(hasSnapshot ? active.id : undefined);
+  const totalW = teams.reduce((s, t) => s + t.wins, 0);
+  const totalL = teams.reduce((s, t) => s + t.losses, 0);
+  const teamCount = teams.length || active.members;
 
   return (
     <View style={layout.screen}>
       <PageIntro
-        eyebrow={`Week ${active.week}`}
+        eyebrow={`Week ${week}`}
         title={active.name}
-        subtitle={`${active.members} teams · ${totalW}-${totalL} combined · ${active.type === 'synced' ? `Synced from ${active.platform}` : 'Hosted'}`}
+        subtitle={`${teamCount} teams · ${teams.length ? `${totalW}-${totalL} combined` : 'Loading stats…'} · ${active.type === 'synced' ? `Synced from ${active.platform}` : 'Hosted'}`}
       />
 
-      <View style={[layout.row, { gap: 8 }]}>
-        <View style={[layout.flex1, { minWidth: 0 }]}>
-          <Segmented
-            value={tab}
-            onChange={setTab}
-            tabs={[
-              { key: 'standings', label: 'Standings' },
-              { key: 'live', label: 'Live' },
-              { key: 'analytics', label: 'Analytics' },
-            ]}
-          />
+      {isLoading ? (
+        <View style={[layout.centered, { paddingVertical: 48 }]}>
+          <ActivityIndicator color={hex.primary} />
+          <Text variant="bodyMuted" style={{ marginTop: 12 }}>Loading league from Sleeper…</Text>
         </View>
-        <Pressable
-          onPress={() => setFeedOpen(true)}
-          style={[
-            layout.iconButtonSm,
-            { position: 'relative', borderRadius: 9999, backgroundColor: hex.surfaceElevated },
-          ]}
-        >
-          <MessageCircle size={20} color={c.foreground} />
-          <View style={surfaces.badge}>
-            <Text variant="pill" style={{ fontWeight: '600', color: hex.background, fontSize: 10 }}>
-              {FEED.length}
-            </Text>
+      ) : isError ? (
+        <View style={{ gap: 12, paddingVertical: 24 }}>
+          <Text variant="bodyMuted">Could not load league data.</Text>
+          <Pressable onPress={onRetry} style={surfaces.primaryButton}>
+            <Text variant="button" style={{ color: hex.primaryForeground }}>Retry</Text>
+          </Pressable>
+        </View>
+      ) : !hasSnapshot ? (
+        <View style={{ paddingVertical: 24, paddingHorizontal: 8 }}>
+          <Text variant="bodyMuted">
+            No standings synced yet. If you just connected, wait a moment and pull to refresh, or re-sync from Commissioner → League Settings.
+          </Text>
+          <Pressable onPress={onRetry} style={[surfaces.secondaryButton, { marginTop: 16, height: 44 }]}>
+            <Text variant="body">Refresh</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <>
+          <View style={[layout.row, { gap: 8 }]}>
+            <View style={[layout.flex1, { minWidth: 0 }]}>
+              <Segmented
+                value={tab}
+                onChange={setTab}
+                tabs={[
+                  { key: 'standings', label: 'Standings' },
+                  { key: 'live', label: 'Live' },
+                  { key: 'analytics', label: 'Analytics' },
+                ]}
+              />
+            </View>
+            <Pressable
+              onPress={() => setFeedOpen(true)}
+              style={[
+                layout.iconButtonSm,
+                { position: 'relative', borderRadius: 9999, backgroundColor: hex.surfaceElevated },
+              ]}
+            >
+              <MessageCircle size={20} color={c.foreground} />
+              <View style={surfaces.badge}>
+                <Text variant="pill" style={{ fontWeight: '600', color: hex.background, fontSize: 10 }}>
+                  {feed.items.length}
+                </Text>
+              </View>
+            </Pressable>
           </View>
-        </Pressable>
-      </View>
 
-      {tab === 'standings' ? <StandingsPane onOpenTeam={onOpenTeam} /> : null}
-      {tab === 'live' ? <LivePane onOpenMatchup={onOpenMatchup} /> : null}
-      {tab === 'analytics' ? <AnalyticsPane active={active} /> : null}
+          {tab === 'standings' ? <StandingsPane teams={teams} onOpenTeam={onOpenTeam} /> : null}
+          {tab === 'live' ? <LivePane matchups={matchups} onOpenMatchup={onOpenMatchup} /> : null}
+          {tab === 'analytics' ? <AnalyticsPane active={active} teams={teams} week={week} /> : null}
+        </>
+      )}
 
-      <FeedSheet open={feedOpen} onClose={() => setFeedOpen(false)} />
+      <FeedSheet
+        open={feedOpen}
+        onClose={() => setFeedOpen(false)}
+        items={feed.items}
+        isLoading={feed.isLoading}
+        isError={feed.isError}
+        posting={feed.posting}
+        onPost={feed.post}
+        onReact={feed.react}
+        onVote={feed.vote}
+        onRetry={() => feed.refetch()}
+      />
     </View>
   );
 }
 
 /* ------------------------------ STANDINGS ------------------------------ */
-function playoffOdds(rank: number) {
-  return rank <= 2 ? 99 : rank <= 4 ? 92 : rank === 5 ? 71 : rank === 6 ? 58 : rank === 7 ? 22 : rank === 8 ? 8 : rank === 9 ? 3 : 1;
+function playoffOdds(rank: number, teamCount: number) {
+  const cutoff = teamCount <= 10 ? 4 : 6;
+  if (rank <= cutoff - 2) return 95;
+  if (rank <= cutoff) return 75;
+  if (rank === cutoff + 1) return 35;
+  if (rank === cutoff + 2) return 15;
+  return 5;
 }
 
-function StandingsPane({ onOpenTeam }: { onOpenTeam: (name: string) => void }) {
+function StandingsPane({ teams, onOpenTeam }: { teams: TeamRow[]; onOpenTeam: (name: string) => void }) {
   const styles = useLeagueStyles();
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const { scheme } = useTheme();
   const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
-  const clinching = TEAMS.filter((t) => playoffOdds(t.rank) >= 95).length;
-  const bubble = TEAMS.filter((t) => {
-    const o = playoffOdds(t.rank);
-    return o >= 20 && o < 95;
-  }).length;
+  const playoffCutoff = teams.length <= 10 ? 4 : 6;
+  const clinching = teams.filter((t) => t.rank <= Math.min(2, playoffCutoff)).length;
+  const bubble = teams.filter((t) => t.rank > playoffCutoff - 2 && t.rank <= playoffCutoff + 1).length;
 
   return (
     <Section title="Standings & playoff odds">
       <View style={styles.standingsBanner}>
-        <Text variant="eyebrow">Top 6 make playoffs</Text>
+        <Text variant="eyebrow">Top {playoffCutoff} make playoffs</Text>
         <Text variant="caption">
           <Text variant="caption" style={{ color: toneFg.success, fontWeight: '600' }}>{clinching}</Text>
           {' clinching · '}
@@ -249,8 +248,8 @@ function StandingsPane({ onOpenTeam }: { onOpenTeam: (name: string) => void }) {
         </Text>
       </View>
       <View style={surfaces.roundedCard}>
-        {TEAMS.map((t, i) => {
-          const odds = playoffOdds(t.rank);
+        {teams.map((t, i) => {
+          const odds = playoffOdds(t.rank, teams.length);
           const oddsColor =
             odds >= 90 ? toneFg.success : odds >= 50 ? hex.foreground : odds >= 20 ? hex.warning : toneFg.danger;
           const barColor =
@@ -259,7 +258,7 @@ function StandingsPane({ onOpenTeam }: { onOpenTeam: (name: string) => void }) {
             <Pressable key={t.name} onPress={() => onOpenTeam(t.name)}>
               <View style={[styles.standingsRow, i > 0 ? layout.listRowBorder : null]}>
                 <Text variant="bodyMuted" style={{ width: 20, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{t.rank}</Text>
-                <AvatarImage src={personAvatar(t.owner + t.name)} name={t.owner} size={36} />
+                <AvatarImage src={personAvatar(t.owner + t.name, t.ownerAvatarUrl)} name={t.owner} size={36} />
                 <TagDot tag={t.tag} />
                 <View style={[layout.flex1, { minWidth: 0 }]}>
                   <Text variant="body" numberOfLines={1}>{t.name}</Text>
@@ -284,8 +283,8 @@ function StandingsPane({ onOpenTeam }: { onOpenTeam: (name: string) => void }) {
 }
 
 /* ------------------------------ LIVE ------------------------------ */
-function LivePane({ onOpenMatchup }: { onOpenMatchup: (id: string) => void }) {
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+function LivePane({ matchups, onOpenMatchup }: { matchups: Matchup[]; onOpenMatchup: (id: string) => void }) {
+  const { hex, layout } = useThemeTokens();
   const { width } = useWindowDimensions();
   const cardW = width - 32;
   const [active, setActive] = useState(0);
@@ -296,10 +295,18 @@ function LivePane({ onOpenMatchup }: { onOpenMatchup: (id: string) => void }) {
     if (idx !== active) setActive(idx);
   };
 
+  if (!matchups.length) {
+    return (
+      <View style={{ paddingVertical: 24, paddingHorizontal: 8 }}>
+        <Text variant="bodyMuted">No matchups for this week yet.</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={{ gap: 12 }}>
       <View style={[layout.rowBetween, { paddingHorizontal: 4 }]}>
-        <Text variant="eyebrow">Matchup {active + 1} of {MATCHUPS.length}</Text>
+        <Text variant="eyebrow">Matchup {active + 1} of {matchups.length}</Text>
         <Text variant="caption">Swipe →</Text>
       </View>
       <ScrollView
@@ -311,14 +318,19 @@ function LivePane({ onOpenMatchup }: { onOpenMatchup: (id: string) => void }) {
         decelerationRate="fast"
         onMomentumScrollEnd={onScroll}
       >
-        {MATCHUPS.map((m, idx) => (
+        {matchups.map((m) => (
           <View key={m.id} style={{ width: cardW }}>
-            <LiveMatchupCard matchup={m} homeLineup={LINEUP_DEFAULT} awayLineup={lineupFor(idx + 1)} onOpen={() => onOpenMatchup(m.id)} />
+            <LiveMatchupCard
+              matchup={m}
+              homeLineup={m.homeLineup}
+              awayLineup={m.awayLineup}
+              onOpen={() => onOpenMatchup(m.id)}
+            />
           </View>
         ))}
       </ScrollView>
       <View style={[layout.row, layout.centered, { gap: 6, paddingTop: 4 }]}>
-        {MATCHUPS.map((_, i) => (
+        {matchups.map((_, i) => (
           <Pressable key={i} onPress={() => scrollerRef.current?.scrollTo({ x: i * cardW, animated: true })}>
             <View
               style={{
@@ -335,7 +347,7 @@ function LivePane({ onOpenMatchup }: { onOpenMatchup: (id: string) => void }) {
   );
 }
 
-function LiveMatchupCard({ matchup: m, homeLineup, awayLineup, onOpen }: { matchup: Matchup; homeLineup: typeof LINEUP_DEFAULT; awayLineup: typeof LINEUP_DEFAULT; onOpen: () => void }) {
+function LiveMatchupCard({ matchup: m, homeLineup, awayLineup, onOpen }: { matchup: Matchup; homeLineup: LineupRow[]; awayLineup: LineupRow[]; onOpen: () => void }) {
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const { scheme } = useTheme();
   const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
@@ -350,7 +362,7 @@ function LiveMatchupCard({ matchup: m, homeLineup, awayLineup, onOpen }: { match
         <View style={[layout.row, { gap: 8, marginTop: 12 }]}>
           <View style={[layout.flex1, { minWidth: 0 }]}>
             <View style={[layout.row, { gap: 8 }]}>
-              <AvatarImage src={personAvatar(m.home.owner + m.home.name)} name={m.home.owner} size={32} />
+              <AvatarImage src={personAvatar(m.home.owner + m.home.name, m.home.ownerAvatarUrl)} name={m.home.owner} size={32} />
               <Text variant="bodyMuted" numberOfLines={1}>{m.home.owner}</Text>
             </View>
             <Text variant="bodySm" style={{ marginTop: 4 }} numberOfLines={1}>{m.home.name}</Text>
@@ -366,7 +378,7 @@ function LiveMatchupCard({ matchup: m, homeLineup, awayLineup, onOpen }: { match
           <View style={[layout.flex1, layout.alignEnd, { minWidth: 0 }]}>
             <View style={[layout.row, { gap: 8 }]}>
               <Text variant="bodyMuted" numberOfLines={1}>{m.away.owner}</Text>
-              <AvatarImage src={personAvatar(m.away.owner + m.away.name)} name={m.away.owner} size={32} />
+              <AvatarImage src={personAvatar(m.away.owner + m.away.name, m.away.ownerAvatarUrl)} name={m.away.owner} size={32} />
             </View>
             <Text variant="bodySm" style={{ marginTop: 4 }} numberOfLines={1}>{m.away.name}</Text>
             <Text
@@ -398,16 +410,23 @@ function LiveMatchupCard({ matchup: m, homeLineup, awayLineup, onOpen }: { match
   );
 }
 
-function LiveLineupCol({ team, rows }: { team: string; rows: typeof LINEUP_DEFAULT }) {
+function LiveLineupCol({ team, rows }: { team: string; rows: LineupRow[] }) {
   const styles = useLeagueStyles();
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
     <View>
       <Text variant="eyebrow" style={{ paddingHorizontal: 12, paddingTop: 12 }} numberOfLines={1}>{team}</Text>
       <View style={{ marginTop: 4 }}>
-        {rows.map((r, i) => (
+        {(rows.length ? rows : [{ slot: '—', name: 'No lineup synced', pts: 0, rem: '—' }]).map((r, i) => (
           <View key={r.slot + i} style={[styles.lineupRow, i > 0 ? layout.listRowBorder : null]}>
             <Text variant="pill" muted style={{ width: 32, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 }}>{r.slot}</Text>
+            {r.playerId || r.imageUrl ? (
+              <AvatarImage
+                src={playerAvatar({ playerId: r.playerId, name: r.name, imageUrl: r.imageUrl })}
+                name={r.name}
+                size={28}
+              />
+            ) : null}
             <View style={[layout.flex1, { minWidth: 0 }]}>
               <Text variant="bodyMuted" style={{ fontSize: 12, fontWeight: '500', color: hex.foreground }} numberOfLines={1}>{r.name}</Text>
               <Text variant="pill" muted numberOfLines={1}>{r.rem}</Text>
@@ -421,16 +440,17 @@ function LiveLineupCol({ team, rows }: { team: string; rows: typeof LINEUP_DEFAU
 }
 
 /* ------------------------------ ANALYTICS ------------------------------ */
-function AnalyticsPane({ active }: { active: League }) {
+function AnalyticsPane({ active, teams, week }: { active: League; teams: TeamRow[]; week: number }) {
   const styles = useLeagueStyles();
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+  const { hex, layout, surfaces } = useThemeTokens();
   const [awardFilter, setAwardFilter] = useState<'season' | number>('season');
-  const weeks = [1, 2, 3, 4, 5, 6, 7, 8];
+  const awards = teams.length ? computeLeagueAwards(teams) : [];
+  const weeks = Array.from({ length: Math.min(week, 8) }, (_, i) => i + 1);
 
   return (
     <View style={{ gap: 24 }}>
       <Section title="Team comparison">
-        <MetricScatter />
+        <MetricScatter teams={teams} />
       </Section>
 
       <Section title="League awards">
@@ -441,7 +461,7 @@ function AnalyticsPane({ active }: { active: League }) {
           ))}
         </ScrollView>
         <View style={[layout.rowWrap, { gap: 8 }]}>
-          {AWARDS.map((a) => (
+          {awards.map((a) => (
             <View key={a.id} style={styles.awardCard}>
               <Text variant="eyebrow">{a.title}</Text>
               <Text variant="body" style={{ marginTop: 6 }}>{a.value}</Text>
@@ -525,14 +545,23 @@ function teamMetric(t: TeamRow, k: MetricKey): number {
   }
 }
 
-function MetricScatter() {
+function MetricScatter({ teams }: { teams: TeamRow[] }) {
   const styles = useLeagueStyles();
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const [metric, setMetric] = useState<MetricKey>('pf');
   const [hover, setHover] = useState<number | null>(null);
   const cfg = METRICS.find((m) => m.key === metric)!;
-  const values = TEAMS.map((t) => teamMetric(t, metric));
+
+  if (!teams.length) {
+    return (
+      <View style={[surfaces.roundedCard, { padding: 16 }]}>
+        <Text variant="bodyMuted">No team data to compare yet.</Text>
+      </View>
+    );
+  }
+
+  const values = teams.map((t) => teamMetric(t, metric));
   const min = Math.min(...values);
   const max = Math.max(...values);
   const avg = values.reduce((a, b) => a + b, 0) / values.length;
@@ -542,10 +571,10 @@ function MetricScatter() {
   const W = 320, H = 200, padL = 8, padR = 8, padT = 14, padB = 26;
   const innerW = W - padL - padR;
   const innerH = H - padT - padB;
-  const xFor = (i: number) => padL + (innerW * (i + 0.5)) / TEAMS.length;
+  const xFor = (i: number) => padL + (innerW * (i + 0.5)) / teams.length;
   const yFor = (v: number) => padT + innerH - ((v - yMin) / (yMax - yMin)) * innerH;
   const avgY = yFor(avg);
-  const sorted = [...TEAMS].map((t, i) => ({ t, v: values[i] })).sort((a, b) => b.v - a.v);
+  const sorted = [...teams].map((t, i) => ({ t, v: values[i] })).sort((a, b) => b.v - a.v);
 
   return (
     <View style={[surfaces.roundedCard, { gap: 12, padding: 16 }]}>
@@ -569,7 +598,7 @@ function MetricScatter() {
         <Svg viewBox={`0 0 ${W} ${H}`} width="100%" height={200}>
           <SvgLine x1={padL} x2={W - padR} y1={avgY} y2={avgY} stroke={c.foreground} strokeOpacity={0.4} strokeDasharray="4 4" strokeWidth={1} />
           <SvgText x={W - padR} y={avgY - 4} textAnchor="end" fill={c.mutedForeground} fontSize={9} fontWeight="600">AVG {cfg.fmt(avg)}</SvgText>
-          {TEAMS.map((t, i) => {
+          {teams.map((t, i) => {
             const v = values[i];
             const cx = xFor(i);
             const cy = yFor(v);
@@ -626,13 +655,45 @@ function MetricScatter() {
 }
 
 /* ------------------------------ FEED SHEET ------------------------------ */
-function FeedSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+function FeedSheet({
+  open,
+  onClose,
+  items,
+  isLoading,
+  isError,
+  posting,
+  onPost,
+  onReact,
+  onVote,
+  onRetry,
+}: {
+  open: boolean;
+  onClose: () => void;
+  items: LeagueFeedItem[];
+  isLoading: boolean;
+  isError: boolean;
+  posting: boolean;
+  onPost: (content: string) => Promise<unknown>;
+  onReact: (postId: string) => Promise<unknown>;
+  onVote: (input: { pollId: string; optionId: string }) => Promise<unknown>;
+  onRetry: () => void;
+}) {
   const styles = useLeagueStyles();
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+  const { hex, layout, surfaces } = useThemeTokens();
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const [items, setItems] = useState(FEED);
   const [draft, setDraft] = useState('');
+
+  const submit = async () => {
+    const content = draft.trim();
+    if (!content || posting) return;
+    try {
+      await onPost(content);
+      setDraft('');
+    } catch {
+      // keep draft on failure
+    }
+  };
 
   return (
     <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
@@ -659,9 +720,26 @@ function FeedSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
             contentContainerStyle={{ gap: 12, paddingHorizontal: 16, paddingBottom: 12 }}
             showsVerticalScrollIndicator={false}
           >
-            {items.map((f) => (
-              <FeedCard key={f.id} item={f} />
-            ))}
+            {isLoading ? (
+              <View style={[layout.centered, { paddingVertical: 32 }]}>
+                <ActivityIndicator color={hex.primary} />
+              </View>
+            ) : isError ? (
+              <View style={{ gap: 12, paddingVertical: 16 }}>
+                <Text variant="bodyMuted">Could not load feed.</Text>
+                <Pressable onPress={onRetry} style={surfaces.primaryButton}>
+                  <Text variant="button" style={{ color: hex.primaryForeground }}>Retry</Text>
+                </Pressable>
+              </View>
+            ) : items.length === 0 ? (
+              <View style={{ paddingVertical: 24 }}>
+                <Text variant="bodyMuted">No posts yet. Start the conversation below.</Text>
+              </View>
+            ) : (
+              items.map((f) => (
+                <FeedCard key={f.id} item={f} onReact={onReact} onVote={onVote} />
+              ))
+            )}
           </ScrollView>
           <View style={[layout.row, { gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: hex.hairline, padding: 12 }]}>
             <TextInput
@@ -670,16 +748,14 @@ function FeedSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
               placeholder="Post to the league…"
               placeholderTextColor={c.mutedForeground}
               style={styles.feedInput}
+              editable={!posting}
             />
-            <Pressable
-              onPress={() => {
-                if (!draft.trim()) return;
-                setItems((m) => [{ id: `me-${Date.now()}`, kind: 'announcement', who: 'You', headline: draft, when: 'now', reactions: { likes: 0, cheers: 0, laughs: 0 }, comments: 0 }, ...m]);
-                setDraft('');
-              }}
-              style={styles.feedPostBtn}
-            >
-              <Text variant="button" style={{ color: hex.primaryForeground }}>Post</Text>
+            <Pressable onPress={submit} disabled={posting || !draft.trim()} style={[styles.feedPostBtn, posting ? { opacity: 0.6 } : null]}>
+              {posting ? (
+                <ActivityIndicator color={hex.primaryForeground} size="small" />
+              ) : (
+                <Text variant="button" style={{ color: hex.primaryForeground }}>Post</Text>
+              )}
             </Pressable>
           </View>
         </View>
@@ -770,54 +846,54 @@ function StateBadge({ state, kickoff }: { state: Matchup['state']; kickoff?: str
   return <Text variant="eyebrow">{kickoff ?? 'Upcoming'}</Text>;
 }
 
-const FEED_ICONS: Record<FeedKind, LucideIcon> = {
+const FEED_ICONS: Record<LeagueFeedItem['kind'], LucideIcon> = {
+  post: MessageCircle,
   announcement: Pin,
-  trade: ChevronsUpDown,
-  waiver: TrendingUp,
+  award: Trophy,
+  recap: Trophy,
   poll: MessageCircle,
-  report: Trophy,
-  payment: PartyPopper,
-  moment: Flame,
 };
 
-function FeedCard({ item }: { item: FeedItem }) {
+function FeedCard({
+  item,
+  onReact,
+  onVote,
+}: {
+  item: LeagueFeedItem;
+  onReact: (postId: string) => Promise<unknown>;
+  onVote: (input: { pollId: string; optionId: string }) => Promise<unknown>;
+}) {
   const styles = useLeagueStyles();
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+  const { hex, layout, surfaces } = useThemeTokens();
   const { scheme } = useTheme();
   const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
   const c = useColors();
-  const [open, setOpen] = useState(false);
-  const [voted, setVoted] = useState<number | null>(null);
-  const Icon = FEED_ICONS[item.kind] ?? Flame;
-  const totalVotes = item.poll ? item.poll.options.reduce((s, o) => s + o.votes, 0) + (voted !== null ? 1 : 0) : 0;
+  const Icon = FEED_ICONS[item.kind] ?? MessageCircle;
+  const poll = item.poll;
+  const totalVotes = poll ? poll.options.reduce((s, o) => s + o.voteCount, 0) : 0;
+  const votedOptionId = poll?.userVoteOptionId ?? null;
 
   return (
-    <View style={[surfaces.roundedCard, item.pinned ? { borderWidth: StyleSheet.hairlineWidth, borderColor: `rgba(${ink},0.1)` } : null]}>
+    <View style={surfaces.roundedCard}>
       <View style={{ gap: 8, padding: 16 }}>
         <View style={[layout.row, { gap: 8 }]}>
           <Icon size={14} color={c.mutedForeground} />
-          <Text variant="eyebrow">{item.who}</Text>
+          <Text variant="eyebrow">{item.authorName}</Text>
           <Text variant="caption" style={{ opacity: 0.6 }}>·</Text>
-          <Text variant="eyebrow">{item.when}</Text>
-          {item.pinned ? (
-            <View style={[surfaces.pillMuted, { marginLeft: 'auto' }]}>
-              <Text variant="pill" muted style={{ letterSpacing: 1 }}>Pinned</Text>
-            </View>
-          ) : null}
+          <Text variant="eyebrow">{formatRelativeTime(item.createdAt)}</Text>
         </View>
         <Text variant="body">{item.headline}</Text>
         {item.body ? <Text variant="subtitle">{item.body}</Text> : null}
 
-        {item.poll ? (
+        {poll ? (
           <View style={{ gap: 6, paddingTop: 4 }}>
-            {item.poll.options.map((o, idx) => {
-              const votes = o.votes + (voted === idx ? 1 : 0);
-              const pct = totalVotes ? Math.round((votes / totalVotes) * 100) : 0;
-              const selected = voted === idx;
+            {poll.options.map((o) => {
+              const pct = totalVotes ? Math.round((o.voteCount / totalVotes) * 100) : 0;
+              const selected = votedOptionId === o.id;
               return (
                 <Pressable
-                  key={o.label}
-                  onPress={() => setVoted(idx)}
+                  key={o.id}
+                  onPress={() => onVote({ pollId: poll.pollId, optionId: o.id })}
                   style={styles.pollOption}
                 >
                   <View
@@ -827,56 +903,39 @@ function FeedCard({ item }: { item: FeedItem }) {
                       bottom: 0,
                       left: 0,
                       backgroundColor: selected ? `rgba(${ink},0.15)` : `rgba(${ink},0.05)`,
-                      width: voted !== null ? `${pct}%` : 0,
+                      width: votedOptionId ? `${pct}%` : 0,
                     }}
                   />
                   <View style={layout.rowBetween}>
-                    <Text variant="bodySm" style={{ fontSize: 13 }}>{o.label}</Text>
-                    {voted !== null ? <Text variant="bodyMuted" style={{ fontVariant: ['tabular-nums'] }}>{pct}%</Text> : null}
+                    <Text variant="bodySm" style={{ fontSize: 13 }}>{o.text}</Text>
+                    {votedOptionId ? <Text variant="bodyMuted" style={{ fontVariant: ['tabular-nums'] }}>{pct}%</Text> : null}
                   </View>
                 </Pressable>
               );
             })}
-            <Text variant="caption" style={{ paddingTop: 2 }}>{totalVotes} {totalVotes === 1 ? 'vote' : 'votes'}</Text>
+            <Text variant="caption" style={{ paddingTop: 2 }}>
+              {totalVotes} {totalVotes === 1 ? 'vote' : 'votes'}
+            </Text>
           </View>
         ) : null}
       </View>
 
-      <View style={[layout.row, { gap: 4, paddingHorizontal: 8, paddingBottom: 8 }]}>
-        <ReactBtn icon={ThumbsUp} count={item.reactions.likes} />
-        <ReactBtn icon={Heart} count={item.reactions.cheers} />
-        <ReactBtn icon={Laugh} count={item.reactions.laughs} />
-        <Pressable onPress={() => setOpen((o) => !o)} style={[layout.row, { gap: 6, marginLeft: 'auto', borderRadius: 9999, paddingHorizontal: 12, paddingVertical: 6 }]}>
-          <MessageCircle size={14} color={c.mutedForeground} />
-          <Text variant="bodyMuted" style={{ fontWeight: '500' }}>{item.comments}</Text>
-        </Pressable>
-      </View>
-
-      {open ? (
-        <View style={{ gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: hex.hairline, padding: 12 }}>
-          <View style={{ borderRadius: 14, backgroundColor: hex.background, paddingHorizontal: 12, paddingVertical: 8 }}>
-            <Text variant="caption" style={{ fontWeight: '600' }}>Mike</Text>
-            <Text variant="bodySm" style={{ fontSize: 13 }}>Brutal.</Text>
-          </View>
-          <TextInput
-            placeholder="Write a comment…"
-            placeholderTextColor={c.mutedForeground}
-            style={styles.commentInput}
-          />
+      {item.kind !== 'poll' ? (
+        <View style={[layout.row, { gap: 4, paddingHorizontal: 8, paddingBottom: 8 }]}>
+          <Pressable
+            onPress={() => onReact(item.id)}
+            style={[layout.row, { gap: 6, borderRadius: 9999, paddingHorizontal: 12, paddingVertical: 6 }]}
+          >
+            <ThumbsUp size={14} color={c.mutedForeground} />
+            {item.reactionCount > 0 ? (
+              <Text variant="bodyMuted" style={{ fontWeight: '500', fontVariant: ['tabular-nums'] }}>
+                {item.reactionCount}
+              </Text>
+            ) : null}
+          </Pressable>
         </View>
       ) : null}
     </View>
-  );
-}
-
-function ReactBtn({ icon: Icon, count }: { icon: LucideIcon; count: number }) {
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
-  const c = useColors();
-  return (
-    <Pressable style={[layout.row, { gap: 6, borderRadius: 9999, paddingHorizontal: 12, paddingVertical: 6 }]}>
-      <Icon size={14} color={c.mutedForeground} />
-      {count > 0 ? <Text variant="bodyMuted" style={{ fontWeight: '500', fontVariant: ['tabular-nums'] }}>{count}</Text> : null}
-    </Pressable>
   );
 }
 
@@ -909,12 +968,8 @@ function MatchupDetail({ matchup: m, onBack }: { matchup: Matchup; onBack: () =>
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const { scheme } = useTheme();
   const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
-  const homeLineup = LINEUP_DEFAULT;
-  const awayLineup = homeLineup.map((p, i) => ({
-    ...p,
-    name: ['P. Mahomes', 'S. Barkley', 'D. Henry', 'C. Lamb', 'A. St. Brown', 'G. Kittle', 'C. Olave', 'B. Aubrey', 'Cowboys'][i],
-    pts: Math.max(0, p.pts - 2 + (i % 3) * 1.5),
-  }));
+  const homeLineup = m.homeLineup.length ? m.homeLineup : [{ slot: '—', name: 'No starters synced', pts: 0, rem: '—' }];
+  const awayLineup = m.awayLineup.length ? m.awayLineup : [{ slot: '—', name: 'No starters synced', pts: 0, rem: '—' }];
 
   return (
     <View style={layout.screen}>
@@ -927,7 +982,7 @@ function MatchupDetail({ matchup: m, onBack }: { matchup: Matchup; onBack: () =>
         <View style={[layout.row, { gap: 8, marginTop: 12 }]}>
           <View style={layout.flex1}>
             <View style={[layout.row, { gap: 8 }]}>
-              <AvatarImage src={personAvatar(m.home.owner + m.home.name)} name={m.home.owner} size={36} />
+              <AvatarImage src={personAvatar(m.home.owner + m.home.name, m.home.ownerAvatarUrl)} name={m.home.owner} size={36} />
               <Text variant="subtitle">{m.home.owner}</Text>
             </View>
             <Text variant="titleMd" style={{ marginTop: 4 }}>{m.home.name}</Text>
@@ -938,7 +993,7 @@ function MatchupDetail({ matchup: m, onBack }: { matchup: Matchup; onBack: () =>
           <View style={[layout.flex1, layout.alignEnd]}>
             <View style={[layout.row, { gap: 8 }]}>
               <Text variant="subtitle">{m.away.owner}</Text>
-              <AvatarImage src={personAvatar(m.away.owner + m.away.name)} name={m.away.owner} size={36} />
+              <AvatarImage src={personAvatar(m.away.owner + m.away.name, m.away.ownerAvatarUrl)} name={m.away.owner} size={36} />
             </View>
             <Text variant="titleMd" style={{ marginTop: 4 }}>{m.away.name}</Text>
             <Text variant="scoreLG" style={{ marginTop: 8, fontVariant: ['tabular-nums'] }}>{m.ap.toFixed(1)}</Text>
@@ -996,7 +1051,7 @@ function MatchupDetail({ matchup: m, onBack }: { matchup: Matchup; onBack: () =>
   );
 }
 
-function LineupCol({ team, rows }: { team: string; rows: typeof LINEUP_DEFAULT }) {
+function LineupCol({ team, rows }: { team: string; rows: LineupRow[] }) {
   const styles = useLeagueStyles();
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
@@ -1006,6 +1061,13 @@ function LineupCol({ team, rows }: { team: string; rows: typeof LINEUP_DEFAULT }
         {rows.map((r, i) => (
           <View key={r.slot + i} style={[styles.lineupRowLg, i > 0 ? layout.listRowBorder : null]}>
             <Text variant="pill" muted style={{ width: 32, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 }}>{r.slot}</Text>
+            {r.playerId || r.imageUrl ? (
+              <AvatarImage
+                src={playerAvatar({ playerId: r.playerId, name: r.name, imageUrl: r.imageUrl })}
+                name={r.name}
+                size={32}
+              />
+            ) : null}
             <View style={[layout.flex1, { minWidth: 0 }]}>
               <Text variant="bodyMuted" style={{ fontSize: 12, fontWeight: '500', color: hex.foreground }} numberOfLines={1}>{r.name}</Text>
               <Text variant="pill" muted numberOfLines={1}>{r.rem}</Text>
@@ -1027,7 +1089,7 @@ function TeamOverview({ team, onBack }: { team: TeamRow; onBack: () => void }) {
       <BackBar onBack={onBack} title="Team" />
       <View style={[surfaces.roundedCardLg, { padding: 20 }]}>
         <View style={[layout.row, { gap: 12 }]}>
-          <AvatarImage src={personAvatar(team.owner + team.name)} name={team.owner} size={56} />
+          <AvatarImage src={personAvatar(team.owner + team.name, team.ownerAvatarUrl)} name={team.owner} size={56} />
           <View style={[layout.flex1, { minWidth: 0 }]}>
             <Text variant="eyebrow">Rank {team.rank}{team.seed ? ` · Seed ${team.seed}` : ''}</Text>
             <Text variant="titleLg" style={{ marginTop: 2, fontSize: 24, letterSpacing: -0.6 }} numberOfLines={1}>{team.name}</Text>

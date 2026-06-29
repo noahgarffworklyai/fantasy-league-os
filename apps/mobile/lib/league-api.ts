@@ -78,6 +78,50 @@ export async function createHostedLeagueOnApi(input: CreateHostedLeagueInput) {
   );
 }
 
+export type SyncLeagueFeatures = {
+  pot: boolean;
+  payments: boolean;
+  payouts: boolean;
+  reports: boolean;
+  insights: boolean;
+};
+
+export type CreateSyncedLeagueInput = {
+  provider: 'sleeper' | 'espn';
+  externalLeagueId: string;
+  name: string;
+  season: number;
+  teamCount?: number;
+  credentials?: Record<string, unknown>;
+  buyIn?: number;
+  features?: SyncLeagueFeatures;
+};
+
+export async function createSyncedLeagueOnApi(input: CreateSyncedLeagueInput) {
+  const buyIn = input.buyIn ?? 0;
+  const size = input.teamCount ?? 12;
+  const potCents = buyIn * 100 * size;
+  return api.post<{ league: { id: string; name: string; buyInCents: number; platformFeeCents: number } }>(
+    '/leagues',
+    {
+      provider: input.provider,
+      externalLeagueId: input.externalLeagueId,
+      name: input.name,
+      season: input.season,
+      buyInCents: buyIn * 100,
+      platformFeeCents: buyIn > 0 ? Math.max(500, Math.round(potCents * 0.03)) : 0,
+      payoutTemplate: 'standard',
+      customRules: JSON.stringify({
+        synced: true,
+        provider: input.provider,
+        features: input.features ?? null,
+        teamCount: input.teamCount ?? null,
+      }),
+      credentials: input.credentials,
+    },
+  );
+}
+
 export function parseInviteToken(raw: string): string {
   const trimmed = raw.trim();
   const match = trimmed.match(/(?:invite\/|join\/)([A-Za-z0-9_-]+)/);

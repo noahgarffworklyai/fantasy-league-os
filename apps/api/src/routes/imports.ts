@@ -1,4 +1,4 @@
-import { resolveSleeperUserId, sleeperAdapter } from '@flos/league-adapters';
+import { previewSleeperLeague, resolveSleeperUserId, sleeperAdapter } from '@flos/league-adapters';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import { authMiddleware, type AuthenticatedRequest } from '../lib/auth-middleware.js';
@@ -25,6 +25,22 @@ export async function importRoutes(app: FastifyInstance) {
       } catch (err) {
         return reply.status(400).send({
           error: err instanceof Error ? err.message : 'Failed to fetch Sleeper leagues',
+        });
+      }
+    },
+  );
+
+  app.get(
+    '/imports/sleeper/league/:leagueId',
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      const { leagueId } = z.object({ leagueId: z.string().min(3) }).parse(request.params);
+      try {
+        const league = await previewSleeperLeague(leagueId);
+        return { league };
+      } catch (err) {
+        return reply.status(400).send({
+          error: err instanceof Error ? err.message : 'Failed to fetch Sleeper league',
         });
       }
     },
