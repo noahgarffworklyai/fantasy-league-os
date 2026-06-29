@@ -1,11 +1,9 @@
 import { ChevronLeft } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { type ReactNode } from 'react';
-import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Pressable, Text } from './primitives';
-import { useColors } from '@/lib/theme';
-import { cn } from '@/lib/cn';
+import { Pressable, ScrollView, Text, View } from './primitives';
+import { useColors, useHex, useThemeStyles } from '@/lib/theme';
 
 export const BOTTOM_BAR_SPACE = 112;
 
@@ -27,35 +25,53 @@ export function WorkflowShell({
 }) {
   const router = useRouter();
   const c = useColors();
+  const hex = useHex();
+  const { layout: L } = useThemeStyles();
   const insets = useSafeAreaInsets();
 
   return (
-    <View className="flex-1 bg-surface">
+    <View style={[L.fill, { backgroundColor: hex.surface }]}>
       <View
-        className="border-b border-hairline bg-surface"
-        style={{ paddingTop: Math.max(insets.top, 14) }}
+        style={{
+          paddingTop: Math.max(insets.top, 14),
+          borderBottomWidth: 1,
+          borderBottomColor: hex.hairline,
+          backgroundColor: hex.surface,
+        }}
       >
-        <View className="flex-row items-center justify-between px-2 pb-3">
+        <View style={[L.rowBetween, { paddingHorizontal: 8, paddingBottom: 12 }]}>
           <Pressable
             onPress={() => (onBack ? onBack() : router.back())}
-            className="flex-row items-center gap-0.5 rounded-full px-2 py-1"
+            style={[L.row, { gap: 2, borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 4 }]}
           >
             <ChevronLeft size={20} color={c.success} />
-            <Text className="text-[15px] text-success">{backLabel}</Text>
+            <Text variant="body" style={{ color: hex.success }}>
+              {backLabel}
+            </Text>
           </Pressable>
-          <View className="items-center">
+          <View style={{ alignItems: 'center' }}>
             {eyebrow ? (
-              <Text className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+              <Text variant="pill" muted style={{ textTransform: 'uppercase', letterSpacing: 2 }}>
                 {eyebrow}
               </Text>
             ) : null}
-            <Text className="text-[16px] font-semibold tracking-tightish">{title}</Text>
+            <Text variant="titleMd">{title}</Text>
           </View>
-          <View className="min-w-[64px] flex-row items-center justify-end pr-2">{trailing}</View>
+          <View
+            style={{
+              minWidth: 64,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              paddingRight: 8,
+            }}
+          >
+            {trailing}
+          </View>
         </View>
       </View>
       <ScrollView
-        className="flex-1"
+        style={L.fill}
         contentContainerStyle={{ padding: 16, paddingBottom: BOTTOM_BAR_SPACE + insets.bottom }}
         showsVerticalScrollIndicator={false}
       >
@@ -74,15 +90,16 @@ export function Section({
   children: ReactNode;
   action?: ReactNode;
 }) {
+  const { layout: L, surfaces } = useThemeStyles();
   return (
-    <View className="mb-5">
-      <View className="mb-2 flex-row items-center justify-between px-2">
-        <Text className="text-[13px] font-medium uppercase tracking-widest text-muted-foreground">
+    <View style={{ marginBottom: 20 }}>
+      <View style={[L.rowBetween, { marginBottom: 8, paddingHorizontal: 8 }]}>
+        <Text variant="eyebrow" style={{ letterSpacing: 1.5, textTransform: 'uppercase' }}>
           {title}
         </Text>
         {action}
       </View>
-      <View className="overflow-hidden rounded-[24px] bg-surface-elevated">{children}</View>
+      <View style={surfaces.roundedCard}>{children}</View>
     </View>
   );
 }
@@ -102,21 +119,24 @@ export function Row({
   trailing?: ReactNode;
   first?: boolean;
 }) {
+  const { layout: L } = useThemeStyles();
   const inner = (
-    <View
-      className={cn('flex-row items-center gap-3 px-4 py-3.5', first ? '' : 'border-t border-hairline')}
-    >
-      <View className="min-w-0 flex-1">
-        <Text className="text-[16px] font-medium tracking-tightish">{label}</Text>
-        {sub ? <Text className="text-[12px] text-muted-foreground">{sub}</Text> : null}
+    <View style={[L.row, { gap: 12, paddingHorizontal: 16, paddingVertical: 14 }, !first ? L.listRowBorder : null]}>
+      <View style={[L.flex1, { minWidth: 0 }]}>
+        <Text variant="body">{label}</Text>
+        {sub ? <Text variant="bodyMuted">{sub}</Text> : null}
       </View>
-      {value ? <Text className="text-[14px] text-muted-foreground">{value}</Text> : null}
+      {value ? (
+        <Text variant="bodyMuted" style={{ fontSize: 14 }}>
+          {value}
+        </Text>
+      ) : null}
       {trailing}
     </View>
   );
   if (onPress) {
     return (
-      <Pressable onPress={onPress} className="w-full">
+      <Pressable onPress={onPress} style={{ width: '100%' }}>
         {inner}
       </Pressable>
     );
@@ -125,10 +145,15 @@ export function Row({
 }
 
 export function Empty({ title, sub }: { title: string; sub?: string }) {
+  const { surfaces } = useThemeStyles();
   return (
-    <View className="items-center rounded-[24px] bg-surface-elevated px-6 py-10">
-      <Text className="text-[15px] font-medium">{title}</Text>
-      {sub ? <Text className="mt-1 text-[13px] text-muted-foreground">{sub}</Text> : null}
+    <View style={surfaces.emptyState}>
+      <Text variant="body">{title}</Text>
+      {sub ? (
+        <Text variant="subtitle" style={{ marginTop: 4 }}>
+          {sub}
+        </Text>
+      ) : null}
     </View>
   );
 }

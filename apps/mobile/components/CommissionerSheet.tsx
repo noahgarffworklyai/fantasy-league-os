@@ -10,13 +10,11 @@ import {
   UserPlus,
   Wallet,
 } from 'lucide-react-native';
-import { View } from 'react-native';
-import { Pressable, Text } from './ui/primitives';
+import { Pressable, Text, View } from './ui/primitives';
 import { Sheet } from './ui/Sheet';
 import { useCommissionerSheet } from '@/lib/commissioner-sheet-context';
 import { useLeague, type League, type SeasonStage } from '@/lib/league-context';
-import { useColors } from '@/lib/theme';
-import { cn } from '@/lib/cn';
+import { useThemeTokens } from '@/lib/theme';
 
 type ActionKey = 'league' | 'treasury' | 'draft' | 'reports' | 'settings';
 
@@ -86,18 +84,17 @@ const HIGHLIGHT: Record<SeasonStage, ActionKey[]> = {
 export function CommissionerSheet() {
   const { state, close } = useCommissionerSheet();
   const { active } = useLeague();
+  const { layout } = useThemeTokens();
 
   return (
     <Sheet open={state.open} onClose={close} scroll={false}>
-      <View className="px-4 pb-2">
-        <View className="mb-2 flex-row items-center justify-between">
-          <Text className="text-[13px] font-medium uppercase tracking-widest text-muted-foreground">
+      <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+        <View style={[layout.rowBetween, { marginBottom: 8 }]}>
+          <Text variant="eyebrow" style={{ letterSpacing: 1.5, textTransform: 'uppercase' }}>
             Commissioner
           </Text>
-          <Text className="text-[15px] font-semibold tracking-tightish">
-            {active ? active.name : 'Get started'}
-          </Text>
-          <View className="w-20" />
+          <Text variant="bodySm">{active ? active.name : 'Get started'}</Text>
+          <View style={{ width: 80 }} />
         </View>
         {active ? <Launcher league={active} onPick={close} /> : <OnboardingLauncher onPick={close} />}
       </View>
@@ -107,9 +104,9 @@ export function CommissionerSheet() {
 
 function Launcher({ league, onPick }: { league: League; onPick: () => void }) {
   const router = useRouter();
-  const c = useColors();
+  const { hex, layout, surfaces } = useThemeTokens();
   return (
-    <View className="overflow-hidden rounded-[30px] border border-hairline bg-surface">
+    <View style={[surfaces.card, { borderWidth: 1, borderColor: hex.hairline }]}>
       {ACTIONS.map((a, i) => {
         const badge = a.badge?.(league) ?? null;
         return (
@@ -119,26 +116,23 @@ function Launcher({ league, onPick }: { league: League; onPick: () => void }) {
               onPick();
               router.push(a.to as never);
             }}
-            className={cn(
-              'w-full flex-row items-center gap-4 px-4 py-4',
-              i > 0 ? 'border-t border-hairline' : '',
-            )}
+            style={[layout.row, { gap: 16, paddingHorizontal: 16, paddingVertical: 16 }, i > 0 ? layout.listRowBorder : null]}
           >
-            <View className="h-11 w-11 items-center justify-center rounded-full bg-muted">
-              <a.icon size={19} color={c.foreground} strokeWidth={2} />
+            <View style={[surfaces.iconBox, { borderRadius: 9999, backgroundColor: hex.muted }]}>
+              <a.icon size={19} color={hex.foreground} strokeWidth={2} />
             </View>
-            <View className="min-w-0 flex-1">
-              <Text className="text-[17px] font-semibold tracking-tightish">{a.label}</Text>
-              <Text className="text-[13px] text-muted-foreground" numberOfLines={1}>
+            <View style={[layout.flex1, { minWidth: 0 }]}>
+              <Text variant="titleMd">{a.label}</Text>
+              <Text variant="subtitle" numberOfLines={1}>
                 {a.sub}
               </Text>
             </View>
             {badge ? (
-              <View className="rounded-full bg-muted px-2 py-0.5">
-                <Text className="text-[11px] font-medium text-muted-foreground">{badge}</Text>
+              <View style={[surfaces.pillMuted, { paddingHorizontal: 8, paddingVertical: 2 }]}>
+                <Text variant="caption">{badge}</Text>
               </View>
             ) : null}
-            <ChevronRight size={16} color={c.mutedForeground} />
+            <ChevronRight size={16} color={hex.mutedForeground} />
           </Pressable>
         );
       })}
@@ -148,16 +142,18 @@ function Launcher({ league, onPick }: { league: League; onPick: () => void }) {
 
 function OnboardingLauncher({ onPick }: { onPick: () => void }) {
   const router = useRouter();
-  const c = useColors();
+  const { hex, layout, surfaces } = useThemeTokens();
   const items = [
     { to: '/onboarding/create', icon: Plus, title: 'Create a League', sub: 'Start a new league in Commissioner.' },
     { to: '/onboarding/join', icon: UserPlus, title: 'Join a League', sub: 'Enter an invite from your commissioner.' },
     { to: '/onboarding/sync', icon: RefreshCw, title: 'Sync Existing League', sub: 'Connect ESPN, Sleeper, or Yahoo.' },
   ] as const;
   return (
-    <View className="gap-2 pt-2">
-      <Text className="px-2 pb-1 text-[15px] text-muted-foreground">Add your first league.</Text>
-      <View className="overflow-hidden rounded-[24px] bg-surface">
+    <View style={{ gap: 8, paddingTop: 8 }}>
+      <Text variant="body" muted style={{ paddingHorizontal: 8, paddingBottom: 4 }}>
+        Add your first league.
+      </Text>
+      <View style={surfaces.sheetGroup}>
         {items.map((it, i) => (
           <Pressable
             key={it.to}
@@ -165,21 +161,18 @@ function OnboardingLauncher({ onPick }: { onPick: () => void }) {
               onPick();
               router.push(it.to as never);
             }}
-            className={cn(
-              'w-full flex-row items-center gap-4 px-4 py-3.5',
-              i > 0 ? 'border-t border-hairline' : '',
-            )}
+            style={[layout.row, { gap: 16, paddingHorizontal: 16, paddingVertical: 14 }, i > 0 ? layout.listRowBorder : null]}
           >
-            <View className="h-10 w-10 items-center justify-center rounded-2xl bg-foreground">
-              <it.icon size={18} color={c.background} strokeWidth={2.25} />
+            <View style={surfaces.iconBoxDark}>
+              <it.icon size={18} color={hex.background} strokeWidth={2.25} />
             </View>
-            <View className="min-w-0 flex-1">
-              <Text className="text-[17px] font-semibold tracking-tightish">{it.title}</Text>
-              <Text className="text-[13px] text-muted-foreground" numberOfLines={1}>
+            <View style={[layout.flex1, { minWidth: 0 }]}>
+              <Text variant="titleMd">{it.title}</Text>
+              <Text variant="subtitle" numberOfLines={1}>
                 {it.sub}
               </Text>
             </View>
-            <ChevronRight size={16} color={c.mutedForeground} />
+            <ChevronRight size={16} color={hex.mutedForeground} />
           </Pressable>
         ))}
       </View>

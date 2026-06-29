@@ -1,11 +1,9 @@
 import { useState } from 'react';
-import { View } from 'react-native';
 import { Copy, Mail, MessageSquare, MoreHorizontal, QrCode, Share2 } from 'lucide-react-native';
-import { Pressable, Text } from '@/components/ui/primitives';
+import { Pressable, Text, View } from '@/components/ui/primitives';
 import { Empty, Row, Section, WorkflowShell } from '@/components/ui/WorkflowShell';
 import { useLeague } from '@/lib/league-context';
-import { useColors } from '@/lib/theme';
-import { cn } from '@/lib/cn';
+import { useTheme, useThemeTokens } from '@/lib/theme';
 
 type View2 = 'main' | 'members' | 'invite' | 'rules' | 'settings' | 'history';
 
@@ -70,7 +68,7 @@ export default function CommissionerLeaguePage() {
       </Section>
 
       {!isCommish ? (
-        <Text className="px-3 text-center text-[12px] text-muted-foreground">
+        <Text variant="caption" muted style={{ paddingHorizontal: 12, textAlign: 'center' }}>
           You are viewing as a member. Only commissioners can edit league settings.
         </Text>
       ) : null}
@@ -80,8 +78,10 @@ export default function CommissionerLeaguePage() {
 
 function MembersView({ onBack }: { onBack: () => void }) {
   const { active } = useLeague();
-  const c = useColors();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+  const { scheme } = useTheme();
   const isCommish = active?.role === 'commissioner';
+  const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
   return (
     <WorkflowShell title="Members" eyebrow="League" onBack={onBack} backLabel="League">
       <Section title={`Joined · ${MEMBERS.length}`}>
@@ -92,38 +92,44 @@ function MembersView({ onBack }: { onBack: () => void }) {
             label={m.name}
             sub={`${m.role} · Joined ${m.joined} · ${m.record}`}
             trailing={
-              <View className="flex-row items-center gap-2">
+              <View style={[layout.row, { gap: 8 }]}>
                 <View
-                  className={cn(
-                    'rounded-full px-2 py-0.5',
-                    m.payment === 'Paid'
-                      ? 'bg-success/15'
-                      : m.payment === 'Pending'
-                        ? 'bg-foreground/10'
-                        : 'bg-destructive/15',
-                  )}
+                  style={[
+                    surfaces.pill,
+                    {
+                      paddingHorizontal: 8,
+                      paddingVertical: 2,
+                      backgroundColor:
+                        m.payment === 'Paid'
+                          ? toneBg.success
+                          : m.payment === 'Pending'
+                            ? `rgba(${ink},0.1)`
+                            : toneBg.danger,
+                    },
+                  ]}
                 >
                   <Text
-                    className={cn(
-                      'text-[10px] font-medium',
-                      m.payment === 'Paid'
-                        ? 'text-success'
-                        : m.payment === 'Pending'
-                          ? 'text-foreground'
-                          : 'text-destructive',
-                    )}
+                    variant="pill"
+                    style={{
+                      color:
+                        m.payment === 'Paid'
+                          ? toneFg.success
+                          : m.payment === 'Pending'
+                            ? hex.foreground
+                            : toneFg.danger,
+                    }}
                   >
                     {m.payment}
                   </Text>
                 </View>
-                {isCommish ? <MoreHorizontal size={16} color={c.mutedForeground} /> : null}
+                {isCommish ? <MoreHorizontal size={16} color={hex.mutedForeground} /> : null}
               </View>
             }
           />
         ))}
       </Section>
       {isCommish ? (
-        <Text className="px-3 text-center text-[12px] text-muted-foreground">
+        <Text variant="caption" muted style={{ paddingHorizontal: 12, textAlign: 'center' }}>
           Long-press a member to remove, transfer commissioner, or resend invite.
         </Text>
       ) : null}
@@ -133,29 +139,29 @@ function MembersView({ onBack }: { onBack: () => void }) {
 
 function InviteView({ onBack }: { onBack: () => void }) {
   const { active } = useLeague();
-  const c = useColors();
+  const { hex, surfaces } = useThemeTokens();
   const size = active?.size ?? 12;
   const joined = active?.joined ?? MEMBERS.length;
   const link = `https://cmsr.app/invite/${active?.id ?? 'abc'}`;
 
   return (
     <WorkflowShell title="Invite Members" eyebrow="League" onBack={onBack} backLabel="League">
-      <View className="mb-4 items-center rounded-[28px] bg-surface-elevated p-5">
-        <Text className="text-[12px] uppercase tracking-widest text-muted-foreground">Capacity</Text>
-        <Text className="mt-1 text-[32px] font-semibold tracking-tight">
+      <View style={[surfaces.card, { marginBottom: 16, alignItems: 'center', padding: 20 }]}>
+        <Text variant="eyebrow">Capacity</Text>
+        <Text variant="scoreLG" style={{ marginTop: 4, fontSize: 32 }}>
           {joined} of {size} Joined
         </Text>
-        <Text className="mt-1 text-[13px] text-muted-foreground">
+        <Text variant="subtitle" style={{ marginTop: 4 }}>
           {size - joined} seats remaining · Draft ready when full
         </Text>
       </View>
 
       <Section title="Share Invite">
-        <Row first label="Copy Invite Link" sub={link} trailing={<Copy size={16} color={c.mutedForeground} />} onPress={() => {}} />
-        <Row label="Share Link" trailing={<Share2 size={16} color={c.mutedForeground} />} onPress={() => {}} />
-        <Row label="Email Invite" trailing={<Mail size={16} color={c.mutedForeground} />} onPress={() => {}} />
-        <Row label="Text Invite" trailing={<MessageSquare size={16} color={c.mutedForeground} />} onPress={() => {}} />
-        <Row label="Show QR Code" trailing={<QrCode size={16} color={c.mutedForeground} />} onPress={() => {}} />
+        <Row first label="Copy Invite Link" sub={link} trailing={<Copy size={16} color={hex.mutedForeground} />} onPress={() => {}} />
+        <Row label="Share Link" trailing={<Share2 size={16} color={hex.mutedForeground} />} onPress={() => {}} />
+        <Row label="Email Invite" trailing={<Mail size={16} color={hex.mutedForeground} />} onPress={() => {}} />
+        <Row label="Text Invite" trailing={<MessageSquare size={16} color={hex.mutedForeground} />} onPress={() => {}} />
+        <Row label="Show QR Code" trailing={<QrCode size={16} color={hex.mutedForeground} />} onPress={() => {}} />
       </Section>
 
       <Section title="Pending · 2">

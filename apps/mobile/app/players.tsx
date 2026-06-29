@@ -1,5 +1,5 @@
 import { useMemo, useState, type ComponentType, type ReactNode } from 'react';
-import { Image, ScrollView, TextInput, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import Svg, { Circle, Line as SvgLine, Text as SvgText } from 'react-native-svg';
 import {
   Activity,
@@ -22,13 +22,13 @@ import {
   TrendingUp,
   X,
 } from 'lucide-react-native';
+import { SearchInput } from '@/components/ui/Input';
 import { Pressable, Text } from '@/components/ui/primitives';
 import { Screen } from '@/components/ui/Screen';
 import { Segmented } from '@/components/ui/Segmented';
 import { useLeague } from '@/lib/league-context';
 import { playerAvatar } from '@/lib/avatars';
-import { useColors } from '@/lib/theme';
-import { cn } from '@/lib/cn';
+import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
 
 /* ------------------------------ TYPES + DATA ------------------------------ */
 type Pos = 'QB' | 'RB' | 'WR' | 'TE' | 'K' | 'DEF';
@@ -117,6 +117,7 @@ const FILTERS = ['All', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 type DetailView = { kind: 'home' } | { kind: 'player'; id: string };
 
 export default function PlayersPage() {
+  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   const { active } = useLeague();
   const [view, setView] = useState<DetailView>({ kind: 'home' });
   const [watchIds, setWatchIds] = useState<Set<string>>(() => new Set(PLAYERS.filter((p) => p.watch).map((p) => p.id)));
@@ -171,6 +172,7 @@ function PlayersHome({
   watchIds: Set<string>;
   toggleWatch: (id: string) => void;
 }) {
+  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   const c = useColors();
   const [q, setQ] = useState('');
   const [pos, setPos] = useState<(typeof FILTERS)[number]>('All');
@@ -205,40 +207,50 @@ function PlayersHome({
   };
 
   return (
-    <View className="gap-6 px-4 pb-6 pt-1">
-      <View className="px-1">
-        <Text className="text-[34px] font-semibold leading-[36px] tracking-tighter2">Player Search</Text>
-        <Text className="mt-2 text-[13px] text-muted-foreground">Trending, injuries, and waiver targets across the league.</Text>
+    <View style={layout.screen}>
+      <View style={layout.intro}>
+        <Text variant="hero">Player Search</Text>
+        <Text variant="subtitle" style={{ marginTop: 8 }}>Trending, injuries, and waiver targets across the league.</Text>
       </View>
 
       <View>
-        <View className="flex-row items-center gap-2">
-          <View className="flex-1 flex-row items-center gap-2 rounded-2xl bg-surface-elevated px-4 py-3">
+        <View style={[layout.row, { gap: 8 }]}>
+          <View style={layout.searchBar}>
             <Search size={16} color={c.mutedForeground} />
-            <TextInput value={q} onChangeText={setQ} placeholder="Search players" placeholderTextColor={c.mutedForeground} className="flex-1 text-[15px] tracking-tightish text-foreground" />
+            <SearchInput value={q} onChangeText={setQ} placeholder="Search players" />
             {q ? (
               <Pressable onPress={() => setQ('')}>
                 <X size={16} color={c.mutedForeground} />
               </Pressable>
             ) : null}
           </View>
-          <Pressable onPress={() => setFilterOpen((s) => !s)} className={cn('relative h-12 w-12 shrink-0 items-center justify-center rounded-2xl', pos !== 'All' || filterOpen ? 'bg-foreground' : 'bg-surface-elevated')}>
-            <SlidersHorizontal size={16} color={pos !== 'All' || filterOpen ? c.background : c.foreground} />
+          <Pressable
+            onPress={() => setFilterOpen((s) => !s)}
+            style={[
+              layout.iconButton,
+              (pos !== 'All' || filterOpen) && { backgroundColor: hex.foreground },
+            ]}
+          >
+            <SlidersHorizontal size={16} color={pos !== 'All' || filterOpen ? hex.background : c.foreground} />
             {pos !== 'All' ? (
-              <View className="absolute -right-1 -top-1 h-4 min-w-4 items-center justify-center rounded-full bg-success px-1">
-                <Text className="text-[9px] font-semibold text-background">{pos}</Text>
+              <View style={surfaces.badge}>
+                <Text variant="pill" style={{ color: hex.background, fontSize: 9, fontWeight: '600' }}>{pos}</Text>
               </View>
             ) : null}
           </Pressable>
         </View>
 
         {filterOpen ? (
-          <View className="mt-2 overflow-hidden rounded-[20px] bg-surface-elevated p-3">
-            <Text className="px-1 pb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Position</Text>
-            <View className="flex-row flex-wrap gap-1.5">
+          <View style={[surfaces.roundedCard, { marginTop: 8, padding: 12 }]}>
+            <Text variant="eyebrow" style={{ paddingHorizontal: 4, paddingBottom: 8 }}>Position</Text>
+            <View style={[layout.rowWrap, { gap: 6 }]}>
               {FILTERS.map((f) => (
-                <Pressable key={f} onPress={() => { setPos(f); setFilterOpen(false); }} className={cn('rounded-full px-3 py-1.5', f === pos ? 'bg-foreground' : 'bg-background')}>
-                  <Text className={cn('text-[12px] font-semibold tracking-tightish', f === pos ? 'text-background' : 'text-muted-foreground')}>{f}</Text>
+                <Pressable
+                  key={f}
+                  onPress={() => { setPos(f); setFilterOpen(false); }}
+                  style={[surfaces.pill, { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: f === pos ? hex.foreground : hex.background }]}
+                >
+                  <Text variant="caption" style={{ color: f === pos ? hex.background : hex.mutedForeground }}>{f}</Text>
                 </Pressable>
               ))}
             </View>
@@ -269,15 +281,15 @@ function PlayersHome({
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
                 {trending.map((p) => (
-                  <Pressable key={p.id} onPress={() => onOpenPlayer(p.id)} className="w-[170px] rounded-[22px] bg-surface-elevated p-4">
-                    <View className="flex-row items-center justify-between">
+                  <Pressable key={p.id} onPress={() => onOpenPlayer(p.id)} style={[surfaces.roundedCard, { width: 170, padding: 16 }]}>
+                    <View style={layout.rowBetween}>
                       <HeadshotBubble player={p} />
                       <HealthDot health={p.health} />
                     </View>
-                    <Text className="mt-3 text-[14px] font-semibold tracking-tightish" numberOfLines={1}>{p.name}</Text>
-                    <Text className="text-[11px] text-muted-foreground">{p.pos} · {p.team} · #{p.rank}</Text>
-                    <View className="mt-2 flex-row items-end justify-between">
-                      <Text className="text-[18px] font-semibold tabular-nums">{p.proj.toFixed(1)}</Text>
+                    <Text variant="bodySm" style={{ marginTop: 12 }} numberOfLines={1}>{p.name}</Text>
+                    <Text variant="caption" muted>{p.pos} · {p.team} · #{p.rank}</Text>
+                    <View style={[layout.rowEnd, { marginTop: 8 }]}>
+                      <Text variant="titleLg" style={{ fontVariant: ['tabular-nums'] }}>{p.proj.toFixed(1)}</Text>
                       <TrendPill trend={p.trend} />
                     </View>
                   </Pressable>
@@ -289,22 +301,22 @@ function PlayersHome({
           {tab === 'available' ? (
             <>
               <Section title="Top waiver targets">
-                <View className="gap-2">
+                <View style={{ gap: 8 }}>
                   {waivers.filter(matchesPos).map((p) => (
-                    <View key={p.id} className="rounded-[22px] bg-surface-elevated p-4">
-                      <Pressable onPress={() => onOpenPlayer(p.id)} className="flex-row items-center gap-3">
+                    <View key={p.id} style={[surfaces.roundedCard, { padding: 16 }]}>
+                      <Pressable onPress={() => onOpenPlayer(p.id)} style={[layout.row, { gap: 12 }]}>
                         <HeadshotBubble player={p} />
-                        <View className="min-w-0 flex-1">
-                          <Text className="text-[15px] font-semibold tracking-tightish" numberOfLines={1}>{p.name}</Text>
-                          <Text className="text-[12px] text-muted-foreground">{p.pos} · {p.team} · {p.avail}% available</Text>
+                        <View style={[layout.flex1, { minWidth: 0 }]}>
+                          <Text variant="body" numberOfLines={1}>{p.name}</Text>
+                          <Text variant="bodyMuted">{p.pos} · {p.team} · {p.avail}% available</Text>
                         </View>
-                        <View className="items-end">
-                          <Text className="text-[14px] font-semibold tabular-nums">{p.proj.toFixed(1)}</Text>
+                        <View style={layout.alignEnd}>
+                          <Text variant="bodySm" style={{ fontVariant: ['tabular-nums'] }}>{p.proj.toFixed(1)}</Text>
                           <TrendPill trend={p.trend} small />
                         </View>
                       </Pressable>
-                      <Text className="mt-2 text-[12px] leading-snug text-muted-foreground">Opportunity score 87 · projected role expanding through bye.</Text>
-                      <View className="mt-3">
+                      <Text variant="bodyMuted" style={{ marginTop: 8, lineHeight: 18 }}>Opportunity score 87 · projected role expanding through bye.</Text>
+                      <View style={{ marginTop: 12 }}>
                         <PrimaryButton>{isSynced ? `Open waivers in ${platform}` : 'Add to waivers'}</PrimaryButton>
                       </View>
                     </View>
@@ -324,27 +336,29 @@ function PlayersHome({
           {tab === 'injured' ? (
             <>
               <Section title="Fantasy doctor alerts">
-                <View className="gap-2">
+                <View style={{ gap: 8 }}>
                   {ALERTS.map((a) => {
                     const p = PLAYERS.find((x) => x.id === a.playerId);
                     if (!p || !matchesPos(p)) return null;
                     return (
-                      <Pressable key={a.playerId} onPress={() => onOpenPlayer(p.id)} className="rounded-[22px] bg-surface-elevated p-4">
-                        <View className="flex-row items-center gap-3">
+                      <Pressable key={a.playerId} onPress={() => onOpenPlayer(p.id)} style={[surfaces.roundedCard, { padding: 16 }]}>
+                        <View style={[layout.row, { gap: 12 }]}>
                           <HeadshotBubble player={p} />
-                          <View className="min-w-0 flex-1">
-                            <View className="flex-row items-center gap-1">
+                          <View style={[layout.flex1, { minWidth: 0 }]}>
+                            <View style={[layout.row, { gap: 4 }]}>
                               <HeartPulse size={12} color={c.mutedForeground} />
-                              <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Fantasy doctor</Text>
+                              <Text variant="eyebrow">Fantasy doctor</Text>
                             </View>
-                            <Text className="text-[15px] font-semibold tracking-tightish" numberOfLines={1}>{p.name}</Text>
+                            <Text variant="body" numberOfLines={1}>{p.name}</Text>
                           </View>
-                          <View className="items-end">
-                            <Text className="text-[16px] font-semibold tabular-nums">{a.prob}%</Text>
-                            <Text className="text-[10px] uppercase tracking-widest text-muted-foreground">to play</Text>
+                          <View style={layout.alignEnd}>
+                            <Text variant="titleMd" style={{ fontVariant: ['tabular-nums'] }}>{a.prob}%</Text>
+                            <Text variant="eyebrow">to play</Text>
                           </View>
                         </View>
-                        <Text className="mt-2 text-[13px] leading-snug text-muted-foreground"><Text className="font-medium text-foreground">{a.status}.</Text> {a.detail}</Text>
+                        <Text variant="bodyMuted" style={{ marginTop: 8, lineHeight: 18 }}>
+                          <Text variant="bodySm" style={{ fontWeight: '500' }}>{a.status}.</Text> {a.detail}
+                        </Text>
                       </Pressable>
                     );
                   })}
@@ -352,18 +366,18 @@ function PlayersHome({
               </Section>
 
               <Section title="Injury news">
-                <View className="overflow-hidden rounded-[24px] bg-surface-elevated">
+                <View style={surfaces.roundedCard}>
                   {NEWS.filter((n) => n.tag === 'injury').map((n, i) => {
                     const p = PLAYERS.find((x) => x.id === n.playerId);
                     return (
                       <Pressable key={n.id} onPress={() => p && onOpenPlayer(p.id)}>
-                        <View className={cn('flex-row items-start gap-3 px-4 py-3', i > 0 ? 'border-t border-hairline' : '')}>
-                          <View className="mt-0.5 h-7 w-7 shrink-0 items-center justify-center rounded-full bg-background">
+                        <View style={[layout.rowStart, { paddingHorizontal: 16, paddingVertical: 12 }, i > 0 && layout.listRowBorder]}>
+                          <View style={[surfaces.iconBoxSm, { marginTop: 2, borderRadius: 9999, backgroundColor: hex.background }]}>
                             <Newspaper size={14} color={c.mutedForeground} />
                           </View>
-                          <View className="min-w-0 flex-1">
-                            <Text className="text-[14px] leading-snug tracking-tightish" numberOfLines={2}>{n.headline}</Text>
-                            <Text className="mt-0.5 text-[11px] text-muted-foreground">{p?.name} · {n.source} · {n.when}</Text>
+                          <View style={[layout.flex1, { minWidth: 0 }]}>
+                            <Text variant="bodySm" style={{ lineHeight: 20 }} numberOfLines={2}>{n.headline}</Text>
+                            <Text variant="caption" muted style={{ marginTop: 2 }}>{p?.name} · {n.source} · {n.when}</Text>
                           </View>
                         </View>
                       </Pressable>
@@ -411,54 +425,55 @@ function PlayerDetail({
   watched: boolean;
   onToggleWatch: () => void;
 }) {
+  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   const c = useColors();
   const [tab, setTab] = useState<Tab>('overview');
   const related = PLAYERS.filter((x) => x.id !== p.id && (x.team === p.team || x.pos === p.pos)).slice(0, 6);
 
   return (
-    <View className="gap-5 px-4 pb-6">
-      <View className="flex-row items-center justify-between px-1 pt-2">
-        <Pressable onPress={onBack} className="flex-row items-center gap-1 rounded-full px-2 py-1.5">
+    <View style={[layout.screen, { gap: 20, paddingTop: 0 }]}>
+      <View style={[layout.rowBetween, { paddingHorizontal: 4, paddingTop: 8 }]}>
+        <Pressable onPress={onBack} style={[layout.row, { gap: 4, borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 6 }]}>
           <ChevronLeft size={16} color={c.mutedForeground} />
-          <Text className="text-[14px] text-muted-foreground">Players</Text>
+          <Text variant="link" muted>Players</Text>
         </Pressable>
-        <View className="flex-row items-center gap-1">
-          <Pressable onPress={onToggleWatch} className="h-9 w-9 items-center justify-center rounded-full bg-surface-elevated">
+        <View style={[layout.row, { gap: 4 }]}>
+          <Pressable onPress={onToggleWatch} style={[layout.iconButtonSm, { backgroundColor: hex.surfaceElevated, borderWidth: 0 }]}>
             <Star size={16} color={watched ? c.foreground : c.mutedForeground} fill={watched ? c.foreground : 'none'} />
           </Pressable>
-          <Pressable className="h-9 w-9 items-center justify-center rounded-full bg-surface-elevated">
+          <Pressable style={[layout.iconButtonSm, { backgroundColor: hex.surfaceElevated, borderWidth: 0 }]}>
             <Share2 size={16} color={c.mutedForeground} />
           </Pressable>
         </View>
       </View>
 
-      <View className="rounded-[28px] bg-surface-elevated p-5">
-        <View className="flex-row items-center gap-4">
+      <View style={[surfaces.roundedCardLg, { borderWidth: 0, padding: 20 }]}>
+        <View style={[layout.row, { gap: 16 }]}>
           <HeadshotBubble player={p} large />
-          <View className="min-w-0 flex-1">
-            <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{p.pos} · {p.team} · Bye {p.bye}</Text>
-            <Text className="text-[22px] font-semibold tracking-tighter2" numberOfLines={1}>{p.name}</Text>
-            <View className="mt-1 flex-row items-center gap-2">
+          <View style={[layout.flex1, { minWidth: 0 }]}>
+            <Text variant="eyebrow">{p.pos} · {p.team} · Bye {p.bye}</Text>
+            <Text variant="sectionTitle" style={{ fontSize: 22 }} numberOfLines={1}>{p.name}</Text>
+            <View style={[layout.row, { marginTop: 4, gap: 8 }]}>
               <HealthBadge health={p.health} />
-              <Text className="text-[12px] text-muted-foreground">Rank #{p.rank}</Text>
+              <Text variant="bodyMuted">Rank #{p.rank}</Text>
             </View>
           </View>
-          <View className="items-end">
-            <Text className="text-[26px] font-semibold tabular-nums">{p.proj.toFixed(1)}</Text>
-            <Text className="text-[11px] uppercase tracking-widest text-muted-foreground">proj</Text>
-            <View className="mt-1"><TrendPill trend={p.trend} small /></View>
+          <View style={layout.alignEnd}>
+            <Text variant="scoreLG" style={{ fontSize: 26, fontVariant: ['tabular-nums'] }}>{p.proj.toFixed(1)}</Text>
+            <Text variant="eyebrow">proj</Text>
+            <View style={{ marginTop: 4 }}><TrendPill trend={p.trend} small /></View>
           </View>
         </View>
 
-        <View className="mt-4 rounded-[18px] bg-background p-3">
-          <View className="flex-row items-center gap-1.5">
+        <View style={[surfaces.roundedCard, { marginTop: 16, borderRadius: 18, padding: 12, backgroundColor: hex.background }]}>
+          <View style={[layout.row, { gap: 6 }]}>
             <Sparkles size={12} color={c.mutedForeground} />
-            <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">AI summary</Text>
+            <Text variant="eyebrow">AI summary</Text>
           </View>
-          <Text className="mt-1 text-[13px] leading-snug tracking-tightish">{aiSummary(p)}</Text>
+          <Text variant="bodyMuted" style={{ marginTop: 4, fontSize: 13, lineHeight: 18 }}>{aiSummary(p)}</Text>
         </View>
 
-        <View className="mt-4 flex-row gap-2">
+        <View style={[layout.row, { marginTop: 16, gap: 8 }]}>
           <PrimaryButton>{isSynced ? `Open in ${platform}` : 'Add to waivers'}</PrimaryButton>
           <SecondaryButton onPress={onToggleWatch}>{watched ? 'Watching' : 'Watch'}</SecondaryButton>
         </View>
@@ -483,12 +498,12 @@ function PlayerDetail({
       <Section title="Related players">
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
           {related.map((r) => (
-            <Pressable key={r.id} onPress={() => onOpenPlayer(r.id)} className="w-[150px] rounded-[20px] bg-surface-elevated p-3">
+            <Pressable key={r.id} onPress={() => onOpenPlayer(r.id)} style={[surfaces.roundedCard, { width: 150, padding: 12 }]}>
               <HeadshotBubble player={r} />
-              <Text className="mt-2 text-[13px] font-semibold tracking-tightish" numberOfLines={1}>{r.name}</Text>
-              <Text className="text-[11px] text-muted-foreground">{r.pos} · {r.team}</Text>
-              <View className="mt-1 flex-row items-center justify-between">
-                <Text className="text-[12px] font-semibold tabular-nums">{r.proj.toFixed(1)}</Text>
+              <Text variant="bodySm" style={{ marginTop: 8 }} numberOfLines={1}>{r.name}</Text>
+              <Text variant="caption" muted>{r.pos} · {r.team}</Text>
+              <View style={[layout.rowBetween, { marginTop: 4 }]}>
+                <Text variant="caption" style={{ fontWeight: '600', fontVariant: ['tabular-nums'] }}>{r.proj.toFixed(1)}</Text>
                 <TrendPill trend={r.trend} small />
               </View>
             </Pressable>
@@ -501,35 +516,35 @@ function PlayerDetail({
 
 /* ------------------------------ TABS ------------------------------ */
 function OverviewTab({ player: p }: { player: Player }) {
+  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   const startSit = p.proj >= 14 ? 'Start' : p.proj >= 10 ? 'Flex' : 'Sit';
-  const tone = startSit === 'Start' ? 'bg-success/15' : startSit === 'Sit' ? 'bg-destructive/15' : 'bg-foreground/10';
-  const toneText = startSit === 'Start' ? 'text-success' : startSit === 'Sit' ? 'text-destructive' : 'text-foreground';
+  const toneKey = startSit === 'Start' ? 'success' : startSit === 'Sit' ? 'danger' : 'neutral';
   return (
     <>
       <Section title="Matchup">
-        <View className="rounded-[24px] bg-surface-elevated p-4">
-          <View className="flex-row items-center justify-between">
+        <View style={[surfaces.roundedCard, { padding: 16 }]}>
+          <View style={layout.rowBetween}>
             <View>
-              <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Week 10</Text>
-              <Text className="text-[16px] font-semibold tracking-tightish">{p.team} {p.opp}</Text>
-              <Text className="mt-0.5 text-[12px] text-muted-foreground">Strength of schedule · Favorable</Text>
+              <Text variant="eyebrow">Week 10</Text>
+              <Text variant="titleMd">{p.team} {p.opp}</Text>
+              <Text variant="bodyMuted" style={{ marginTop: 2 }}>Strength of schedule · Favorable</Text>
             </View>
-            <View className="items-end">
-              <Text className="text-[22px] font-semibold tabular-nums">{p.proj.toFixed(1)}</Text>
-              <Text className="text-[11px] uppercase tracking-widest text-muted-foreground">proj pts</Text>
+            <View style={layout.alignEnd}>
+              <Text variant="scoreLG" style={{ fontSize: 22, fontVariant: ['tabular-nums'] }}>{p.proj.toFixed(1)}</Text>
+              <Text variant="eyebrow">proj pts</Text>
             </View>
           </View>
-          <View className="mt-3 flex-row items-center gap-2">
-            <View className={cn('rounded-full px-3 py-1', tone)}>
-              <Text className={cn('text-[12px] font-semibold tracking-tightish', toneText)}>{startSit}</Text>
+          <View style={[layout.row, { marginTop: 12, gap: 8 }]}>
+            <View style={[surfaces.pill, { paddingHorizontal: 12, paddingVertical: 4, backgroundColor: toneBg[toneKey] }]}>
+              <Text variant="caption" style={{ color: toneFg[toneKey] }}>{startSit}</Text>
             </View>
-            <Text className="text-[12px] text-muted-foreground">Recommendation</Text>
+            <Text variant="bodyMuted">Recommendation</Text>
           </View>
         </View>
       </Section>
 
       <Section title="Usage">
-        <View className="flex-row flex-wrap gap-2">
+        <View style={[layout.rowWrap, { gap: 8 }]}>
           <StatBlock label="Snap %" value="78%" />
           <StatBlock label="Target share" value="24%" />
           <StatBlock label="Red zone" value="6 touches" />
@@ -538,8 +553,8 @@ function OverviewTab({ player: p }: { player: Player }) {
       </Section>
 
       <Section title="Fantasy outlook">
-        <View className="rounded-[24px] bg-surface-elevated p-4">
-          <Text className="text-[14px] leading-snug tracking-tightish">
+        <View style={[surfaces.roundedCard, { padding: 16 }]}>
+          <Text variant="bodySm" style={{ lineHeight: 20 }}>
             High-floor producer with consistent volume regardless of game script. Schedule turns favorable through the playoff stretch — hold and start with confidence in most weeks.
           </Text>
         </View>
@@ -549,6 +564,7 @@ function OverviewTab({ player: p }: { player: Player }) {
 }
 
 function PerformanceTab() {
+  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   const c = useColors();
   const avg = GAME_LOG.reduce((s, g) => s + g.pts, 0) / GAME_LOG.length;
   const n = GAME_LOG.length;
@@ -572,17 +588,17 @@ function PerformanceTab() {
   return (
     <>
       <Section title="Weekly trend">
-        <View className="rounded-[24px] bg-surface-elevated p-4">
-          <View className="mb-3 flex-row items-center justify-between">
+        <View style={[surfaces.roundedCard, { padding: 16 }]}>
+          <View style={[layout.rowBetween, { marginBottom: 12 }]}>
             <View>
-              <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Points per week</Text>
-              <Text className="mt-0.5 text-[13px] tracking-tightish">
-                Trend <Text className={trendDir === 'up' ? 'text-success' : 'text-destructive'}>{trendDir === 'up' ? '▲' : '▼'} {Math.abs(slope).toFixed(2)} pts/wk</Text>
+              <Text variant="eyebrow">Points per week</Text>
+              <Text variant="bodySm" style={{ marginTop: 2 }}>
+                Trend <Text variant="bodySm" style={{ color: trendDir === 'up' ? hex.success : hex.danger }}>{trendDir === 'up' ? '▲' : '▼'} {Math.abs(slope).toFixed(2)} pts/wk</Text>
               </Text>
             </View>
-            <View className="items-end">
-              <Text className="text-[18px] font-semibold tabular-nums">{avg.toFixed(1)}</Text>
-              <Text className="text-[10px] uppercase tracking-widest text-muted-foreground">season avg</Text>
+            <View style={layout.alignEnd}>
+              <Text variant="titleLg" style={{ fontVariant: ['tabular-nums'] }}>{avg.toFixed(1)}</Text>
+              <Text variant="eyebrow" style={{ fontSize: 10 }}>season avg</Text>
             </View>
           </View>
           <Svg viewBox={`0 0 ${W} ${H}`} width="100%" height={176}>
@@ -604,32 +620,38 @@ function PerformanceTab() {
               <SvgText key={`l-${g.wk}`} x={xFor(g.wk)} y={H - 6} textAnchor="middle" fill={c.mutedForeground} fontSize={9}>W{g.wk}</SvgText>
             ))}
           </Svg>
-          <View className="mt-2 flex-row items-center gap-4">
-            <View className="flex-row items-center gap-1.5"><View className="h-0.5 w-4 bg-success" /><Text className="text-[11px] text-muted-foreground">Progression</Text></View>
-            <View className="flex-row items-center gap-1.5"><View className="h-0.5 w-4 bg-destructive" /><Text className="text-[11px] text-muted-foreground">Regression</Text></View>
+          <View style={[layout.row, { marginTop: 8, gap: 16 }]}>
+            <View style={[layout.row, { gap: 6 }]}>
+              <View style={{ height: 2, width: 16, backgroundColor: hex.success }} />
+              <Text variant="caption" muted>Progression</Text>
+            </View>
+            <View style={[layout.row, { gap: 6 }]}>
+              <View style={{ height: 2, width: 16, backgroundColor: hex.danger }} />
+              <Text variant="caption" muted>Regression</Text>
+            </View>
           </View>
         </View>
       </Section>
 
       <Section title="Game log">
-        <View className="overflow-hidden rounded-[24px] bg-surface-elevated">
-          <View className="flex-row px-4 pt-3">
-            <Text className="w-9 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Wk</Text>
-            <Text className="w-14 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Opp</Text>
-            <Text className="flex-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground" />
-            <Text className="w-10 text-right text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Tch</Text>
-            <Text className="w-10 text-right text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Tgt</Text>
-            <Text className="w-12 text-right text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Pts</Text>
+        <View style={surfaces.roundedCard}>
+          <View style={[layout.row, { paddingHorizontal: 16, paddingTop: 12 }]}>
+            <Text variant="eyebrow" style={{ width: 36, fontSize: 10 }}>Wk</Text>
+            <Text variant="eyebrow" style={{ width: 56, fontSize: 10 }}>Opp</Text>
+            <Text variant="eyebrow" style={[layout.flex1, { fontSize: 10 }]} />
+            <Text variant="eyebrow" style={{ width: 40, textAlign: 'right', fontSize: 10 }}>Tch</Text>
+            <Text variant="eyebrow" style={{ width: 40, textAlign: 'right', fontSize: 10 }}>Tgt</Text>
+            <Text variant="eyebrow" style={{ width: 48, textAlign: 'right', fontSize: 10 }}>Pts</Text>
           </View>
-          <View className="mt-1">
+          <View style={{ marginTop: 4 }}>
             {GAME_LOG.map((g, i) => (
-              <View key={g.wk} className={cn('flex-row items-center px-4 py-2.5', i > 0 ? 'border-t border-hairline' : '')}>
-                <Text className="w-9 text-[13px] tabular-nums text-muted-foreground">{g.wk}</Text>
-                <Text className="w-14 text-[13px] tabular-nums text-muted-foreground">{g.opp}</Text>
-                <Text className="flex-1 text-[12px] text-muted-foreground">{g.yds} yds</Text>
-                <Text className="w-10 text-right text-[13px] tabular-nums">{g.tch}</Text>
-                <Text className="w-10 text-right text-[13px] tabular-nums">{g.tgt}</Text>
-                <Text className="w-12 text-right text-[13px] font-semibold tabular-nums">{g.pts.toFixed(1)}</Text>
+              <View key={g.wk} style={[layout.row, { paddingHorizontal: 16, paddingVertical: 10 }, i > 0 && layout.listRowBorder]}>
+                <Text variant="bodyMuted" style={{ width: 36, fontVariant: ['tabular-nums'] }}>{g.wk}</Text>
+                <Text variant="bodyMuted" style={{ width: 56, fontVariant: ['tabular-nums'] }}>{g.opp}</Text>
+                <Text variant="bodyMuted" style={layout.flex1}>{g.yds} yds</Text>
+                <Text variant="bodyMuted" style={{ width: 40, textAlign: 'right', fontVariant: ['tabular-nums'] }}>{g.tch}</Text>
+                <Text variant="bodyMuted" style={{ width: 40, textAlign: 'right', fontVariant: ['tabular-nums'] }}>{g.tgt}</Text>
+                <Text variant="bodySm" style={{ width: 48, textAlign: 'right', fontVariant: ['tabular-nums'] }}>{g.pts.toFixed(1)}</Text>
               </View>
             ))}
           </View>
@@ -640,19 +662,20 @@ function PerformanceTab() {
 }
 
 function HealthTab({ player: p }: { player: Player }) {
+  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   const isInjured = p.health && p.health !== 'healthy';
   return (
     <>
       <Section title="Fantasy doctor">
-        <View className="rounded-[24px] bg-surface-elevated p-4">
-          <View className="flex-row items-center justify-between">
+        <View style={[surfaces.roundedCard, { padding: 16 }]}>
+          <View style={layout.rowBetween}>
             <HealthBadge health={p.health} large />
-            <View className="items-end">
-              <Text className="text-[24px] font-semibold tabular-nums">{isInjured ? '72%' : '97%'}</Text>
-              <Text className="text-[11px] uppercase tracking-widest text-muted-foreground">to play</Text>
+            <View style={layout.alignEnd}>
+              <Text variant="scoreLG" style={{ fontSize: 24, fontVariant: ['tabular-nums'] }}>{isInjured ? '72%' : '97%'}</Text>
+              <Text variant="eyebrow">to play</Text>
             </View>
           </View>
-          <View className="mt-3 flex-row flex-wrap gap-2">
+          <View style={[layout.rowWrap, { marginTop: 12, gap: 8 }]}>
             <StatBlock label="Body part" value={isInjured ? 'Calf' : '—'} />
             <StatBlock label="Severity" value={isInjured ? 'Mild' : 'None'} />
             <StatBlock label="Practice" value={isInjured ? 'Limited (Th)' : 'Full'} />
@@ -662,8 +685,8 @@ function HealthTab({ player: p }: { player: Player }) {
       </Section>
 
       <Section title="AI summary">
-        <View className="rounded-[24px] bg-surface-elevated p-4">
-          <Text className="text-[14px] leading-snug tracking-tightish">
+        <View style={[surfaces.roundedCard, { padding: 16 }]}>
+          <Text variant="bodySm" style={{ lineHeight: 20 }}>
             {isInjured
               ? `${p.name} is trending toward playing this week but may have a reduced workload. The backup remains a valuable insurance option for managers worried about a late scratch.`
               : `${p.name} is fully healthy with no practice limitations entering this week. Workload expected to remain at season norms.`}
@@ -672,24 +695,24 @@ function HealthTab({ player: p }: { player: Player }) {
       </Section>
 
       <Section title="Recovery timeline">
-        <View className="overflow-hidden rounded-[24px] bg-surface-elevated">
+        <View style={surfaces.roundedCard}>
           {[
             { t: 'Today', what: 'Limited practice — expected to play' },
             { t: 'Last week', what: 'Aggravated calf in 2nd quarter' },
             { t: 'Comparable', what: 'Similar injuries return in 1 week (74% of cases)' },
           ].map((row, i) => (
-            <View key={i} className={cn('flex-row items-start gap-3 px-4 py-3', i > 0 ? 'border-t border-hairline' : '')}>
-              <Text className="w-20 shrink-0 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{row.t}</Text>
-              <Text className="flex-1 text-[13px] tracking-tightish">{row.what}</Text>
+            <View key={i} style={[layout.rowStart, { paddingHorizontal: 16, paddingVertical: 12 }, i > 0 && layout.listRowBorder]}>
+              <Text variant="eyebrow" style={{ width: 80, flexShrink: 0 }}>{row.t}</Text>
+              <Text variant="bodyMuted" style={[layout.flex1, { fontSize: 13 }]}>{row.what}</Text>
             </View>
           ))}
         </View>
       </Section>
 
       <Section title="Backup beneficiary">
-        <View className="rounded-[24px] bg-surface-elevated p-4">
-          <Text className="text-[13px] tracking-tightish">
-            <Text className="font-semibold">Jordan Mason</Text> projects to absorb 60% of touches if {p.name.split(' ')[1]} is limited. Strong handcuff value.
+        <View style={[surfaces.roundedCard, { padding: 16 }]}>
+          <Text variant="bodyMuted" style={{ fontSize: 13 }}>
+            <Text variant="bodySm">Jordan Mason</Text> projects to absorb 60% of touches if {p.name.split(' ')[1]} is limited. Strong handcuff value.
           </Text>
         </View>
       </Section>
@@ -698,6 +721,7 @@ function HealthTab({ player: p }: { player: Player }) {
 }
 
 function CommunityTab({ player: p }: { player: Player }) {
+  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   const c = useColors();
   const [sort, setSort] = useState<'trending' | 'newest' | 'helpful'>('trending');
   const [draft, setDraft] = useState('');
@@ -723,20 +747,24 @@ function CommunityTab({ player: p }: { player: Player }) {
   return (
     <>
       <Section title="Community">
-        <View className="gap-2">
-          <View className="rounded-[24px] bg-surface-elevated p-3">
+        <View style={{ gap: 8 }}>
+          <View style={[surfaces.roundedCard, { padding: 12 }]}>
             <TextInput
               value={draft}
               onChangeText={setDraft}
               placeholder={`Share your take on ${p.name}…`}
               placeholderTextColor={c.mutedForeground}
               multiline
-              className="min-h-[60px] text-[14px] tracking-tightish text-foreground"
+              style={[typeStyles.bodySm, { minHeight: 60, padding: 0, color: hex.foreground }]}
             />
-            <View className="flex-row items-center justify-between">
-              <Text className="text-[11px] text-muted-foreground">Public · visible to all Commissioner users</Text>
-              <Pressable onPress={submit} disabled={!draft.trim()} className={cn('rounded-full bg-foreground px-4 py-1.5', !draft.trim() ? 'opacity-40' : '')}>
-                <Text className="text-[12px] font-semibold text-background">Post</Text>
+            <View style={layout.rowBetween}>
+              <Text variant="caption" muted>Public · visible to all Commissioner users</Text>
+              <Pressable
+                onPress={submit}
+                disabled={!draft.trim()}
+                style={[surfaces.pill, { paddingHorizontal: 16, paddingVertical: 6, backgroundColor: hex.foreground, opacity: !draft.trim() ? 0.4 : 1 }]}
+              >
+                <Text variant="button" style={{ color: hex.background }}>Post</Text>
               </Pressable>
             </View>
           </View>
@@ -760,8 +788,8 @@ function CommunityTab({ player: p }: { player: Player }) {
       </Section>
 
       <Section title="Guidelines">
-        <View className="rounded-[24px] bg-surface-elevated p-4">
-          <Text className="text-[12px] leading-snug text-muted-foreground">Be respectful. No spam, no leaks, no harassment. Report or mute users from any post menu.</Text>
+        <View style={[surfaces.roundedCard, { padding: 16 }]}>
+          <Text variant="bodyMuted" style={{ lineHeight: 18 }}>Be respectful. No spam, no leaks, no harassment. Report or mute users from any post menu.</Text>
         </View>
       </Section>
     </>
@@ -769,31 +797,38 @@ function CommunityTab({ player: p }: { player: Player }) {
 }
 
 function PostCard({ post }: { post: Post }) {
+  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
+  const { scheme } = useTheme();
+  const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
   const c = useColors();
   return (
-    <View className={cn('rounded-[22px] bg-surface-elevated p-4', post.pinned ? 'border border-foreground/10' : '')}>
-      <View className="flex-row items-center justify-between">
-        <View className="flex-row items-center gap-2">
-          <View className="h-6 w-6 items-center justify-center rounded-full bg-foreground/10">
-            <Text className="text-[10px] text-foreground">{post.user[0]?.toUpperCase()}</Text>
+    <View style={[surfaces.roundedCard, { padding: 16 }, post.pinned && { borderWidth: StyleSheet.hairlineWidth, borderColor: `rgba(${ink},0.1)` }]}>
+      <View style={layout.rowBetween}>
+        <View style={[layout.row, { gap: 8 }]}>
+          <View style={[surfaces.iconBoxSm, { borderRadius: 9999, backgroundColor: toneBg.neutral }]}>
+            <Text variant="pill" style={{ fontSize: 10 }}>{post.user[0]?.toUpperCase()}</Text>
           </View>
-          <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{post.user}</Text>
-          <Text className="text-[11px] text-muted-foreground">·</Text>
-          <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{post.when}</Text>
-          {post.pinned ? <View className="rounded-full bg-foreground/10 px-2 py-0.5"><Text className="text-[10px] text-muted-foreground">Pinned</Text></View> : null}
+          <Text variant="eyebrow">{post.user}</Text>
+          <Text variant="caption" muted>·</Text>
+          <Text variant="eyebrow">{post.when}</Text>
+          {post.pinned ? (
+            <View style={[surfaces.pillMuted, { paddingHorizontal: 8, paddingVertical: 2 }]}>
+              <Text variant="pill" muted>Pinned</Text>
+            </View>
+          ) : null}
         </View>
-        <Pressable className="rounded-full p-1.5">
+        <Pressable style={{ borderRadius: 9999, padding: 6 }}>
           <MoreHorizontal size={16} color={c.mutedForeground} />
         </Pressable>
       </View>
-      <Text className="mt-2 text-[14px] leading-snug tracking-tightish">{post.body}</Text>
-      <View className="mt-2 flex-row items-center gap-1">
+      <Text variant="bodySm" style={{ marginTop: 8, lineHeight: 20 }}>{post.body}</Text>
+      <View style={[layout.row, { marginTop: 8, gap: 4 }]}>
         <ReactBtn icon={ThumbsUp} count={post.reactions.likes} />
         <ReactBtn icon={Heart} count={post.reactions.cheers} />
         <ReactBtn icon={Laugh} count={post.reactions.laughs} />
-        <Pressable className="ml-auto flex-row items-center gap-1.5 rounded-full px-3 py-1.5">
+        <Pressable style={[layout.row, { marginLeft: 'auto', gap: 6, borderRadius: 9999, paddingHorizontal: 12, paddingVertical: 6 }]}>
           <MessageCircle size={14} color={c.mutedForeground} />
-          <Text className="text-[12px] font-medium text-muted-foreground">{post.comments}</Text>
+          <Text variant="caption">{post.comments}</Text>
         </Pressable>
       </View>
     </View>
@@ -802,101 +837,112 @@ function PostCard({ post }: { post: Post }) {
 
 /* ------------------------------ ATOMS ------------------------------ */
 function Section({ title, children }: { title: string; children: ReactNode }) {
+  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   return (
-    <View className="gap-2">
-      <Text className="px-2 text-[13px] font-semibold uppercase tracking-widest text-muted-foreground">{title}</Text>
+    <View style={layout.sectionBlock}>
+      <Text variant="eyebrow" style={{ paddingHorizontal: 8, letterSpacing: 1.5, textTransform: 'uppercase' }}>{title}</Text>
       {children}
     </View>
   );
 }
 
 function HeadshotBubble({ player, large }: { player: Player; large?: boolean }) {
+  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
+  const { scheme } = useTheme();
+  const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
   const size = large ? 64 : 40;
   return (
-    <View style={{ width: size, height: size }} className="relative shrink-0">
-      <Image source={{ uri: playerAvatar(player.name + player.team) }} style={{ width: size, height: size, borderRadius: size / 2 }} className="bg-foreground/5" />
-      <View className="absolute -bottom-1 -right-1 rounded-full bg-foreground px-1.5 py-0.5">
-        <Text className="text-[9px] font-semibold tracking-widest text-background">{player.pos}</Text>
+    <View style={{ width: size, height: size, flexShrink: 0 }}>
+      <Image source={{ uri: playerAvatar(player.name + player.team) }} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: `rgba(${ink},0.05)` }} />
+      <View style={{ position: 'absolute', bottom: -4, right: -4, borderRadius: 9999, backgroundColor: hex.foreground, paddingHorizontal: 6, paddingVertical: 2 }}>
+        <Text variant="pill" style={{ fontSize: 9, fontWeight: '600', letterSpacing: 1, color: hex.background }}>{player.pos}</Text>
       </View>
     </View>
   );
 }
 
 function HealthDot({ health }: { health?: Health }) {
-  if (!health || health === 'healthy') return <View className="h-2 w-2 rounded-full bg-success" />;
-  const color = health === 'questionable' ? 'bg-warning' : health === 'doubtful' ? 'bg-warning' : 'bg-destructive';
-  return <View className={cn('h-2 w-2 rounded-full', color)} />;
+  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
+  const color = !health || health === 'healthy' ? hex.success : health === 'questionable' || health === 'doubtful' ? hex.warning : hex.danger;
+  return <View style={{ height: 8, width: 8, borderRadius: 9999, backgroundColor: color }} />;
 }
 
 function HealthBadge({ health, large }: { health?: Health; large?: boolean }) {
+  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   const c = useColors();
   const label = !health || health === 'healthy' ? 'Healthy' : health === 'questionable' ? 'Questionable' : health === 'doubtful' ? 'Doubtful' : health === 'out' ? 'Out' : 'IR';
-  const tone = !health || health === 'healthy' ? 'bg-success/15' : health === 'questionable' ? 'bg-warning/15' : 'bg-destructive/15';
-  const toneText = !health || health === 'healthy' ? 'text-success' : health === 'questionable' ? 'text-warning' : 'text-destructive';
+  const toneKey = !health || health === 'healthy' ? 'success' : health === 'questionable' ? 'warning' : 'danger';
   const iconColor = !health || health === 'healthy' ? c.success : health === 'questionable' ? c.warning : c.destructive;
   return (
-    <View className={cn('flex-row items-center gap-1 self-start rounded-full px-2.5 py-1', tone)}>
+    <View style={[layout.row, { gap: 4, alignSelf: 'flex-start', borderRadius: 9999, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: toneBg[toneKey] }]}>
       <HeartPulse size={12} color={iconColor} />
-      <Text className={cn('font-semibold tracking-widest', toneText, large ? 'text-[12px]' : 'text-[10px] uppercase')}>{label}</Text>
+      <Text variant={large ? 'caption' : 'eyebrow'} style={{ color: toneFg[toneKey], textTransform: large ? 'none' : 'uppercase' }}>{label}</Text>
     </View>
   );
 }
 
 function TrendPill({ trend, small }: { trend: number; small?: boolean }) {
+  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   const c = useColors();
   const up = trend >= 0;
   return (
-    <View className="flex-row items-center gap-0.5">
+    <View style={[layout.row, { gap: 2 }]}>
       {up ? <TrendingUp size={12} color={c.success} /> : <TrendingDown size={12} color={c.destructive} />}
-      <Text className={cn('font-semibold tabular-nums', up ? 'text-success' : 'text-destructive', small ? 'text-[11px]' : 'text-[12px]')}>{Math.abs(trend).toFixed(1)}</Text>
+      <Text variant="caption" style={{ fontWeight: '600', fontVariant: ['tabular-nums'], color: up ? hex.success : hex.danger, fontSize: small ? 11 : 12 }}>
+        {Math.abs(trend).toFixed(1)}
+      </Text>
     </View>
   );
 }
 
 function StatBlock({ label, value }: { label: string; value: string }) {
+  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   return (
-    <View className="w-[48%] rounded-[18px] bg-background px-3 py-2.5">
-      <Text className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{label}</Text>
-      <Text className="mt-0.5 text-[14px] font-semibold tracking-tightish">{value}</Text>
+    <View style={{ width: '48%', borderRadius: 18, backgroundColor: hex.background, paddingHorizontal: 12, paddingVertical: 10 }}>
+      <Text variant="eyebrow" style={{ fontSize: 10 }}>{label}</Text>
+      <Text variant="bodySm" style={{ marginTop: 2 }}>{value}</Text>
     </View>
   );
 }
 
 function PrimaryButton({ children, onPress }: { children: ReactNode; onPress?: () => void }) {
+  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   return (
-    <Pressable onPress={onPress} className="flex-1 items-center rounded-full bg-foreground px-4 py-2.5">
-      <Text className="text-[13px] font-semibold tracking-tightish text-background">{children}</Text>
+    <Pressable onPress={onPress} style={[layout.flex1, surfaces.pill, { alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: hex.foreground }]}>
+      <Text variant="button" style={{ color: hex.background }}>{children}</Text>
     </Pressable>
   );
 }
 
 function SecondaryButton({ children, onPress }: { children: ReactNode; onPress?: () => void }) {
+  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   return (
-    <Pressable onPress={onPress} className="items-center rounded-full bg-background px-4 py-2.5">
-      <Text className="text-[13px] font-semibold tracking-tightish text-foreground">{children}</Text>
+    <Pressable onPress={onPress} style={[surfaces.pill, { alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: hex.background }]}>
+      <Text variant="button">{children}</Text>
     </Pressable>
   );
 }
 
 function PlayerList({ players, onOpen, watchIds, toggleWatch }: { players: Player[]; onOpen: (id: string) => void; watchIds: Set<string>; toggleWatch: (id: string) => void }) {
+  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   const c = useColors();
   if (players.length === 0) return <EmptyState icon={Search} title="No matches" body="Try a different filter or search term." />;
   return (
-    <View className="overflow-hidden rounded-[24px] bg-surface-elevated">
+    <View style={surfaces.roundedCard}>
       {players.map((p, i) => (
-        <View key={p.id} className={cn('flex-row items-center gap-3 px-4 py-3', i > 0 ? 'border-t border-hairline' : '')}>
-          <Pressable onPress={() => onOpen(p.id)} className="min-w-0 flex-1 flex-row items-center gap-3">
+        <View key={p.id} style={[layout.row, { gap: 12, paddingHorizontal: 16, paddingVertical: 12 }, i > 0 && layout.listRowBorder]}>
+          <Pressable onPress={() => onOpen(p.id)} style={[layout.flex1, layout.row, { gap: 12, minWidth: 0 }]}>
             <HeadshotBubble player={p} />
-            <View className="min-w-0 flex-1">
-              <Text className="text-[15px] font-medium tracking-tightish" numberOfLines={1}>{p.name}</Text>
-              <Text className="text-[12px] text-muted-foreground" numberOfLines={1}>{p.team} {p.opp} · #{p.rank}</Text>
+            <View style={[layout.flex1, { minWidth: 0 }]}>
+              <Text variant="body" numberOfLines={1}>{p.name}</Text>
+              <Text variant="bodyMuted" numberOfLines={1}>{p.team} {p.opp} · #{p.rank}</Text>
             </View>
-            <View className="items-end">
-              <Text className="text-[14px] font-semibold tabular-nums">{p.proj.toFixed(1)}</Text>
+            <View style={layout.alignEnd}>
+              <Text variant="bodySm" style={{ fontVariant: ['tabular-nums'] }}>{p.proj.toFixed(1)}</Text>
               <TrendPill trend={p.trend} small />
             </View>
           </Pressable>
-          <Pressable onPress={() => toggleWatch(p.id)} className="h-9 w-9 items-center justify-center rounded-full">
+          <Pressable onPress={() => toggleWatch(p.id)} style={[layout.iconButtonSm, { width: 36, height: 36, borderWidth: 0, backgroundColor: 'transparent' }]}>
             <Star size={16} color={watchIds.has(p.id) ? c.foreground : c.mutedForeground} fill={watchIds.has(p.id) ? c.foreground : 'none'} />
           </Pressable>
         </View>
@@ -906,18 +952,19 @@ function PlayerList({ players, onOpen, watchIds, toggleWatch }: { players: Playe
 }
 
 function CompactList({ players, metric, metricNegative, onOpen }: { players: Player[]; metric: (p: Player) => string; metricNegative?: boolean; onOpen: (id: string) => void }) {
+  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   if (players.length === 0) return <EmptyState icon={Activity} title="Nothing yet" body="Check back later." />;
   return (
-    <View className="overflow-hidden rounded-[24px] bg-surface-elevated">
+    <View style={surfaces.roundedCard}>
       {players.map((p, i) => (
         <Pressable key={p.id} onPress={() => onOpen(p.id)}>
-          <View className={cn('flex-row items-center gap-3 px-4 py-3', i > 0 ? 'border-t border-hairline' : '')}>
+          <View style={[layout.row, { gap: 12, paddingHorizontal: 16, paddingVertical: 12 }, i > 0 && layout.listRowBorder]}>
             <HeadshotBubble player={p} />
-            <View className="min-w-0 flex-1">
-              <Text className="text-[14px] font-semibold tracking-tightish" numberOfLines={1}>{p.name}</Text>
-              <Text className="text-[12px] text-muted-foreground">{p.pos} · {p.team}</Text>
+            <View style={[layout.flex1, { minWidth: 0 }]}>
+              <Text variant="bodySm" numberOfLines={1}>{p.name}</Text>
+              <Text variant="bodyMuted">{p.pos} · {p.team}</Text>
             </View>
-            <Text className={cn('text-[14px] font-semibold tabular-nums', metricNegative ? 'text-destructive' : 'text-success')}>{metric(p)}</Text>
+            <Text variant="bodySm" style={{ fontVariant: ['tabular-nums'], color: metricNegative ? hex.danger : hex.success }}>{metric(p)}</Text>
           </View>
         </Pressable>
       ))}
@@ -926,27 +973,30 @@ function CompactList({ players, metric, metricNegative, onOpen }: { players: Pla
 }
 
 function EmptyState({ icon: Icon, title, body }: { icon: ComponentType<{ size?: number; color?: string }>; title: string; body: string }) {
+  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   const c = useColors();
   return (
-    <View className="items-center rounded-[24px] bg-surface-elevated p-8">
+    <View style={surfaces.emptyState}>
       <Icon size={24} color={c.mutedForeground} />
-      <Text className="mt-3 text-[14px] font-semibold tracking-tightish">{title}</Text>
-      <Text className="mt-1 text-[12px] text-muted-foreground">{body}</Text>
+      <Text variant="bodySm" style={{ marginTop: 12 }}>{title}</Text>
+      <Text variant="bodyMuted" style={{ marginTop: 4 }}>{body}</Text>
     </View>
   );
 }
 
 function ReactBtn({ icon: Icon, count }: { icon: LucideIcon; count: number }) {
+  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   const c = useColors();
   return (
-    <Pressable className="flex-row items-center gap-1.5 rounded-full px-3 py-1.5">
+    <Pressable style={[layout.row, { gap: 6, borderRadius: 9999, paddingHorizontal: 12, paddingVertical: 6 }]}>
       <Icon size={14} color={c.mutedForeground} />
-      {count > 0 ? <Text className="text-[12px] font-medium tabular-nums text-muted-foreground">{count}</Text> : null}
+      {count > 0 ? <Text variant="caption" style={{ fontVariant: ['tabular-nums'] }}>{count}</Text> : null}
     </Pressable>
   );
 }
 
 function aiSummary(p: Player): string {
+  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   if (p.health && p.health !== 'healthy') return `${p.name} is trending toward playing this week but may have a reduced workload. The backup remains a valuable insurance option.`;
   if (p.trend > 3) return `${p.name} is one of the hottest players in fantasy right now. Role and opportunity are both expanding heading into a favorable matchup.`;
   if (p.trend < -2) return `${p.name}'s usage has dipped over the last three weeks. Monitor practice reports and the depth chart before locking in lineups.`;

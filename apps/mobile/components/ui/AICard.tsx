@@ -1,9 +1,7 @@
 import { ArrowUpRight, ChevronRight, Sparkles } from 'lucide-react-native';
 import { type ReactNode } from 'react';
-import { View } from 'react-native';
-import { Pressable, Text } from './primitives';
-import { useColors } from '@/lib/theme';
-import { cn } from '@/lib/cn';
+import { Pressable, Text, View } from './primitives';
+import { useColors, useHex, useTheme, useThemeStyles } from '@/lib/theme';
 import type { Confidence, Recommendation } from '@/lib/ai-intelligence';
 
 export function AICard({
@@ -16,43 +14,41 @@ export function AICard({
   compact?: boolean;
 }) {
   const c = useColors();
-  const toneBorder =
-    rec.tone === 'warning'
-      ? 'border-warning/40'
-      : rec.tone === 'danger'
-        ? 'border-destructive/40'
-        : rec.tone === 'success'
-          ? 'border-success/40'
-          : 'border-foreground/10';
-
+  const hex = useHex();
+  const { scheme } = useTheme();
+  const { layout, surfaces, toneBg } = useThemeStyles();
   const primary = rec.action?.kind === 'primary';
   const external = rec.action?.label.startsWith('Open in');
+  const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
+  const borderColor =
+    rec.tone === 'warning'
+      ? 'rgba(242,177,13,0.4)'
+      : rec.tone === 'danger'
+        ? 'rgba(238,55,52,0.4)'
+        : rec.tone === 'success'
+          ? 'rgba(40,189,95,0.4)'
+          : `rgba(${ink},0.1)`;
 
   return (
-    <View className={cn('rounded-[30px] border bg-surface-elevated p-4', toneBorder)}>
-      <View className="flex-row items-start gap-3">
-        <View className="h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-foreground">
-          <Sparkles size={16} color={c.background} strokeWidth={2.25} />
+    <View style={[surfaces.aiCard, { borderColor }]}>
+      <View style={layout.rowStart}>
+        <View style={surfaces.iconBoxDark}>
+          <Sparkles size={16} color={hex.primaryForeground} strokeWidth={2.25} />
         </View>
-        <View className="min-w-0 flex-1">
-          <View className="flex-row items-center gap-2">
+        <View style={layout.flex1}>
+          <View style={[layout.row, { gap: 8 }]}>
             {rec.category ? (
-              <Text className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+              <Text variant="pill" muted style={{ textTransform: 'uppercase', letterSpacing: 2 }}>
                 {rec.category}
               </Text>
             ) : null}
             <ConfidencePill confidence={rec.confidence} />
           </View>
-          <Text
-            className={cn(
-              'mt-1 font-semibold tracking-tightish text-foreground',
-              compact ? 'text-[14px]' : 'text-[15px]',
-            )}
-          >
+          <Text variant={compact ? 'bodySm' : 'body'} style={{ marginTop: 4 }}>
             {rec.title}
           </Text>
           {!compact ? (
-            <Text className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+            <Text variant="bodyMuted" style={{ marginTop: 4, lineHeight: 18 }}>
               {rec.why}
             </Text>
           ) : null}
@@ -61,16 +57,14 @@ export function AICard({
       {rec.action ? (
         <Pressable
           onPress={onAction}
-          className={cn(
-            'mt-3 w-full flex-row items-center justify-center gap-1 rounded-full py-2.5',
-            primary ? 'bg-foreground' : 'bg-foreground/5',
-          )}
+          style={[
+            surfaces.aiButton,
+            primary ? surfaces.aiButtonPrimary : surfaces.aiButtonSecondary,
+          ]}
         >
           <Text
-            className={cn(
-              'text-[13px] font-semibold',
-              primary ? 'text-background' : 'text-foreground',
-            )}
+            variant="button"
+            style={{ color: primary ? hex.primaryForeground : hex.foreground }}
           >
             {rec.action.label}
           </Text>
@@ -86,15 +80,21 @@ export function AICard({
 }
 
 export function ConfidencePill({ confidence }: { confidence: Confidence }) {
+  const hex = useHex();
+  const { scheme } = useTheme();
+  const { surfaces, toneBg } = useThemeStyles();
+  const moderateBg = scheme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(13,13,13,0.1)';
   const map = {
-    high: { label: 'High confidence', cls: 'bg-success/15', text: 'text-success' },
-    moderate: { label: 'Moderate', cls: 'bg-foreground/10', text: 'text-foreground' },
-    low: { label: 'Low confidence', cls: 'bg-muted', text: 'text-muted-foreground' },
+    high: { label: 'High confidence', bg: toneBg.success, color: hex.success },
+    moderate: { label: 'Moderate', bg: moderateBg, color: hex.foreground },
+    low: { label: 'Low confidence', bg: hex.muted, color: hex.mutedForeground },
   } as const;
   const m = map[confidence];
   return (
-    <View className={cn('rounded-full px-2 py-0.5', m.cls)}>
-      <Text className={cn('text-[10px] font-medium tracking-wide', m.text)}>{m.label}</Text>
+    <View style={[surfaces.pill, { backgroundColor: m.bg, paddingHorizontal: 8, paddingVertical: 2 }]}>
+      <Text variant="pill" style={{ color: m.color }}>
+        {m.label}
+      </Text>
     </View>
   );
 }
@@ -109,20 +109,21 @@ export function AISection({
   children: ReactNode;
 }) {
   const c = useColors();
+  const { layout } = useThemeStyles();
   return (
     <View>
-      <View className="mb-2 flex-row items-center justify-between px-2">
-        <View className="flex-row items-center gap-1.5">
+      <View style={[layout.rowBetween, { marginBottom: 8, paddingHorizontal: 8 }]}>
+        <View style={[layout.row, { gap: 6 }]}>
           <Sparkles size={14} color={c.mutedForeground} />
-          <Text className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
-            {title}
-          </Text>
+          <Text variant="eyebrow">{title}</Text>
         </View>
         {caption ? (
-          <Text className="text-[11px] text-muted-foreground">{caption}</Text>
+          <Text variant="caption" muted>
+            {caption}
+          </Text>
         ) : null}
       </View>
-      <View className="gap-2.5">{children}</View>
+      <View style={layout.stackSm}>{children}</View>
     </View>
   );
 }

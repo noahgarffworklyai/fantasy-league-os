@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePathname, useRouter } from 'expo-router';
 import { BlurView } from 'expo-blur';
@@ -7,7 +7,6 @@ import {
   Bell,
   Check,
   ChevronDown,
-  ChevronRight,
   CircleHelp,
   Home,
   LogOut,
@@ -20,14 +19,14 @@ import {
   Users,
   Wifi,
 } from 'lucide-react-native';
-import { Pressable, Text } from './ui/primitives';
+import { Pressable, Text, View } from './ui/primitives';
 import { AvatarImage } from './ui/AvatarImage';
 import { Sheet } from './ui/Sheet';
 import { useCommissionerSheet } from '@/lib/commissioner-sheet-context';
 import { leagueSubtitle, useLeague, type League } from '@/lib/league-context';
 import { personAvatar } from '@/lib/avatars';
-import { useColors, useTheme } from '@/lib/theme';
-import { cn } from '@/lib/cn';
+import { isTabActive } from '@/lib/nav';
+import { useColors, useHex, useTheme, useThemeStyles } from '@/lib/theme';
 
 const NAV = [
   { to: '/', label: 'Home', icon: Home, exact: true },
@@ -42,38 +41,48 @@ export function TopChrome() {
   const insets = useSafeAreaInsets();
   const { user, leagues, active, setActiveId, signOut } = useLeague();
   const c = useColors();
+  const hex = useHex();
+  const { layout, surfaces } = useThemeStyles();
   const [switcher, setSwitcher] = useState(false);
   const [menu, setMenu] = useState(false);
   if (!active) return null;
 
-  const initials =
-    user?.name
-      ?.split(/\s+/)
-      .map((w) => w[0])
-      .slice(0, 2)
-      .join('')
-      .toUpperCase() ?? 'MJ';
-
   return (
-    <View style={{ paddingTop: Math.max(insets.top, 12) }} className="bg-background">
-      <View className="flex-row items-center justify-between px-4 pb-2">
+    <View style={{ paddingTop: Math.max(insets.top, 12), backgroundColor: hex.background }}>
+      <View style={[layout.rowBetween, { paddingHorizontal: 16, paddingBottom: 8 }]}>
         <Pressable
           onPress={() => setSwitcher(true)}
-          className="h-9 flex-row items-center gap-1.5 rounded-full bg-foreground/[0.06] px-3.5"
+          style={[
+            layout.row,
+            surfaces.pill,
+            {
+              height: 36,
+              gap: 6,
+              paddingHorizontal: 14,
+              backgroundColor: 'rgba(13,13,13,0.06)',
+            },
+          ]}
         >
-          <Text className="max-w-[180px] text-[13px] font-medium tracking-tightish text-foreground/90" numberOfLines={1}>
+          <Text variant="link" numberOfLines={1} style={{ maxWidth: 180, opacity: 0.9 }}>
             {active.name}
           </Text>
           <ChevronDown size={14} color={c.foreground} strokeWidth={2} />
         </Pressable>
         <Pressable
           onPress={() => setMenu(true)}
-          className="h-9 w-9 overflow-hidden rounded-full border border-foreground/10"
+          style={{
+            height: 36,
+            width: 36,
+            overflow: 'hidden',
+            borderRadius: 9999,
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: 'rgba(13,13,13,0.1)',
+          }}
         >
           <AvatarImage
             src={personAvatar(user?.email || user?.name || 'me')}
             name={user?.name ?? 'Me'}
-            className="h-9 w-9"
+            size={36}
           />
         </Pressable>
       </View>
@@ -115,33 +124,48 @@ function LeagueSwitcherSheet({
 }) {
   const router = useRouter();
   const c = useColors();
+  const hex = useHex();
+  const { layout, surfaces } = useThemeStyles();
   const go = (to: string) => {
     onClose();
     router.push(to as never);
   };
   return (
     <Sheet open={open} onClose={onClose} title="Switch League" scroll={false}>
-      <View className="px-4">
-        <View className="overflow-hidden rounded-[24px] bg-surface">
+      <View style={{ paddingHorizontal: 16 }}>
+        <View style={surfaces.sheetGroup}>
           {leagues.map((l, i) => {
             const selected = l.id === activeId;
             return (
               <Pressable
                 key={l.id}
                 onPress={() => onSelect(l.id)}
-                className={cn(
-                  'w-full flex-row items-center gap-3 px-4 py-3.5',
-                  i > 0 ? 'border-t border-foreground/[0.06]' : '',
-                )}
+                style={[
+                  layout.row,
+                  { gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
+                  i > 0 ? layout.listRowBorder : null,
+                ]}
               >
-                <View className="h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-foreground/90">
-                  <Text className="text-[12px] font-semibold text-background">{l.shortName}</Text>
+                <View
+                  style={[
+                    layout.centered,
+                    {
+                      height: 40,
+                      width: 40,
+                      borderRadius: 14,
+                      backgroundColor: 'rgba(13,13,13,0.9)',
+                    },
+                  ]}
+                >
+                  <Text variant="caption" style={{ color: hex.primaryForeground }}>
+                    {l.shortName}
+                  </Text>
                 </View>
-                <View className="min-w-0 flex-1">
-                  <Text className="text-[15px] font-semibold tracking-tightish" numberOfLines={1}>
+                <View style={[layout.flex1, { minWidth: 0 }]}>
+                  <Text variant="bodySm" numberOfLines={1}>
                     {l.name}
                   </Text>
-                  <Text className="text-[12px] text-muted-foreground" numberOfLines={1}>
+                  <Text variant="bodyMuted" numberOfLines={1}>
                     {leagueSubtitle(l)}
                   </Text>
                 </View>
@@ -151,7 +175,7 @@ function LeagueSwitcherSheet({
           })}
         </View>
 
-        <View className="mt-4 flex-row gap-2">
+        <View style={[layout.row, { marginTop: 16, gap: 8 }]}>
           <SheetAction icon={Plus} label="Create" onPress={() => go('/onboarding/create')} />
           <SheetAction icon={UserPlus} label="Join" onPress={() => go('/onboarding/join')} />
           <SheetAction icon={Wifi} label="Sync" onPress={() => go('/onboarding/sync')} />
@@ -171,13 +195,24 @@ function SheetAction({
   onPress: () => void;
 }) {
   const c = useColors();
+  const hex = useHex();
+  const { layout } = useThemeStyles();
   return (
     <Pressable
       onPress={onPress}
-      className="flex-1 items-center gap-2 rounded-[20px] bg-surface py-4"
+      style={[
+        layout.flex1,
+        layout.centered,
+        {
+          gap: 8,
+          borderRadius: 20,
+          backgroundColor: hex.surface,
+          paddingVertical: 16,
+        },
+      ]}
     >
       <IconComp size={16} color={c.foreground} />
-      <Text className="text-[12px] font-medium tracking-tightish">{label} League</Text>
+      <Text variant="caption">{label} League</Text>
     </Pressable>
   );
 }
@@ -197,6 +232,8 @@ function ProfileMenuSheet({
 }) {
   const router = useRouter();
   const c = useColors();
+  const hex = useHex();
+  const { layout, surfaces } = useThemeStyles();
   const go = (to: string) => {
     onClose();
     router.push(to as never);
@@ -217,36 +254,38 @@ function ProfileMenuSheet({
   ];
   return (
     <Sheet open={open} onClose={onClose} scroll={false}>
-      <View className="px-4">
-        <View className="flex-row items-center gap-3 px-2 pb-4">
-          <AvatarImage src={personAvatar(email || name)} name={name} className="h-12 w-12" />
-          <View className="min-w-0 flex-1">
-            <Text className="text-[17px] font-semibold tracking-tighter2" numberOfLines={1}>
+      <View style={{ paddingHorizontal: 16 }}>
+        <View style={[layout.row, { gap: 12, paddingHorizontal: 8, paddingBottom: 16 }]}>
+          <AvatarImage src={personAvatar(email || name)} name={name} size={48} />
+          <View style={[layout.flex1, { minWidth: 0 }]}>
+            <Text variant="titleMd" numberOfLines={1}>
               {name}
             </Text>
             {email ? (
-              <Text className="text-[12px] text-muted-foreground" numberOfLines={1}>
+              <Text variant="bodyMuted" numberOfLines={1}>
                 {email}
               </Text>
             ) : null}
           </View>
         </View>
-        <View className="overflow-hidden rounded-[24px] bg-surface">
+        <View style={surfaces.sheetGroup}>
           {items.map((it, i) => (
             <Pressable
               key={it.label}
               onPress={it.onPress}
-              className={cn(
-                'w-full flex-row items-center gap-3 px-4 py-3.5',
-                i > 0 ? 'border-t border-foreground/[0.06]' : '',
-              )}
+              style={[
+                layout.row,
+                { gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
+                i > 0 ? layout.listRowBorder : null,
+              ]}
             >
               <it.icon size={16} color={it.label === 'Logout' ? c.destructive : c.foreground} />
               <Text
-                className={cn(
-                  'flex-1 text-[15px] tracking-tightish',
-                  it.label === 'Logout' ? 'text-destructive' : '',
-                )}
+                variant="body"
+                style={[
+                  layout.flex1,
+                  it.label === 'Logout' ? { color: hex.danger } : null,
+                ]}
               >
                 {it.label}
               </Text>
@@ -265,34 +304,61 @@ export function BottomBar() {
   const pathname = usePathname();
   const router = useRouter();
   const { open } = useCommissionerSheet();
-  const { scheme } = useTheme();
   const c = useColors();
+  const hex = useHex();
+  const { scheme } = useTheme();
+  const { layout } = useThemeStyles();
 
   return (
     <View
-      className="absolute inset-x-0 bottom-0 px-4"
-      style={{ paddingBottom: Math.max(insets.bottom, 12), paddingTop: 8 }}
+      style={{
+        position: 'absolute',
+        left: 16,
+        right: 16,
+        bottom: 0,
+        paddingBottom: Math.max(insets.bottom, 12),
+        paddingTop: 8,
+      }}
       pointerEvents="box-none"
     >
-      <View className="flex-row items-center gap-2">
+      <View style={[layout.row, { gap: 8 }]}>
         <BlurView
           intensity={40}
           tint={scheme === 'dark' ? 'dark' : 'light'}
           experimentalBlurMethod="dimezisBlurView"
-          className="flex-1 overflow-hidden rounded-full border border-hairline"
-          style={{ borderRadius: 9999 }}
+          style={{
+            flex: 1,
+            overflow: 'hidden',
+            borderRadius: 9999,
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: hex.hairline,
+          }}
         >
-          <View className="flex-row bg-background/40 px-2 py-1.5">
+          <View
+            style={[
+              layout.row,
+              {
+                backgroundColor: scheme === 'dark' ? 'rgba(8,8,8,0.5)' : 'rgba(242,242,242,0.4)',
+                paddingHorizontal: 8,
+                paddingVertical: 6,
+              },
+            ]}
+          >
             {NAV.map((n) => {
-              const active = n.exact ? pathname === n.to : pathname.startsWith(n.to);
+              const active = isTabActive(pathname, n.to);
               return (
                 <Pressable
                   key={n.to}
-                  onPress={() => router.navigate(n.to as never)}
-                  className={cn(
-                    'flex-1 items-center gap-0.5 rounded-full py-1.5',
-                    active ? 'bg-foreground/5' : '',
-                  )}
+                  onPress={() => {
+                    if (active) return;
+                    router.replace(n.to as never);
+                  }}
+                  style={[
+                    layout.flex1,
+                    layout.centered,
+                    { gap: 2, borderRadius: 9999, paddingVertical: 6 },
+                    active ? { backgroundColor: 'rgba(13,13,13,0.05)' } : null,
+                  ]}
                 >
                   <n.icon
                     size={20}
@@ -300,10 +366,8 @@ export function BottomBar() {
                     strokeWidth={active ? 2.4 : 1.8}
                   />
                   <Text
-                    className={cn(
-                      'text-[10px] font-medium tracking-wide',
-                      active ? 'text-foreground' : 'text-muted-foreground',
-                    )}
+                    variant="pill"
+                    style={{ color: active ? hex.foreground : hex.mutedForeground }}
                   >
                     {n.label}
                   </Text>
@@ -314,10 +378,39 @@ export function BottomBar() {
         </BlurView>
         <Pressable
           onPress={open}
-          className="h-[58px] w-[58px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-hairline bg-background/60"
+          style={[
+            layout.centered,
+            {
+              height: 58,
+              width: 58,
+              flexShrink: 0,
+              overflow: 'hidden',
+              borderRadius: 9999,
+              borderWidth: StyleSheet.hairlineWidth,
+              borderColor: hex.hairline,
+              backgroundColor: scheme === 'dark' ? 'rgba(8,8,8,0.6)' : 'rgba(242,242,242,0.6)',
+            },
+          ]}
         >
-          <View className="h-7 w-7 items-center justify-center rounded-full bg-foreground">
-            <View className="h-1.5 w-1.5 rounded-full bg-success" />
+          <View
+            style={[
+              layout.centered,
+              {
+                height: 28,
+                width: 28,
+                borderRadius: 9999,
+                backgroundColor: hex.primary,
+              },
+            ]}
+          >
+            <View
+              style={{
+                height: 6,
+                width: 6,
+                borderRadius: 9999,
+                backgroundColor: hex.success,
+              }}
+            />
           </View>
         </Pressable>
       </View>

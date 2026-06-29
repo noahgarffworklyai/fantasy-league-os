@@ -1,5 +1,5 @@
-import { Fragment, useRef, useState, type ReactNode } from 'react';
-import { Modal, ScrollView, TextInput, useWindowDimensions, View, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
+import { Fragment, useRef, useState, type ReactNode, useMemo } from 'react';
+import { Modal, ScrollView, StyleSheet, TextInput, useWindowDimensions, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line as SvgLine, Rect, Text as SvgText } from 'react-native-svg';
 import {
@@ -19,14 +19,14 @@ import {
   TrendingUp,
   Trophy,
 } from 'lucide-react-native';
-import { Pressable, Text } from '@/components/ui/primitives';
+import { Pressable, Text, View } from '@/components/ui/primitives';
 import { Screen } from '@/components/ui/Screen';
 import { Segmented } from '@/components/ui/Segmented';
 import { AvatarImage } from '@/components/ui/AvatarImage';
+import { PageIntro } from '@/components/ui/PageIntro';
 import { useLeague, type League } from '@/lib/league-context';
 import { personAvatar } from '@/lib/avatars';
-import { useColors } from '@/lib/theme';
-import { cn } from '@/lib/cn';
+import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
 
 /* ------------------------------ MOCK DATA ------------------------------ */
 interface TeamRow {
@@ -169,6 +169,7 @@ export default function LeaguePage() {
 type LeagueTab = 'standings' | 'live' | 'analytics';
 
 function LeagueHome({ active, onOpenMatchup, onOpenTeam }: { active: League; onOpenMatchup: (id: string) => void; onOpenTeam: (name: string) => void }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const [tab, setTab] = useState<LeagueTab>('standings');
   const [feedOpen, setFeedOpen] = useState(false);
@@ -176,19 +177,15 @@ function LeagueHome({ active, onOpenMatchup, onOpenTeam }: { active: League; onO
   const totalL = TEAMS.reduce((s, t) => s + t.losses, 0);
 
   return (
-    <View className="gap-5 px-4 pb-10 pt-1">
-      <View className="gap-3 px-1 pt-1">
-        <View className="min-w-0">
-          <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Week {active.week}</Text>
-          <Text className="mt-1 text-[34px] font-semibold leading-[36px] tracking-tighter2" numberOfLines={1}>{active.name}</Text>
-          <Text className="mt-2 text-[13px] text-muted-foreground">
-            {active.members} teams · {totalW}-{totalL} combined · {active.type === 'synced' ? `Synced from ${active.platform}` : 'Hosted'}
-          </Text>
-        </View>
-      </View>
+    <View style={layout.screen}>
+      <PageIntro
+        eyebrow={`Week ${active.week}`}
+        title={active.name}
+        subtitle={`${active.members} teams · ${totalW}-${totalL} combined · ${active.type === 'synced' ? `Synced from ${active.platform}` : 'Hosted'}`}
+      />
 
-      <View className="flex-row items-center gap-2">
-        <View className="min-w-0 flex-1">
+      <View style={[layout.row, { gap: 8 }]}>
+        <View style={[layout.flex1, { minWidth: 0 }]}>
           <Segmented
             value={tab}
             onChange={setTab}
@@ -199,10 +196,18 @@ function LeagueHome({ active, onOpenMatchup, onOpenTeam }: { active: League; onO
             ]}
           />
         </View>
-        <Pressable onPress={() => setFeedOpen(true)} className="relative h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border bg-card">
+        <Pressable
+          onPress={() => setFeedOpen(true)}
+          style={[
+            layout.iconButtonSm,
+            { position: 'relative', borderRadius: 9999, backgroundColor: hex.surfaceElevated },
+          ]}
+        >
           <MessageCircle size={20} color={c.foreground} />
-          <View className="absolute -right-1 -top-1 h-4 min-w-4 items-center justify-center rounded-full bg-success px-1">
-            <Text className="text-[10px] font-semibold text-background">{FEED.length}</Text>
+          <View style={surfaces.badge}>
+            <Text variant="pill" style={{ fontWeight: '600', color: hex.background, fontSize: 10 }}>
+              {FEED.length}
+            </Text>
           </View>
         </Pressable>
       </View>
@@ -222,6 +227,10 @@ function playoffOdds(rank: number) {
 }
 
 function StandingsPane({ onOpenTeam }: { onOpenTeam: (name: string) => void }) {
+  const styles = useLeagueStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+  const { scheme } = useTheme();
+  const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
   const clinching = TEAMS.filter((t) => playoffOdds(t.rank) >= 95).length;
   const bubble = TEAMS.filter((t) => {
     const o = playoffOdds(t.rank);
@@ -230,33 +239,38 @@ function StandingsPane({ onOpenTeam }: { onOpenTeam: (name: string) => void }) {
 
   return (
     <Section title="Standings & playoff odds">
-      <View className="flex-row items-center justify-between rounded-[18px] bg-surface-elevated px-4 py-2.5">
-        <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Top 6 make playoffs</Text>
-        <Text className="text-[11px] text-muted-foreground">
-          <Text className="font-semibold text-success">{clinching}</Text> clinching · <Text className="font-semibold text-warning">{bubble}</Text> bubble
+      <View style={styles.standingsBanner}>
+        <Text variant="eyebrow">Top 6 make playoffs</Text>
+        <Text variant="caption">
+          <Text variant="caption" style={{ color: toneFg.success, fontWeight: '600' }}>{clinching}</Text>
+          {' clinching · '}
+          <Text variant="caption" style={{ color: hex.warning, fontWeight: '600' }}>{bubble}</Text>
+          {' bubble'}
         </Text>
       </View>
-      <View className="overflow-hidden rounded-[24px] bg-surface-elevated">
+      <View style={surfaces.roundedCard}>
         {TEAMS.map((t, i) => {
           const odds = playoffOdds(t.rank);
-          const oddsColor = odds >= 90 ? 'text-success' : odds >= 50 ? 'text-foreground' : odds >= 20 ? 'text-warning' : 'text-destructive';
-          const barColor = odds >= 90 ? 'bg-success' : odds >= 50 ? 'bg-foreground/80' : odds >= 20 ? 'bg-warning' : 'bg-destructive/70';
+          const oddsColor =
+            odds >= 90 ? toneFg.success : odds >= 50 ? hex.foreground : odds >= 20 ? hex.warning : toneFg.danger;
+          const barColor =
+            odds >= 90 ? hex.success : odds >= 50 ? `rgba(${ink},0.8)` : odds >= 20 ? hex.warning : 'rgba(238,55,52,0.7)';
           return (
             <Pressable key={t.name} onPress={() => onOpenTeam(t.name)}>
-              <View className={cn('flex-row items-center gap-3 px-4 py-3', i > 0 ? 'border-t border-hairline' : '')}>
-                <Text className="w-5 text-[13px] font-semibold tabular-nums text-muted-foreground">{t.rank}</Text>
-                <AvatarImage src={personAvatar(t.owner + t.name)} name={t.owner} className="h-9 w-9" />
+              <View style={[styles.standingsRow, i > 0 ? layout.listRowBorder : null]}>
+                <Text variant="bodyMuted" style={{ width: 20, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{t.rank}</Text>
+                <AvatarImage src={personAvatar(t.owner + t.name)} name={t.owner} size={36} />
                 <TagDot tag={t.tag} />
-                <View className="min-w-0 flex-1">
-                  <Text className="text-[15px] font-medium tracking-tightish" numberOfLines={1}>{t.name}</Text>
-                  <Text className="text-[12px] text-muted-foreground" numberOfLines={1}>{t.owner} · {t.wins}-{t.losses} · {t.streak}</Text>
-                  <View className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-border">
-                    <View className={cn('h-full rounded-full', barColor)} style={{ width: `${odds}%` }} />
+                <View style={[layout.flex1, { minWidth: 0 }]}>
+                  <Text variant="body" numberOfLines={1}>{t.name}</Text>
+                  <Text variant="bodyMuted" numberOfLines={1}>{t.owner} · {t.wins}-{t.losses} · {t.streak}</Text>
+                  <View style={surfaces.progressTrack}>
+                    <View style={[surfaces.progressFill, { width: `${odds}%`, backgroundColor: barColor }]} />
                   </View>
                 </View>
-                <View className="items-end">
-                  <Text className={cn('text-[14px] font-semibold tabular-nums', oddsColor)}>{odds}%</Text>
-                  <Text className="text-[11px] tabular-nums text-muted-foreground">{t.pf.toFixed(0)} PF</Text>
+                <View style={layout.alignEnd}>
+                  <Text variant="bodySm" style={{ fontVariant: ['tabular-nums'], color: oddsColor }}>{odds}%</Text>
+                  <Text variant="caption" style={{ fontVariant: ['tabular-nums'] }}>{t.pf.toFixed(0)} PF</Text>
                 </View>
                 <Movement delta={t.prev - t.rank} />
               </View>
@@ -271,6 +285,7 @@ function StandingsPane({ onOpenTeam }: { onOpenTeam: (name: string) => void }) {
 
 /* ------------------------------ LIVE ------------------------------ */
 function LivePane({ onOpenMatchup }: { onOpenMatchup: (id: string) => void }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const { width } = useWindowDimensions();
   const cardW = width - 32;
   const [active, setActive] = useState(0);
@@ -282,10 +297,10 @@ function LivePane({ onOpenMatchup }: { onOpenMatchup: (id: string) => void }) {
   };
 
   return (
-    <View className="gap-3">
-      <View className="flex-row items-center justify-between px-1">
-        <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Matchup {active + 1} of {MATCHUPS.length}</Text>
-        <Text className="text-[11px] text-muted-foreground">Swipe →</Text>
+    <View style={{ gap: 12 }}>
+      <View style={[layout.rowBetween, { paddingHorizontal: 4 }]}>
+        <Text variant="eyebrow">Matchup {active + 1} of {MATCHUPS.length}</Text>
+        <Text variant="caption">Swipe →</Text>
       </View>
       <ScrollView
         ref={scrollerRef}
@@ -302,10 +317,17 @@ function LivePane({ onOpenMatchup }: { onOpenMatchup: (id: string) => void }) {
           </View>
         ))}
       </ScrollView>
-      <View className="flex-row items-center justify-center gap-1.5 pt-1">
+      <View style={[layout.row, layout.centered, { gap: 6, paddingTop: 4 }]}>
         {MATCHUPS.map((_, i) => (
           <Pressable key={i} onPress={() => scrollerRef.current?.scrollTo({ x: i * cardW, animated: true })}>
-            <View className={cn('h-1.5 rounded-full', i === active ? 'w-5 bg-foreground' : 'w-1.5 bg-muted-foreground/40')} />
+            <View
+              style={{
+                height: 6,
+                borderRadius: 9999,
+                width: i === active ? 20 : 6,
+                backgroundColor: i === active ? hex.foreground : 'rgba(99,99,99,0.4)',
+              }}
+            />
           </Pressable>
         ))}
       </View>
@@ -314,46 +336,61 @@ function LivePane({ onOpenMatchup }: { onOpenMatchup: (id: string) => void }) {
 }
 
 function LiveMatchupCard({ matchup: m, homeLineup, awayLineup, onOpen }: { matchup: Matchup; homeLineup: typeof LINEUP_DEFAULT; awayLineup: typeof LINEUP_DEFAULT; onOpen: () => void }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+  const { scheme } = useTheme();
+  const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
   const c = useColors();
   return (
-    <View className="overflow-hidden rounded-[28px] bg-surface-elevated">
-      <View className="px-5 pt-4">
-        <View className="flex-row items-center justify-between">
+    <View style={surfaces.roundedCardLg}>
+      <View style={{ paddingHorizontal: 20, paddingTop: 16 }}>
+        <View style={layout.rowBetween}>
           <StateBadge state={m.state} kickoff={m.kickoff} />
-          <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{Math.round(m.winProb * 100)}% · {Math.round((1 - m.winProb) * 100)}%</Text>
+          <Text variant="eyebrow">{Math.round(m.winProb * 100)}% · {Math.round((1 - m.winProb) * 100)}%</Text>
         </View>
-        <View className="mt-3 flex-row items-center gap-2">
-          <View className="min-w-0 flex-1">
-            <View className="flex-row items-center gap-2">
-              <AvatarImage src={personAvatar(m.home.owner + m.home.name)} name={m.home.owner} className="h-8 w-8" />
-              <Text className="text-[12px] text-muted-foreground" numberOfLines={1}>{m.home.owner}</Text>
+        <View style={[layout.row, { gap: 8, marginTop: 12 }]}>
+          <View style={[layout.flex1, { minWidth: 0 }]}>
+            <View style={[layout.row, { gap: 8 }]}>
+              <AvatarImage src={personAvatar(m.home.owner + m.home.name)} name={m.home.owner} size={32} />
+              <Text variant="bodyMuted" numberOfLines={1}>{m.home.owner}</Text>
             </View>
-            <Text className="mt-1 text-[14px] font-semibold tracking-tightish" numberOfLines={1}>{m.home.name}</Text>
-            <Text className={cn('mt-1 text-[28px] font-semibold tabular-nums', m.hp > m.ap && m.state !== 'pre' ? 'text-success' : '')}>{m.state === 'pre' ? '—' : m.hp.toFixed(1)}</Text>
-            <Text className="text-[10px] text-muted-foreground">proj {m.hproj.toFixed(1)}</Text>
+            <Text variant="bodySm" style={{ marginTop: 4 }} numberOfLines={1}>{m.home.name}</Text>
+            <Text
+              variant="scoreLG"
+              style={{ marginTop: 4, fontVariant: ['tabular-nums'], color: m.hp > m.ap && m.state !== 'pre' ? toneFg.success : hex.foreground }}
+            >
+              {m.state === 'pre' ? '—' : m.hp.toFixed(1)}
+            </Text>
+            <Text variant="pill" muted>proj {m.hproj.toFixed(1)}</Text>
           </View>
-          <Text className="text-[10px] uppercase tracking-widest text-muted-foreground">vs</Text>
-          <View className="min-w-0 flex-1 items-end">
-            <View className="flex-row items-center gap-2">
-              <Text className="text-[12px] text-muted-foreground" numberOfLines={1}>{m.away.owner}</Text>
-              <AvatarImage src={personAvatar(m.away.owner + m.away.name)} name={m.away.owner} className="h-8 w-8" />
+          <Text variant="caption" style={{ textTransform: 'uppercase', letterSpacing: 2 }}>vs</Text>
+          <View style={[layout.flex1, layout.alignEnd, { minWidth: 0 }]}>
+            <View style={[layout.row, { gap: 8 }]}>
+              <Text variant="bodyMuted" numberOfLines={1}>{m.away.owner}</Text>
+              <AvatarImage src={personAvatar(m.away.owner + m.away.name)} name={m.away.owner} size={32} />
             </View>
-            <Text className="mt-1 text-[14px] font-semibold tracking-tightish" numberOfLines={1}>{m.away.name}</Text>
-            <Text className={cn('mt-1 text-[28px] font-semibold tabular-nums', m.ap > m.hp && m.state !== 'pre' ? 'text-success' : '')}>{m.state === 'pre' ? '—' : m.ap.toFixed(1)}</Text>
-            <Text className="text-[10px] text-muted-foreground">proj {m.aproj.toFixed(1)}</Text>
+            <Text variant="bodySm" style={{ marginTop: 4 }} numberOfLines={1}>{m.away.name}</Text>
+            <Text
+              variant="scoreLG"
+              style={{ marginTop: 4, fontVariant: ['tabular-nums'], color: m.ap > m.hp && m.state !== 'pre' ? toneFg.success : hex.foreground }}
+            >
+              {m.state === 'pre' ? '—' : m.ap.toFixed(1)}
+            </Text>
+            <Text variant="pill" muted>proj {m.aproj.toFixed(1)}</Text>
           </View>
         </View>
-        <View className="mt-3 h-1 overflow-hidden rounded-full bg-border">
-          <View className="h-full bg-foreground/80" style={{ width: `${Math.round(m.winProb * 100)}%` }} />
+        <View style={[surfaces.progressTrack, { marginTop: 12, height: 4 }]}>
+          <View style={[surfaces.progressFill, { width: `${Math.round(m.winProb * 100)}%`, backgroundColor: `rgba(${ink},0.8)` }]} />
         </View>
       </View>
-      <View className="mt-4 flex-row">
-        <View className="flex-1"><LiveLineupCol team={m.home.name} rows={homeLineup} /></View>
-        <View className="flex-1 border-l border-border"><LiveLineupCol team={m.away.name} rows={awayLineup} /></View>
+      <View style={[layout.row, { marginTop: 16 }]}>
+        <View style={layout.flex1}><LiveLineupCol team={m.home.name} rows={homeLineup} /></View>
+        <View style={[layout.flex1, { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: hex.border }]}>
+          <LiveLineupCol team={m.away.name} rows={awayLineup} />
+        </View>
       </View>
       <Pressable onPress={onOpen}>
-        <View className="flex-row items-center justify-between border-t border-hairline px-5 py-3">
-          <Text className="text-[13px] font-semibold tracking-tightish">Open matchup</Text>
+        <View style={[layout.cardFooter, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: hex.hairline, paddingHorizontal: 20 }]}>
+          <Text variant="link">Open matchup</Text>
           <ChevronRight size={16} color={c.mutedForeground} />
         </View>
       </Pressable>
@@ -362,18 +399,20 @@ function LiveMatchupCard({ matchup: m, homeLineup, awayLineup, onOpen }: { match
 }
 
 function LiveLineupCol({ team, rows }: { team: string; rows: typeof LINEUP_DEFAULT }) {
+  const styles = useLeagueStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
     <View>
-      <Text className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground" numberOfLines={1}>{team}</Text>
-      <View className="mt-1">
+      <Text variant="eyebrow" style={{ paddingHorizontal: 12, paddingTop: 12 }} numberOfLines={1}>{team}</Text>
+      <View style={{ marginTop: 4 }}>
         {rows.map((r, i) => (
-          <View key={r.slot + i} className={cn('flex-row items-center gap-2 px-3 py-1.5', i > 0 ? 'border-t border-hairline' : '')}>
-            <Text className="w-8 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{r.slot}</Text>
-            <View className="min-w-0 flex-1">
-              <Text className="text-[12px] font-medium tracking-tightish" numberOfLines={1}>{r.name}</Text>
-              <Text className="text-[10px] text-muted-foreground" numberOfLines={1}>{r.rem}</Text>
+          <View key={r.slot + i} style={[styles.lineupRow, i > 0 ? layout.listRowBorder : null]}>
+            <Text variant="pill" muted style={{ width: 32, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 }}>{r.slot}</Text>
+            <View style={[layout.flex1, { minWidth: 0 }]}>
+              <Text variant="bodyMuted" style={{ fontSize: 12, fontWeight: '500', color: hex.foreground }} numberOfLines={1}>{r.name}</Text>
+              <Text variant="pill" muted numberOfLines={1}>{r.rem}</Text>
             </View>
-            <Text className="text-[12px] font-semibold tabular-nums">{r.pts.toFixed(1)}</Text>
+            <Text variant="bodyMuted" style={{ fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'], color: hex.foreground }}>{r.pts.toFixed(1)}</Text>
           </View>
         ))}
       </View>
@@ -383,11 +422,13 @@ function LiveLineupCol({ team, rows }: { team: string; rows: typeof LINEUP_DEFAU
 
 /* ------------------------------ ANALYTICS ------------------------------ */
 function AnalyticsPane({ active }: { active: League }) {
+  const styles = useLeagueStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const [awardFilter, setAwardFilter] = useState<'season' | number>('season');
   const weeks = [1, 2, 3, 4, 5, 6, 7, 8];
 
   return (
-    <View className="gap-6">
+    <View style={{ gap: 24 }}>
       <Section title="Team comparison">
         <MetricScatter />
       </Section>
@@ -399,19 +440,19 @@ function AnalyticsPane({ active }: { active: League }) {
             <FilterChip key={w} active={awardFilter === w} onPress={() => setAwardFilter(w)} label={`Wk ${w}`} />
           ))}
         </ScrollView>
-        <View className="flex-row flex-wrap gap-2">
+        <View style={[layout.rowWrap, { gap: 8 }]}>
           {AWARDS.map((a) => (
-            <View key={a.id} className="w-[48%] rounded-[22px] bg-surface-elevated p-4">
-              <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{a.title}</Text>
-              <Text className="mt-1.5 text-[15px] font-semibold tracking-tightish">{a.value}</Text>
-              <Text className="text-[12px] text-muted-foreground">{awardFilter === 'season' ? a.detail : `${a.detail} · Wk ${awardFilter}`}</Text>
+            <View key={a.id} style={styles.awardCard}>
+              <Text variant="eyebrow">{a.title}</Text>
+              <Text variant="body" style={{ marginTop: 6 }}>{a.value}</Text>
+              <Text variant="bodyMuted">{awardFilter === 'season' ? a.detail : `${a.detail} · Wk ${awardFilter}`}</Text>
             </View>
           ))}
         </View>
       </Section>
 
       <Section title="League information">
-        <View className="overflow-hidden rounded-[24px] bg-surface-elevated">
+        <View style={surfaces.roundedCard}>
           <InfoRow label="Scoring" value={active.scoring ?? 'Half PPR'} first />
           <InfoRow label="League size" value={`${active.members} teams`} />
           <InfoRow label="Draft type" value={active.draftType ?? 'Snake'} />
@@ -420,9 +461,9 @@ function AnalyticsPane({ active }: { active: League }) {
           <InfoRow label="Buy in" value={`$${active.buyIn ?? 0}`} />
           <InfoRow label="Pot" value={`$${active.potUsd.toLocaleString()}`} />
         </View>
-        <View className="mt-3 overflow-hidden rounded-[24px] bg-surface-elevated">
-          <Text className="px-4 pt-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Scoring breakdown</Text>
-          <View className="px-1 pb-2 pt-1">
+        <View style={[surfaces.roundedCard, { marginTop: 12 }]}>
+          <Text variant="eyebrow" style={{ paddingHorizontal: 16, paddingTop: 12 }}>Scoring breakdown</Text>
+          <View style={{ paddingHorizontal: 4, paddingBottom: 8, paddingTop: 4 }}>
             <InfoRow label="Passing TD" value="4 pts" first />
             <InfoRow label="Rushing/Receiving TD" value="6 pts" />
             <InfoRow label="Reception" value="0.5 pts" />
@@ -432,15 +473,15 @@ function AnalyticsPane({ active }: { active: League }) {
             <InfoRow label="Fumble lost" value="-2 pts" />
           </View>
         </View>
-        <View className="mt-3 overflow-hidden rounded-[24px] bg-surface-elevated">
-          <Text className="px-4 pt-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Payouts</Text>
-          <View className="px-1 pb-2 pt-1">
+        <View style={[surfaces.roundedCard, { marginTop: 12 }]}>
+          <Text variant="eyebrow" style={{ paddingHorizontal: 16, paddingTop: 12 }}>Payouts</Text>
+          <View style={{ paddingHorizontal: 4, paddingBottom: 8, paddingTop: 4 }}>
             <InfoRow label="1st place" value={`$${(active.potUsd * 0.7).toFixed(0)}`} first />
             <InfoRow label="2nd place" value={`$${(active.potUsd * 0.2).toFixed(0)}`} />
             <InfoRow label="3rd place" value={`$${(active.potUsd * 0.1).toFixed(0)}`} />
           </View>
         </View>
-        <Text className="px-2 pt-2 text-[11px] text-muted-foreground">
+        <Text variant="caption" style={{ paddingHorizontal: 8, paddingTop: 8 }}>
           {active.type === 'synced' ? `Imported from ${active.platform}. Edit on the connected platform.` : 'Edit in Commissioner → League → Settings.'}
         </Text>
       </Section>
@@ -449,9 +490,16 @@ function AnalyticsPane({ active }: { active: League }) {
 }
 
 function FilterChip({ active, onPress, label }: { active: boolean; onPress: () => void; label: string }) {
+  const styles = useLeagueStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
-    <Pressable onPress={onPress} className={cn('shrink-0 rounded-full px-3 py-1.5', active ? 'bg-foreground' : 'bg-muted')}>
-      <Text className={cn('text-[12px] font-semibold tracking-tightish', active ? 'text-background' : 'text-muted-foreground')}>{label}</Text>
+    <Pressable
+      onPress={onPress}
+      style={[styles.filterChip, { backgroundColor: active ? hex.primary : hex.muted }]}
+    >
+      <Text variant="bodyMuted" style={{ fontSize: 12, fontWeight: '600', color: active ? hex.primaryForeground : hex.mutedForeground }}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -478,6 +526,8 @@ function teamMetric(t: TeamRow, k: MetricKey): number {
 }
 
 function MetricScatter() {
+  const styles = useLeagueStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const [metric, setMetric] = useState<MetricKey>('pf');
   const [hover, setHover] = useState<number | null>(null);
@@ -498,13 +548,15 @@ function MetricScatter() {
   const sorted = [...TEAMS].map((t, i) => ({ t, v: values[i] })).sort((a, b) => b.v - a.v);
 
   return (
-    <View className="gap-3 overflow-hidden rounded-[24px] bg-surface-elevated p-4">
-      <View className="flex-row items-center justify-between">
+    <View style={[surfaces.roundedCard, { gap: 12, padding: 16 }]}>
+      <View style={layout.rowBetween}>
         <View>
-          <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Metric</Text>
-          <Text className="text-[15px] font-semibold tracking-tightish">{cfg.label}</Text>
+          <Text variant="eyebrow">Metric</Text>
+          <Text variant="body">{cfg.label}</Text>
         </View>
-        <Text className="text-[11px] text-muted-foreground">League avg <Text className="font-semibold text-foreground">{cfg.fmt(avg)}</Text></Text>
+        <Text variant="caption">
+          League avg <Text variant="caption" style={{ color: hex.foreground, fontWeight: '600' }}>{cfg.fmt(avg)}</Text>
+        </Text>
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
@@ -513,7 +565,7 @@ function MetricScatter() {
         ))}
       </ScrollView>
 
-      <View className="rounded-[18px] bg-background p-2">
+      <View style={{ borderRadius: 18, backgroundColor: hex.background, padding: 8 }}>
         <Svg viewBox={`0 0 ${W} ${H}`} width="100%" height={200}>
           <SvgLine x1={padL} x2={W - padR} y1={avgY} y2={avgY} stroke={c.foreground} strokeOpacity={0.4} strokeDasharray="4 4" strokeWidth={1} />
           <SvgText x={W - padR} y={avgY - 4} textAnchor="end" fill={c.mutedForeground} fontSize={9} fontWeight="600">AVG {cfg.fmt(avg)}</SvgText>
@@ -540,20 +592,30 @@ function MetricScatter() {
         </Svg>
       </View>
 
-      <View className="gap-1 pt-1">
+      <View style={{ gap: 4, paddingTop: 4 }}>
         {sorted.map(({ t, v }, i) => {
           const above = v >= avg;
           const delta = v - avg;
           return (
-            <View key={t.name} className="flex-row items-center justify-between rounded-[12px] px-2 py-1.5">
-              <View className="min-w-0 flex-row items-center gap-2">
-                <Text className="w-4 text-[11px] font-semibold tabular-nums text-muted-foreground">{i + 1}</Text>
-                <View className={cn('h-2 w-2 rounded-full', above ? 'bg-success' : 'bg-destructive')} />
-                <Text className="text-[12px] tracking-tightish" numberOfLines={1}>{t.name}</Text>
+            <View key={t.name} style={styles.metricRow}>
+              <View style={[layout.row, { gap: 8, minWidth: 0, flex: 1 }]}>
+                <Text variant="caption" style={{ width: 16, fontVariant: ['tabular-nums'] }}>{i + 1}</Text>
+                <View style={{ width: 8, height: 8, borderRadius: 9999, backgroundColor: above ? hex.success : hex.danger }} />
+                <Text variant="bodyMuted" style={{ fontSize: 12, color: hex.foreground, flex: 1 }} numberOfLines={1}>{t.name}</Text>
               </View>
-              <View className="flex-row items-center gap-3">
-                <Text className="text-[12px] font-semibold tabular-nums">{cfg.fmt(v)}</Text>
-                <Text className={cn('w-12 text-right text-[11px] tabular-nums', above ? 'text-success' : 'text-destructive')}>{above ? '+' : ''}{delta.toFixed(1)}</Text>
+              <View style={[layout.row, { gap: 12 }]}>
+                <Text variant="bodyMuted" style={{ fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'], color: hex.foreground }}>{cfg.fmt(v)}</Text>
+                <Text
+                  variant="caption"
+                  style={{
+                    width: 48,
+                    textAlign: 'right',
+                    fontVariant: ['tabular-nums'],
+                    color: above ? toneFg.success : toneFg.danger,
+                  }}
+                >
+                  {above ? '+' : ''}{delta.toFixed(1)}
+                </Text>
               </View>
             </View>
           );
@@ -565,6 +627,8 @@ function MetricScatter() {
 
 /* ------------------------------ FEED SHEET ------------------------------ */
 function FeedSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const styles = useLeagueStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const insets = useSafeAreaInsets();
   const [items, setItems] = useState(FEED);
@@ -572,31 +636,40 @@ function FeedSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
 
   return (
     <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
-      <View className="flex-1 justify-end bg-black/50">
-        <Pressable className="flex-1" onPress={onClose} />
-        <View className="rounded-t-[30px] bg-background" style={{ height: '82%', paddingBottom: Math.max(insets.bottom, 8) }}>
-          <View className="items-center pt-2"><View className="h-1.5 w-10 rounded-full bg-muted" /></View>
-          <View className="flex-row items-center justify-between px-5 py-3">
+      <View style={[StyleSheet.absoluteFillObject, { justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
+        <View style={[styles.feedSheet, { height: '82%', paddingBottom: Math.max(insets.bottom, 8) }]}>
+          <View style={{ alignItems: 'center', paddingTop: 8 }}>
+            <View style={{ height: 6, width: 40, borderRadius: 9999, backgroundColor: hex.muted }} />
+          </View>
+          <View style={[layout.rowBetween, { paddingHorizontal: 20, paddingVertical: 12 }]}>
             <View>
-              <Text className="text-[10px] uppercase tracking-widest text-muted-foreground">League</Text>
-              <Text className="text-[17px] font-semibold tracking-tightish">Feed</Text>
+              <Text variant="pill" muted style={{ textTransform: 'uppercase', letterSpacing: 2 }}>League</Text>
+              <Text variant="titleLg">Feed</Text>
             </View>
-            <Pressable onPress={onClose} className="h-9 w-9 items-center justify-center rounded-full bg-muted">
-              <Text className="text-[16px] font-semibold">×</Text>
+            <Pressable
+              onPress={onClose}
+              style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 9999, backgroundColor: hex.muted }}
+            >
+              <Text variant="titleMd">×</Text>
             </Pressable>
           </View>
-          <ScrollView className="flex-1" contentContainerStyle={{ gap: 12, paddingHorizontal: 16, paddingBottom: 12 }} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={layout.fill}
+            contentContainerStyle={{ gap: 12, paddingHorizontal: 16, paddingBottom: 12 }}
+            showsVerticalScrollIndicator={false}
+          >
             {items.map((f) => (
               <FeedCard key={f.id} item={f} />
             ))}
           </ScrollView>
-          <View className="flex-row items-center gap-2 border-t border-hairline p-3">
+          <View style={[layout.row, { gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: hex.hairline, padding: 12 }]}>
             <TextInput
               value={draft}
               onChangeText={setDraft}
               placeholder="Post to the league…"
               placeholderTextColor={c.mutedForeground}
-              className="h-11 flex-1 rounded-full bg-muted px-4 text-[14px] text-foreground"
+              style={styles.feedInput}
             />
             <Pressable
               onPress={() => {
@@ -604,9 +677,9 @@ function FeedSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
                 setItems((m) => [{ id: `me-${Date.now()}`, kind: 'announcement', who: 'You', headline: draft, when: 'now', reactions: { likes: 0, cheers: 0, laughs: 0 }, comments: 0 }, ...m]);
                 setDraft('');
               }}
-              className="h-11 items-center justify-center rounded-full bg-foreground px-4"
+              style={styles.feedPostBtn}
             >
-              <Text className="text-[13px] font-semibold text-background">Post</Text>
+              <Text variant="button" style={{ color: hex.primaryForeground }}>Post</Text>
             </Pressable>
           </View>
         </View>
@@ -618,61 +691,83 @@ function FeedSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
 /* ------------------------------ ATOMS ------------------------------ */
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <View className="gap-2">
-      <Text className="px-2 text-[13px] font-semibold uppercase tracking-widest text-muted-foreground">{title}</Text>
+    <View style={{ marginBottom: 20, gap: 8 }}>
+      <Text variant="eyebrow" style={{ paddingHorizontal: 8, letterSpacing: 1.5, textTransform: 'uppercase' }}>
+        {title}
+      </Text>
       {children}
     </View>
   );
 }
 
 function TagDot({ tag }: { tag?: TeamRow['tag'] }) {
-  const cls = tag === 'division' ? 'bg-success' : tag === 'playoff' ? 'bg-foreground/80' : tag === 'bubble' ? 'bg-warning' : tag === 'last' ? 'bg-destructive' : 'bg-transparent';
-  return <View className={cn('h-2 w-2 shrink-0 rounded-full', cls)} />;
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+  const { scheme } = useTheme();
+  const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
+  const color =
+    tag === 'division'
+      ? hex.success
+      : tag === 'playoff'
+        ? `rgba(${ink},0.8)`
+        : tag === 'bubble'
+          ? hex.warning
+          : tag === 'last'
+            ? hex.danger
+            : 'transparent';
+  return <View style={{ width: 8, height: 8, borderRadius: 9999, flexShrink: 0, backgroundColor: color }} />;
 }
 
 function Legend() {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+  const { scheme } = useTheme();
+  const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
   return (
-    <View className="flex-row flex-wrap items-center gap-x-3 gap-y-1 px-2 pt-1">
-      <LegendDot color="bg-success" label="Division" />
-      <LegendDot color="bg-foreground/80" label="Playoff" />
-      <LegendDot color="bg-warning" label="Bubble" />
-      <LegendDot color="bg-destructive" label="Last" />
+    <View style={[layout.rowWrap, { gap: 12, rowGap: 4, paddingHorizontal: 8, paddingTop: 4, alignItems: 'center' }]}>
+      <LegendDot color={hex.success} label="Division" />
+      <LegendDot color={`rgba(${ink},0.8)`} label="Playoff" />
+      <LegendDot color={hex.warning} label="Bubble" />
+      <LegendDot color={hex.danger} label="Last" />
     </View>
   );
 }
 
 function LegendDot({ color, label }: { color: string; label: string }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
-    <View className="flex-row items-center gap-1">
-      <View className={cn('h-1.5 w-1.5 rounded-full', color)} />
-      <Text className="text-[11px] text-muted-foreground">{label}</Text>
+    <View style={[layout.row, { gap: 4 }]}>
+      <View style={{ width: 6, height: 6, borderRadius: 9999, backgroundColor: color }} />
+      <Text variant="caption">{label}</Text>
     </View>
   );
 }
 
 function Movement({ delta }: { delta: number }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
-  if (delta === 0) return <Text className="w-6 text-right text-[11px] text-muted-foreground">—</Text>;
+  if (delta === 0) return <Text variant="caption" style={{ width: 24, textAlign: 'right' }}>—</Text>;
   const up = delta > 0;
   return (
-    <View className="w-6 flex-row items-center justify-end gap-0.5">
+    <View style={[layout.row, { width: 24, justifyContent: 'flex-end', gap: 2 }]}>
       {up ? <TrendingUp size={12} color={c.success} /> : <TrendingDown size={12} color={c.destructive} />}
-      <Text className={cn('text-[11px] font-semibold tabular-nums', up ? 'text-success' : 'text-destructive')}>{Math.abs(delta)}</Text>
+      <Text variant="caption" style={{ fontWeight: '600', fontVariant: ['tabular-nums'], color: up ? toneFg.success : toneFg.danger }}>
+        {Math.abs(delta)}
+      </Text>
     </View>
   );
 }
 
 function StateBadge({ state, kickoff }: { state: Matchup['state']; kickoff?: string }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   if (state === 'live')
     return (
-      <View className="flex-row items-center gap-1.5">
+      <View style={[layout.row, { gap: 6 }]}>
         <Radio size={12} color={c.success} />
-        <Text className="text-[11px] font-semibold uppercase tracking-widest text-success">Live</Text>
+        <Text variant="captionSuccess" style={{ textTransform: 'uppercase', letterSpacing: 2 }}>Live</Text>
       </View>
     );
-  if (state === 'final') return <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Final</Text>;
-  return <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{kickoff ?? 'Upcoming'}</Text>;
+  if (state === 'final') return <Text variant="eyebrow">Final</Text>;
+  return <Text variant="eyebrow">{kickoff ?? 'Upcoming'}</Text>;
 }
 
 const FEED_ICONS: Record<FeedKind, LucideIcon> = {
@@ -686,6 +781,10 @@ const FEED_ICONS: Record<FeedKind, LucideIcon> = {
 };
 
 function FeedCard({ item }: { item: FeedItem }) {
+  const styles = useLeagueStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+  const { scheme } = useTheme();
+  const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
   const c = useColors();
   const [open, setOpen] = useState(false);
   const [voted, setVoted] = useState<number | null>(null);
@@ -693,58 +792,77 @@ function FeedCard({ item }: { item: FeedItem }) {
   const totalVotes = item.poll ? item.poll.options.reduce((s, o) => s + o.votes, 0) + (voted !== null ? 1 : 0) : 0;
 
   return (
-    <View className={cn('overflow-hidden rounded-[24px] bg-surface-elevated', item.pinned ? 'border border-foreground/10' : '')}>
-      <View className="gap-2 p-4">
-        <View className="flex-row items-center gap-2">
+    <View style={[surfaces.roundedCard, item.pinned ? { borderWidth: StyleSheet.hairlineWidth, borderColor: `rgba(${ink},0.1)` } : null]}>
+      <View style={{ gap: 8, padding: 16 }}>
+        <View style={[layout.row, { gap: 8 }]}>
           <Icon size={14} color={c.mutedForeground} />
-          <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{item.who}</Text>
-          <Text className="text-[11px] text-muted-foreground/60">·</Text>
-          <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{item.when}</Text>
+          <Text variant="eyebrow">{item.who}</Text>
+          <Text variant="caption" style={{ opacity: 0.6 }}>·</Text>
+          <Text variant="eyebrow">{item.when}</Text>
           {item.pinned ? (
-            <View className="ml-auto rounded-full bg-foreground/10 px-2 py-0.5"><Text className="text-[10px] tracking-widest text-muted-foreground">Pinned</Text></View>
+            <View style={[surfaces.pillMuted, { marginLeft: 'auto' }]}>
+              <Text variant="pill" muted style={{ letterSpacing: 1 }}>Pinned</Text>
+            </View>
           ) : null}
         </View>
-        <Text className="text-[15px] font-medium leading-snug tracking-tightish">{item.headline}</Text>
-        {item.body ? <Text className="text-[13px] leading-snug text-muted-foreground">{item.body}</Text> : null}
+        <Text variant="body">{item.headline}</Text>
+        {item.body ? <Text variant="subtitle">{item.body}</Text> : null}
 
         {item.poll ? (
-          <View className="gap-1.5 pt-1">
+          <View style={{ gap: 6, paddingTop: 4 }}>
             {item.poll.options.map((o, idx) => {
               const votes = o.votes + (voted === idx ? 1 : 0);
               const pct = totalVotes ? Math.round((votes / totalVotes) * 100) : 0;
               const selected = voted === idx;
               return (
-                <Pressable key={o.label} onPress={() => setVoted(idx)} className="relative overflow-hidden rounded-[14px] border border-border bg-background px-3 py-2">
-                  <View className={cn('absolute inset-y-0 left-0', selected ? 'bg-foreground/15' : 'bg-foreground/5')} style={{ width: voted !== null ? `${pct}%` : 0 }} />
-                  <View className="flex-row items-center justify-between">
-                    <Text className="text-[13px] font-medium tracking-tightish">{o.label}</Text>
-                    {voted !== null ? <Text className="text-[12px] tabular-nums text-muted-foreground">{pct}%</Text> : null}
+                <Pressable
+                  key={o.label}
+                  onPress={() => setVoted(idx)}
+                  style={styles.pollOption}
+                >
+                  <View
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      bottom: 0,
+                      left: 0,
+                      backgroundColor: selected ? `rgba(${ink},0.15)` : `rgba(${ink},0.05)`,
+                      width: voted !== null ? `${pct}%` : 0,
+                    }}
+                  />
+                  <View style={layout.rowBetween}>
+                    <Text variant="bodySm" style={{ fontSize: 13 }}>{o.label}</Text>
+                    {voted !== null ? <Text variant="bodyMuted" style={{ fontVariant: ['tabular-nums'] }}>{pct}%</Text> : null}
                   </View>
                 </Pressable>
               );
             })}
-            <Text className="pt-0.5 text-[11px] text-muted-foreground">{totalVotes} {totalVotes === 1 ? 'vote' : 'votes'}</Text>
+            <Text variant="caption" style={{ paddingTop: 2 }}>{totalVotes} {totalVotes === 1 ? 'vote' : 'votes'}</Text>
           </View>
         ) : null}
       </View>
 
-      <View className="flex-row items-center gap-1 px-2 pb-2">
+      <View style={[layout.row, { gap: 4, paddingHorizontal: 8, paddingBottom: 8 }]}>
         <ReactBtn icon={ThumbsUp} count={item.reactions.likes} />
         <ReactBtn icon={Heart} count={item.reactions.cheers} />
         <ReactBtn icon={Laugh} count={item.reactions.laughs} />
-        <Pressable onPress={() => setOpen((o) => !o)} className="ml-auto flex-row items-center gap-1.5 rounded-full px-3 py-1.5">
+        <Pressable onPress={() => setOpen((o) => !o)} style={[layout.row, { gap: 6, marginLeft: 'auto', borderRadius: 9999, paddingHorizontal: 12, paddingVertical: 6 }]}>
           <MessageCircle size={14} color={c.mutedForeground} />
-          <Text className="text-[12px] font-medium text-muted-foreground">{item.comments}</Text>
+          <Text variant="bodyMuted" style={{ fontWeight: '500' }}>{item.comments}</Text>
         </Pressable>
       </View>
 
       {open ? (
-        <View className="gap-2 border-t border-hairline p-3">
-          <View className="rounded-[14px] bg-background px-3 py-2">
-            <Text className="text-[11px] font-semibold text-muted-foreground">Mike</Text>
-            <Text className="text-[13px] tracking-tightish">Brutal.</Text>
+        <View style={{ gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: hex.hairline, padding: 12 }}>
+          <View style={{ borderRadius: 14, backgroundColor: hex.background, paddingHorizontal: 12, paddingVertical: 8 }}>
+            <Text variant="caption" style={{ fontWeight: '600' }}>Mike</Text>
+            <Text variant="bodySm" style={{ fontSize: 13 }}>Brutal.</Text>
           </View>
-          <TextInput placeholder="Write a comment…" placeholderTextColor={c.mutedForeground} className="rounded-full border border-border bg-background px-4 py-2 text-[13px] text-foreground" />
+          <TextInput
+            placeholder="Write a comment…"
+            placeholderTextColor={c.mutedForeground}
+            style={styles.commentInput}
+          />
         </View>
       ) : null}
     </View>
@@ -752,39 +870,45 @@ function FeedCard({ item }: { item: FeedItem }) {
 }
 
 function ReactBtn({ icon: Icon, count }: { icon: LucideIcon; count: number }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   return (
-    <Pressable className="flex-row items-center gap-1.5 rounded-full px-3 py-1.5">
+    <Pressable style={[layout.row, { gap: 6, borderRadius: 9999, paddingHorizontal: 12, paddingVertical: 6 }]}>
       <Icon size={14} color={c.mutedForeground} />
-      {count > 0 ? <Text className="text-[12px] font-medium tabular-nums text-muted-foreground">{count}</Text> : null}
+      {count > 0 ? <Text variant="bodyMuted" style={{ fontWeight: '500', fontVariant: ['tabular-nums'] }}>{count}</Text> : null}
     </Pressable>
   );
 }
 
 function InfoRow({ label, value, first }: { label: string; value: string; first?: boolean }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
-    <View className={cn('flex-row items-center justify-between px-4 py-3', first ? '' : 'border-t border-border')}>
-      <Text className="text-[13px] text-muted-foreground">{label}</Text>
-      <Text className="text-[14px] font-medium tracking-tightish">{value}</Text>
+    <View style={[layout.rowBetween, { paddingHorizontal: 16, paddingVertical: 12 }, !first ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: hex.border } : null]}>
+      <Text variant="subtitle">{label}</Text>
+      <Text variant="bodySm" style={{ fontSize: 14 }}>{value}</Text>
     </View>
   );
 }
 
 /* ------------------------------ DETAIL VIEWS ------------------------------ */
 function BackBar({ onBack, title }: { onBack: () => void; title: string }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   return (
-    <View className="flex-row items-center gap-2 px-1 pt-2">
-      <Pressable onPress={onBack} className="flex-row items-center gap-1 rounded-full px-2 py-1.5">
+    <View style={[layout.row, { gap: 8, paddingHorizontal: 4, paddingTop: 8 }]}>
+      <Pressable onPress={onBack} style={[layout.row, { gap: 4, borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 6 }]}>
         <ChevronLeft size={16} color={c.mutedForeground} />
-        <Text className="text-[14px] text-muted-foreground">League</Text>
+        <Text variant="bodySm" style={{ fontSize: 14, color: hex.mutedForeground }}>League</Text>
       </Pressable>
-      <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">/ {title}</Text>
+      <Text variant="eyebrow">/ {title}</Text>
     </View>
   );
 }
 
 function MatchupDetail({ matchup: m, onBack }: { matchup: Matchup; onBack: () => void }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+  const { scheme } = useTheme();
+  const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
   const homeLineup = LINEUP_DEFAULT;
   const awayLineup = homeLineup.map((p, i) => ({
     ...p,
@@ -793,46 +917,46 @@ function MatchupDetail({ matchup: m, onBack }: { matchup: Matchup; onBack: () =>
   }));
 
   return (
-    <View className="gap-5 px-4 pb-6">
+    <View style={layout.screen}>
       <BackBar onBack={onBack} title="Matchup" />
-      <View className="overflow-hidden rounded-[28px] bg-surface-elevated p-5">
-        <View className="flex-row items-center justify-between">
+      <View style={[surfaces.roundedCardLg, { padding: 20 }]}>
+        <View style={layout.rowBetween}>
           <StateBadge state={m.state} kickoff={m.kickoff} />
-          <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Win prob</Text>
+          <Text variant="eyebrow">Win prob</Text>
         </View>
-        <View className="mt-3 flex-row items-center gap-2">
-          <View className="flex-1">
-            <View className="flex-row items-center gap-2">
-              <AvatarImage src={personAvatar(m.home.owner + m.home.name)} name={m.home.owner} className="h-9 w-9" />
-              <Text className="text-[13px] text-muted-foreground">{m.home.owner}</Text>
+        <View style={[layout.row, { gap: 8, marginTop: 12 }]}>
+          <View style={layout.flex1}>
+            <View style={[layout.row, { gap: 8 }]}>
+              <AvatarImage src={personAvatar(m.home.owner + m.home.name)} name={m.home.owner} size={36} />
+              <Text variant="subtitle">{m.home.owner}</Text>
             </View>
-            <Text className="mt-1 text-[16px] font-semibold tracking-tightish">{m.home.name}</Text>
-            <Text className="mt-2 text-[28px] font-semibold tabular-nums">{m.hp.toFixed(1)}</Text>
-            <Text className="text-[11px] text-muted-foreground">proj {m.hproj.toFixed(1)}</Text>
+            <Text variant="titleMd" style={{ marginTop: 4 }}>{m.home.name}</Text>
+            <Text variant="scoreLG" style={{ marginTop: 8, fontVariant: ['tabular-nums'] }}>{m.hp.toFixed(1)}</Text>
+            <Text variant="caption">proj {m.hproj.toFixed(1)}</Text>
           </View>
-          <Text className="text-[11px] uppercase tracking-widest text-muted-foreground">vs</Text>
-          <View className="flex-1 items-end">
-            <View className="flex-row items-center gap-2">
-              <Text className="text-[13px] text-muted-foreground">{m.away.owner}</Text>
-              <AvatarImage src={personAvatar(m.away.owner + m.away.name)} name={m.away.owner} className="h-9 w-9" />
+          <Text variant="caption" style={{ textTransform: 'uppercase', letterSpacing: 2 }}>vs</Text>
+          <View style={[layout.flex1, layout.alignEnd]}>
+            <View style={[layout.row, { gap: 8 }]}>
+              <Text variant="subtitle">{m.away.owner}</Text>
+              <AvatarImage src={personAvatar(m.away.owner + m.away.name)} name={m.away.owner} size={36} />
             </View>
-            <Text className="mt-1 text-[16px] font-semibold tracking-tightish">{m.away.name}</Text>
-            <Text className="mt-2 text-[28px] font-semibold tabular-nums">{m.ap.toFixed(1)}</Text>
-            <Text className="text-[11px] text-muted-foreground">proj {m.aproj.toFixed(1)}</Text>
+            <Text variant="titleMd" style={{ marginTop: 4 }}>{m.away.name}</Text>
+            <Text variant="scoreLG" style={{ marginTop: 8, fontVariant: ['tabular-nums'] }}>{m.ap.toFixed(1)}</Text>
+            <Text variant="caption">proj {m.aproj.toFixed(1)}</Text>
           </View>
         </View>
-        <View className="mt-4 h-1.5 overflow-hidden rounded-full bg-border">
-          <View className="h-full bg-foreground/80" style={{ width: `${Math.round(m.winProb * 100)}%` }} />
+        <View style={[surfaces.progressTrack, { marginTop: 16, height: 6 }]}>
+          <View style={[surfaces.progressFill, { width: `${Math.round(m.winProb * 100)}%`, backgroundColor: `rgba(${ink},0.8)` }]} />
         </View>
-        <View className="mt-1 flex-row justify-between">
-          <Text className="text-[11px] tabular-nums text-muted-foreground">{Math.round(m.winProb * 100)}%</Text>
-          <Text className="text-[11px] tabular-nums text-muted-foreground">{Math.round((1 - m.winProb) * 100)}%</Text>
+        <View style={[layout.rowBetween, { marginTop: 4 }]}>
+          <Text variant="caption" style={{ fontVariant: ['tabular-nums'] }}>{Math.round(m.winProb * 100)}%</Text>
+          <Text variant="caption" style={{ fontVariant: ['tabular-nums'] }}>{Math.round((1 - m.winProb) * 100)}%</Text>
         </View>
       </View>
 
       <Section title="AI summary">
-        <View className="rounded-[24px] bg-surface-elevated p-4">
-          <Text className="text-[14px] leading-snug tracking-tightish">
+        <View style={[surfaces.roundedCard, { padding: 16 }]}>
+          <Text variant="bodySm" style={{ fontSize: 14, lineHeight: 20 }}>
             {m.state === 'live'
               ? `${m.home.name} pulled ahead in the second half thanks to Jefferson and Robinson. ${m.away.name} still has Kelce and the Monday night flex to come.`
               : m.state === 'final'
@@ -843,27 +967,27 @@ function MatchupDetail({ matchup: m, onBack }: { matchup: Matchup; onBack: () =>
       </Section>
 
       <Section title="Lineups">
-        <View className="flex-row gap-2">
-          <View className="flex-1"><LineupCol team={m.home.name} rows={homeLineup} /></View>
-          <View className="flex-1"><LineupCol team={m.away.name} rows={awayLineup} /></View>
+        <View style={[layout.row, { gap: 8 }]}>
+          <View style={layout.flex1}><LineupCol team={m.home.name} rows={homeLineup} /></View>
+          <View style={layout.flex1}><LineupCol team={m.away.name} rows={awayLineup} /></View>
         </View>
       </Section>
 
       <Section title="Scoring timeline">
-        <View className="overflow-hidden rounded-[24px] bg-surface-elevated">
+        <View style={surfaces.roundedCard}>
           {[
             { t: 'Q4 7:22', who: 'Jefferson', play: '21yd TD reception', pts: '+8.1' },
             { t: 'Q3 2:11', who: 'Robinson', play: '4yd TD run', pts: '+7.4' },
             { t: 'Q2 9:05', who: 'Mahomes', play: '32yd TD pass', pts: '+5.2' },
             { t: 'Q1 4:48', who: 'Allen', play: '12yd TD run', pts: '+7.1' },
           ].map((e, i) => (
-            <View key={i} className={cn('flex-row items-center gap-3 px-4 py-3', i > 0 ? 'border-t border-hairline' : '')}>
-              <Text className="w-14 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{e.t}</Text>
-              <View className="min-w-0 flex-1">
-                <Text className="text-[13px] font-medium tracking-tightish" numberOfLines={1}>{e.who}</Text>
-                <Text className="text-[12px] text-muted-foreground" numberOfLines={1}>{e.play}</Text>
+            <View key={i} style={[layout.row, { gap: 12, paddingHorizontal: 16, paddingVertical: 12 }, i > 0 ? layout.listRowBorder : null]}>
+              <Text variant="eyebrow" style={{ width: 56 }}>{e.t}</Text>
+              <View style={[layout.flex1, { minWidth: 0 }]}>
+                <Text variant="bodySm" style={{ fontSize: 13 }} numberOfLines={1}>{e.who}</Text>
+                <Text variant="bodyMuted" numberOfLines={1}>{e.play}</Text>
               </View>
-              <Text className="text-[13px] font-semibold tabular-nums text-success">{e.pts}</Text>
+              <Text variant="bodySm" style={{ fontVariant: ['tabular-nums'], color: toneFg.success }}>{e.pts}</Text>
             </View>
           ))}
         </View>
@@ -873,18 +997,20 @@ function MatchupDetail({ matchup: m, onBack }: { matchup: Matchup; onBack: () =>
 }
 
 function LineupCol({ team, rows }: { team: string; rows: typeof LINEUP_DEFAULT }) {
+  const styles = useLeagueStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
-    <View className="overflow-hidden rounded-[22px] bg-surface-elevated">
-      <Text className="px-3 pt-3 text-[12px] font-semibold tracking-tightish" numberOfLines={1}>{team}</Text>
-      <View className="mt-2">
+    <View style={{ borderRadius: 22, overflow: 'hidden', backgroundColor: hex.surfaceElevated }}>
+      <Text variant="bodySm" style={{ fontSize: 12, paddingHorizontal: 12, paddingTop: 12 }} numberOfLines={1}>{team}</Text>
+      <View style={{ marginTop: 8 }}>
         {rows.map((r, i) => (
-          <View key={r.slot + i} className={cn('flex-row items-center gap-2 px-3 py-2', i > 0 ? 'border-t border-hairline' : '')}>
-            <Text className="w-8 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{r.slot}</Text>
-            <View className="min-w-0 flex-1">
-              <Text className="text-[12px] font-medium tracking-tightish" numberOfLines={1}>{r.name}</Text>
-              <Text className="text-[10px] text-muted-foreground" numberOfLines={1}>{r.rem}</Text>
+          <View key={r.slot + i} style={[styles.lineupRowLg, i > 0 ? layout.listRowBorder : null]}>
+            <Text variant="pill" muted style={{ width: 32, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 }}>{r.slot}</Text>
+            <View style={[layout.flex1, { minWidth: 0 }]}>
+              <Text variant="bodyMuted" style={{ fontSize: 12, fontWeight: '500', color: hex.foreground }} numberOfLines={1}>{r.name}</Text>
+              <Text variant="pill" muted numberOfLines={1}>{r.rem}</Text>
             </View>
-            <Text className="text-[12px] font-semibold tabular-nums">{r.pts.toFixed(1)}</Text>
+            <Text variant="bodyMuted" style={{ fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'], color: hex.foreground }}>{r.pts.toFixed(1)}</Text>
           </View>
         ))}
       </View>
@@ -893,19 +1019,22 @@ function LineupCol({ team, rows }: { team: string; rows: typeof LINEUP_DEFAULT }
 }
 
 function TeamOverview({ team, onBack }: { team: TeamRow; onBack: () => void }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+  const { scheme } = useTheme();
+  const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
   return (
-    <View className="gap-5 px-4 pb-6">
+    <View style={layout.screen}>
       <BackBar onBack={onBack} title="Team" />
-      <View className="rounded-[28px] bg-surface-elevated p-5">
-        <View className="flex-row items-center gap-3">
-          <AvatarImage src={personAvatar(team.owner + team.name)} name={team.owner} className="h-14 w-14" />
-          <View className="min-w-0 flex-1">
-            <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Rank {team.rank}{team.seed ? ` · Seed ${team.seed}` : ''}</Text>
-            <Text className="mt-0.5 text-[24px] font-semibold tracking-tighter2" numberOfLines={1}>{team.name}</Text>
-            <Text className="text-[13px] text-muted-foreground">{team.owner}</Text>
+      <View style={[surfaces.roundedCardLg, { padding: 20 }]}>
+        <View style={[layout.row, { gap: 12 }]}>
+          <AvatarImage src={personAvatar(team.owner + team.name)} name={team.owner} size={56} />
+          <View style={[layout.flex1, { minWidth: 0 }]}>
+            <Text variant="eyebrow">Rank {team.rank}{team.seed ? ` · Seed ${team.seed}` : ''}</Text>
+            <Text variant="titleLg" style={{ marginTop: 2, fontSize: 24, letterSpacing: -0.6 }} numberOfLines={1}>{team.name}</Text>
+            <Text variant="subtitle">{team.owner}</Text>
           </View>
         </View>
-        <View className="mt-4 flex-row gap-2">
+        <View style={[layout.row, { gap: 8, marginTop: 16 }]}>
           <Stat label="Record" value={`${team.wins}-${team.losses}`} />
           <Stat label="Streak" value={team.streak} />
           <Stat label="PF" value={team.pf.toFixed(0)} />
@@ -914,45 +1043,146 @@ function TeamOverview({ team, onBack }: { team: TeamRow; onBack: () => void }) {
       </View>
 
       <Section title="Season trend">
-        <View className="rounded-[24px] bg-surface-elevated p-4">
-          <View className="h-20 flex-row items-end gap-1">
+        <View style={[surfaces.roundedCard, { padding: 16 }]}>
+          <View style={{ height: 80, flexDirection: 'row', alignItems: 'flex-end', gap: 4 }}>
             {[78, 92, 110, 88, 121, 99, 134].map((v, i) => (
-              <View key={i} className="flex-1 rounded-md bg-foreground/70" style={{ height: `${(v / 134) * 100}%` }} />
+              <View key={i} style={{ flex: 1, borderRadius: 6, backgroundColor: `rgba(${ink},0.7)`, height: `${(v / 134) * 100}%` }} />
             ))}
           </View>
-          <View className="mt-2 flex-row justify-between">
+          <View style={[layout.rowBetween, { marginTop: 8 }]}>
             {['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7'].map((w) => (
-              <Text key={w} className="text-[11px] tabular-nums text-muted-foreground">{w}</Text>
+              <Text key={w} variant="caption" style={{ fontVariant: ['tabular-nums'] }}>{w}</Text>
             ))}
           </View>
         </View>
       </Section>
 
       <Section title="Recent activity">
-        <View className="overflow-hidden rounded-[24px] bg-surface-elevated">
+        <View style={surfaces.roundedCard}>
           {[
             { t: '2d', what: 'Added T. Spears (RB)' },
             { t: '5d', what: 'Traded D. London for K. Walker III' },
             { t: '1w', what: 'Dropped J. Reed (TE)' },
           ].map((a, i) => (
-            <View key={i} className={cn('flex-row items-center justify-between px-4 py-3', i > 0 ? 'border-t border-hairline' : '')}>
-              <Text className="text-[13px] tracking-tightish">{a.what}</Text>
-              <Text className="text-[11px] text-muted-foreground">{a.t}</Text>
+            <View key={i} style={[layout.rowBetween, { paddingHorizontal: 16, paddingVertical: 12 }, i > 0 ? layout.listRowBorder : null]}>
+              <Text variant="bodySm" style={{ fontSize: 13 }}>{a.what}</Text>
+              <Text variant="caption">{a.t}</Text>
             </View>
           ))}
         </View>
       </Section>
 
-      <Text className="px-2 text-[11px] text-muted-foreground">Roster management lives in the Team tab. This view is read only.</Text>
+      <Text variant="caption" style={{ paddingHorizontal: 8 }}>Roster management lives in the Team tab. This view is read only.</Text>
     </View>
   );
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
-    <View className="flex-1 rounded-[16px] bg-background px-3 py-2.5">
-      <Text className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{label}</Text>
-      <Text className="mt-0.5 text-[15px] font-semibold tabular-nums tracking-tightish">{value}</Text>
+    <View style={{ flex: 1, borderRadius: 16, backgroundColor: hex.background, paddingHorizontal: 12, paddingVertical: 10 }}>
+      <Text variant="pill" muted style={{ fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 }}>{label}</Text>
+      <Text variant="body" style={{ marginTop: 2, fontVariant: ['tabular-nums'] }}>{value}</Text>
     </View>
   );
+}
+
+function useLeagueStyles() {
+  const { hex } = useThemeTokens();
+  return useMemo(() => StyleSheet.create({
+
+  standingsBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 18,
+    backgroundColor: hex.surfaceElevated,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  standingsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  lineupRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  lineupRowLg: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  awardCard: {
+    width: '48%',
+    borderRadius: 22,
+    backgroundColor: hex.surfaceElevated,
+    padding: 16,
+  },
+  filterChip: {
+    flexShrink: 0,
+    borderRadius: 9999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  metricRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  feedSheet: {
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    backgroundColor: hex.background,
+  },
+  feedInput: {
+    height: 44,
+    flex: 1,
+    borderRadius: 9999,
+    backgroundColor: hex.muted,
+    paddingHorizontal: 16,
+    fontSize: 14,
+    color: hex.foreground,
+  },
+  feedPostBtn: {
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9999,
+    backgroundColor: hex.primary,
+    paddingHorizontal: 16,
+  },
+  pollOption: {
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: hex.border,
+    backgroundColor: hex.background,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  commentInput: {
+    borderRadius: 9999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: hex.border,
+    backgroundColor: hex.background,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: hex.foreground,
+  },
+
+  }), [hex]);
 }

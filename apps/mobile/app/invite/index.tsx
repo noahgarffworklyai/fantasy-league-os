@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Share, View } from 'react-native';
+import { Share } from 'react-native';
 import {
   Check,
   ChevronLeft,
@@ -10,18 +10,17 @@ import {
   QrCode,
   Share2,
 } from 'lucide-react-native';
-import { Pressable, Text } from '@/components/ui/primitives';
+import { Pressable, Text, View } from '@/components/ui/primitives';
 import { Screen } from '@/components/ui/Screen';
 import { Divider } from '@/components/ui/Card';
 import { useLeague } from '@/lib/league-context';
 import { useNav } from '@/lib/nav';
-import { useColors } from '@/lib/theme';
-import { cn } from '@/lib/cn';
+import { useThemeTokens } from '@/lib/theme';
 
 export default function InvitePage() {
   const { active } = useLeague();
   const nav = useNav();
-  const c = useColors();
+  const { hex, layout, surfaces } = useThemeTokens();
   const [copied, setCopied] = useState(false);
   if (!active) return null;
 
@@ -39,43 +38,52 @@ export default function InvitePage() {
 
   return (
     <Screen>
-      <View className="px-6 pt-2">
+      <View style={{ paddingHorizontal: 24, paddingTop: 8 }}>
         <Pressable
           onPress={() => nav.back()}
-          className="-ml-2 flex-row items-center gap-0.5 rounded-full px-2 py-1"
+          style={[layout.row, { marginLeft: -8, paddingHorizontal: 8, paddingVertical: 4 }]}
         >
-          <ChevronLeft size={20} color={c.foreground} />
-          <Text className="text-[15px]">Back</Text>
+          <ChevronLeft size={20} color={hex.foreground} />
+          <Text variant="body">Back</Text>
         </Pressable>
 
-        <Text className="mt-4 text-[28px] font-semibold leading-tight tracking-tighter2">
+        <Text variant="titleXl" style={{ marginTop: 16 }}>
           Invite members
         </Text>
-        <Text className="mt-2 text-[15px] text-muted-foreground">
+        <Text variant="subtitle" style={{ marginTop: 8 }}>
           Bring the league together. No app required to join.
         </Text>
 
-        <View className="mt-6 rounded-[28px] bg-surface-elevated p-5">
-          <Text className="text-[12px] font-medium uppercase tracking-widest text-muted-foreground">
-            Invite link
-          </Text>
-          <View className="mt-2 flex-row items-center justify-between gap-3">
-            <Text className="flex-1 text-[15px] font-medium tracking-tightish" numberOfLines={1}>
+        <View style={[surfaces.roundedCardLg, { marginTop: 24, padding: 20 }]}>
+          <Text variant="eyebrow">Invite link</Text>
+          <View style={[layout.rowBetween, { marginTop: 8, gap: 12 }]}>
+            <Text variant="body" numberOfLines={1} style={layout.flex1}>
               {link}
             </Text>
             <Pressable
               onPress={copy}
-              className="h-10 shrink-0 flex-row items-center gap-1.5 rounded-full bg-foreground px-4"
+              style={[
+                layout.row,
+                {
+                  height: 40,
+                  flexShrink: 0,
+                  gap: 6,
+                  borderRadius: 9999,
+                  backgroundColor: hex.primary,
+                  paddingHorizontal: 16,
+                  alignItems: 'center',
+                },
+              ]}
             >
-              {copied ? <Check size={16} color={c.background} /> : <Copy size={16} color={c.background} />}
-              <Text className="text-[13px] font-semibold tracking-tightish text-background">
+              {copied ? <Check size={16} color={hex.background} /> : <Copy size={16} color={hex.background} />}
+              <Text variant="button" style={{ color: hex.primaryForeground }}>
                 {copied ? 'Copied' : 'Copy'}
               </Text>
             </Pressable>
           </View>
         </View>
 
-        <View className="mt-4 flex-row flex-wrap gap-3">
+        <View style={[layout.rowWrap, { marginTop: 16, gap: 12 }]}>
           <InviteAction icon={Link2} label="Copy Link" onPress={copy} />
           <InviteAction icon={Share2} label="Share Link" onPress={share} />
           <InviteAction icon={MessageSquare} label="Text Invite" onPress={share} />
@@ -83,7 +91,7 @@ export default function InvitePage() {
           <InviteAction icon={QrCode} label="QR Code" wide />
         </View>
 
-        <View className="mt-6 overflow-hidden rounded-[28px] bg-surface-elevated">
+        <View style={[surfaces.card, { marginTop: 24 }]}>
           <StatRow label="League capacity" value={`${size} teams`} />
           <StatRow label="Joined" value={`${joined}`} divided />
           <StatRow label="Pending" value={`${pending}`} divided />
@@ -106,28 +114,39 @@ function InviteAction({
   onPress?: () => void;
   wide?: boolean;
 }) {
-  const c = useColors();
+  const { hex, layout } = useThemeTokens();
   return (
     <Pressable
       onPress={onPress}
-      className={cn(
-        'h-[88px] items-center justify-center gap-2 rounded-[24px] bg-surface-elevated',
-        wide ? 'w-full' : 'w-[48%]',
-      )}
+      style={[
+        layout.centered,
+        {
+          height: 88,
+          gap: 8,
+          borderRadius: 24,
+          backgroundColor: hex.surfaceElevated,
+          width: wide ? '100%' : '48%',
+        },
+      ]}
     >
-      <IconComp size={20} color={c.foreground} />
-      <Text className="text-[14px] font-medium tracking-tightish">{label}</Text>
+      <IconComp size={20} color={hex.foreground} />
+      <Text variant="bodySm" style={{ fontWeight: '500' }}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
 
 function StatRow({ label, value, divided }: { label: string; value: string; divided?: boolean }) {
+  const { layout } = useThemeTokens();
   return (
     <View>
       {divided ? <Divider /> : null}
-      <View className="flex-row items-center justify-between px-5 py-4">
-        <Text className="text-[14px] text-muted-foreground">{label}</Text>
-        <Text className="text-[15px] font-medium tracking-tightish">{value}</Text>
+      <View style={[layout.rowBetween, { paddingHorizontal: 20, paddingVertical: 16 }]}>
+        <Text variant="bodyMuted" style={{ fontSize: 14 }}>
+          {label}
+        </Text>
+        <Text variant="body">{value}</Text>
       </View>
     </View>
   );

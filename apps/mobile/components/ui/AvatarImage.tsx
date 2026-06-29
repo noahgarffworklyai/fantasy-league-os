@@ -2,13 +2,13 @@ import { useState, type ReactNode } from 'react';
 import { Image, View } from 'react-native';
 import { Text } from './primitives';
 import { initialsOf } from '@/lib/avatars';
-import { cn } from '@/lib/cn';
+import { useHex, useTheme } from '@/lib/theme';
 
 type Props = {
   src: string;
   name: string;
-  /** Tailwind size classes for the container, e.g. "h-10 w-10". */
-  className?: string;
+  /** Diameter in px (default 40). */
+  size?: number;
   badge?: ReactNode;
 };
 
@@ -16,13 +16,27 @@ type Props = {
  * Circular avatar image with graceful fallback to initials if the
  * remote image fails to load.
  */
-export function AvatarImage({ src, name, className = 'h-10 w-10', badge }: Props) {
+export function AvatarImage({ src, name, size = 40, badge }: Props) {
+  const hex = useHex();
+  const { scheme } = useTheme();
   const [failed, setFailed] = useState(false);
+  const dim = { width: size, height: size, borderRadius: size / 2 };
+  const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
+
   return (
-    <View className={cn('relative shrink-0', className)}>
+    <View style={[{ position: 'relative', flexShrink: 0 }, dim]}>
       {failed ? (
-        <View className="h-full w-full items-center justify-center rounded-full bg-foreground/10">
-          <Text className="text-[11px] font-semibold tracking-tightish text-foreground/80">
+        <View
+          style={[
+            dim,
+            {
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: `rgba(${ink},0.1)`,
+            },
+          ]}
+        >
+          <Text variant="caption" style={{ color: `rgba(${ink},0.8)` }}>
             {initialsOf(name)}
           </Text>
         </View>
@@ -30,11 +44,11 @@ export function AvatarImage({ src, name, className = 'h-10 w-10', badge }: Props
         <Image
           source={{ uri: src }}
           onError={() => setFailed(true)}
-          className="h-full w-full rounded-full bg-foreground/5"
+          style={[dim, { backgroundColor: `rgba(${ink},0.05)` }]}
           resizeMode="cover"
         />
       )}
-      {badge && <View className="absolute -bottom-1 -right-1">{badge}</View>}
+      {badge ? <View style={{ position: 'absolute', bottom: -4, right: -4 }}>{badge}</View> : null}
     </View>
   );
 }

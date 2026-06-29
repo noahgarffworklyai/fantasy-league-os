@@ -55,7 +55,9 @@ export default function SettingsPage() {
         </Section>
       ) : null}
 
-      <Text className="mt-2 px-3 text-center text-[12px] text-muted-foreground">Commissioner · v1.0</Text>
+      <Text variant="caption" muted style={{ marginTop: 8, textAlign: 'center' }}>
+        Commissioner · v1.0
+      </Text>
     </WorkflowShell>
   );
 }

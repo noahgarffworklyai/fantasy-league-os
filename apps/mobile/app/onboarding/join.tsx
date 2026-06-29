@@ -1,14 +1,12 @@
 import { useState } from 'react';
-import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft } from 'lucide-react-native';
-import { Pressable, Text } from '@/components/ui/primitives';
+import { Pressable, Text, View } from '@/components/ui/primitives';
 import { Input } from '@/components/ui/Input';
 import { Divider } from '@/components/ui/Card';
 import { makeId, shortNameFor, useLeague, type League } from '@/lib/league-context';
 import { useNav } from '@/lib/nav';
-import { useColors } from '@/lib/theme';
-import { cn } from '@/lib/cn';
+import { useThemeTokens } from '@/lib/theme';
 
 interface Preview {
   name: string;
@@ -23,7 +21,7 @@ interface Preview {
 export default function JoinPage() {
   const nav = useNav();
   const insets = useSafeAreaInsets();
-  const c = useColors();
+  const { hex, layout, surfaces } = useThemeTokens();
   const { addLeague } = useLeague();
   const [code, setCode] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -67,48 +65,48 @@ export default function JoinPage() {
 
   return (
     <View
-      className="flex-1 bg-background px-6"
-      style={{ paddingTop: Math.max(insets.top, 16), paddingBottom: Math.max(insets.bottom, 24) }}
+      style={{
+        flex: 1,
+        backgroundColor: hex.background,
+        paddingHorizontal: 24,
+        paddingTop: Math.max(insets.top, 16),
+        paddingBottom: Math.max(insets.bottom, 24),
+      }}
     >
       <Pressable
         onPress={() => nav.push('/onboarding')}
-        className="-ml-2 flex-row items-center gap-0.5 rounded-full px-2 py-1"
+        style={[layout.row, { marginLeft: -8, paddingHorizontal: 8, paddingVertical: 4 }]}
       >
-        <ChevronLeft size={20} color={c.foreground} />
-        <Text className="text-[15px]">Back</Text>
+        <ChevronLeft size={20} color={hex.foreground} />
+        <Text variant="body">Back</Text>
       </Pressable>
 
-      <Text className="mt-6 text-[28px] font-semibold leading-tight tracking-tighter2">
+      <Text variant="titleXl" style={{ marginTop: 24 }}>
         Join a league
       </Text>
-      <Text className="mt-2 text-[15px] text-muted-foreground">
+      <Text variant="subtitle" style={{ marginTop: 8 }}>
         Paste an invite code or link from your commissioner.
       </Text>
 
-      <View className="mt-6 gap-2">
+      <View style={{ marginTop: 24, gap: 8 }}>
         <Input value={code} onChangeText={setCode} placeholder="Invite code or link" autoCapitalize="none" />
         <Pressable
           onPress={lookup}
           disabled={code.trim().length < 3}
-          className={cn(
-            'h-12 w-full items-center justify-center rounded-full bg-surface-elevated',
-            code.trim().length < 3 ? 'opacity-40' : '',
-          )}
+          style={[surfaces.secondaryButton, { height: 48 }, code.trim().length < 3 ? { opacity: 0.4 } : null]}
         >
-          <Text className="text-[15px] font-semibold tracking-tightish text-foreground">
-            Look up league
-          </Text>
+          <Text variant="bodySm">Look up league</Text>
         </Pressable>
       </View>
 
       {preview ? (
-        <View className="mt-6 overflow-hidden rounded-[28px] bg-surface-elevated">
-          <View className="p-5">
-            <Text className="text-[12px] font-medium uppercase tracking-widest text-muted-foreground">
-              League preview
+        <View style={[surfaces.card, { marginTop: 24 }]}>
+          <View style={{ padding: 20 }}>
+            <Text variant="eyebrow">League preview</Text>
+            <Text variant="scoreLG" style={{ marginTop: 4, fontSize: 24 }}>
+              {preview.name}
             </Text>
-            <Text className="mt-1 text-[24px] font-semibold tracking-tighter2">{preview.name}</Text>
-            <Text className="mt-1 text-[13px] text-muted-foreground">
+            <Text variant="subtitle" style={{ marginTop: 4 }}>
               Commissioner: {preview.commissioner}
             </Text>
           </View>
@@ -121,13 +119,10 @@ export default function JoinPage() {
         </View>
       ) : null}
 
-      <View className="flex-1" />
+      <View style={layout.fill} />
       {preview ? (
-        <Pressable
-          onPress={join}
-          className="mt-6 h-14 w-full items-center justify-center rounded-full bg-foreground"
-        >
-          <Text className="text-[17px] font-semibold tracking-tightish text-background">
+        <Pressable onPress={join} style={[surfaces.primaryButton, { marginTop: 24 }]}>
+          <Text variant="button" style={{ color: hex.primaryForeground, fontSize: 17 }}>
             Join League
           </Text>
         </Pressable>
@@ -137,12 +132,15 @@ export default function JoinPage() {
 }
 
 function PreviewRow({ label, value }: { label: string; value: string }) {
+  const { layout } = useThemeTokens();
   return (
     <View>
       <Divider />
-      <View className="flex-row items-center justify-between px-5 py-4">
-        <Text className="text-[14px] text-muted-foreground">{label}</Text>
-        <Text className="text-[15px] font-medium tracking-tightish">{value}</Text>
+      <View style={[layout.rowBetween, { paddingHorizontal: 20, paddingVertical: 16 }]}>
+        <Text variant="bodyMuted" style={{ fontSize: 14 }}>
+          {label}
+        </Text>
+        <Text variant="body">{value}</Text>
       </View>
     </View>
   );

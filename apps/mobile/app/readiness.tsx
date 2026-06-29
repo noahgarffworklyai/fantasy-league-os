@@ -1,11 +1,10 @@
-import { View } from 'react-native';
 import { AlertCircle, Check, ChevronRight, Circle } from 'lucide-react-native';
-import { Pressable, Text } from '@/components/ui/primitives';
+import { Pressable, Text, View } from '@/components/ui/primitives';
 import { Screen } from '@/components/ui/Screen';
 import { Divider } from '@/components/ui/Card';
 import { useLeague } from '@/lib/league-context';
 import { useNav } from '@/lib/nav';
-import { useColors } from '@/lib/theme';
+import { useTheme, useThemeTokens } from '@/lib/theme';
 
 type Status = 'complete' | 'progress' | 'attention';
 interface Item {
@@ -20,6 +19,7 @@ interface Item {
 export default function ReadinessPage() {
   const { active } = useLeague();
   const nav = useNav();
+  const { hex, layout, surfaces } = useThemeTokens();
   if (!active) return null;
 
   const items: Item[] = [
@@ -59,38 +59,38 @@ export default function ReadinessPage() {
 
   return (
     <Screen>
-      <View className="px-6 pt-2">
-        <Text className="text-[12px] font-medium uppercase tracking-widest text-muted-foreground">
-          League Readiness
-        </Text>
-        <Text className="mt-1 text-[28px] font-semibold leading-tight tracking-tighter2">
+      <View style={{ paddingHorizontal: 24, paddingTop: 8 }}>
+        <Text variant="eyebrow">League Readiness</Text>
+        <Text variant="titleXl" style={{ marginTop: 4 }}>
           {active.name}
         </Text>
-        <Text className="mt-2 text-[15px] text-muted-foreground">
+        <Text variant="subtitle" style={{ marginTop: 8 }}>
           Set everything up before draft day.
         </Text>
 
-        <View className="mt-6 overflow-hidden rounded-[28px] bg-surface-elevated">
+        <View style={[surfaces.card, { marginTop: 24 }]}>
           {items.map((it, i) => (
             <ReadinessRow key={it.key} item={it} divided={i > 0} onPress={() => it.to && nav.push(it.to)} />
           ))}
         </View>
 
         {next ? (
-          <View className="pt-6">
-            <Text className="px-1 pb-2 text-[12px] font-medium uppercase tracking-widest text-muted-foreground">
+          <View style={{ paddingTop: 24 }}>
+            <Text variant="eyebrow" style={{ paddingHorizontal: 4, paddingBottom: 8 }}>
               Next up
             </Text>
             <Pressable
               onPress={() => next.to && nav.push(next.to)}
-              className="h-14 w-full items-center justify-center rounded-full bg-foreground"
+              style={surfaces.primaryButton}
             >
-              <Text className="text-[17px] font-semibold tracking-tightish text-background">
+              <Text variant="button" style={{ color: hex.primaryForeground, fontSize: 17 }}>
                 {next.action ?? next.label}
               </Text>
             </Pressable>
-            <Pressable onPress={() => nav.replace('/')} className="items-center pt-3">
-              <Text className="text-[13px] text-muted-foreground">Skip for now</Text>
+            <Pressable onPress={() => nav.replace('/')} style={[layout.centered, { paddingTop: 12 }]}>
+              <Text variant="link" muted>
+                Skip for now
+              </Text>
             </Pressable>
           </View>
         ) : null}
@@ -100,17 +100,17 @@ export default function ReadinessPage() {
 }
 
 function ReadinessRow({ item, divided, onPress }: { item: Item; divided?: boolean; onPress: () => void }) {
-  const c = useColors();
+  const { hex, layout } = useThemeTokens();
   const inner = (
-    <View className="flex-row items-center gap-3 px-4 py-4">
+    <View style={[layout.row, { gap: 12, paddingHorizontal: 16, paddingVertical: 16 }]}>
       <StatusIcon status={item.status} />
-      <View className="min-w-0 flex-1">
-        <Text className="text-[15px] font-medium tracking-tightish">{item.label}</Text>
-        <Text className="text-[13px] text-muted-foreground" numberOfLines={1}>
+      <View style={[layout.flex1, { minWidth: 0 }]}>
+        <Text variant="body">{item.label}</Text>
+        <Text variant="bodyMuted" numberOfLines={1}>
           {item.sub}
         </Text>
       </View>
-      {item.to ? <ChevronRight size={16} color={c.mutedForeground} /> : null}
+      {item.to ? <ChevronRight size={16} color={hex.mutedForeground} /> : null}
     </View>
   );
   return (
@@ -122,22 +122,39 @@ function ReadinessRow({ item, divided, onPress }: { item: Item; divided?: boolea
 }
 
 export function StatusIcon({ status }: { status: Status }) {
-  const c = useColors();
+  const { hex, layout, toneBg } = useThemeTokens();
+  const { scheme } = useTheme();
+  const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
   if (status === 'complete')
     return (
-      <View className="h-8 w-8 items-center justify-center rounded-full bg-success">
-        <Check size={16} color={c.background} />
+      <View
+        style={[
+          layout.centered,
+          { height: 32, width: 32, borderRadius: 9999, backgroundColor: hex.success },
+        ]}
+      >
+        <Check size={16} color={hex.background} />
       </View>
     );
   if (status === 'progress')
     return (
-      <View className="h-8 w-8 items-center justify-center rounded-full bg-warning/30">
-        <Circle size={12} color={c.foreground} fill={c.foreground} />
+      <View
+        style={[
+          layout.centered,
+          { height: 32, width: 32, borderRadius: 9999, backgroundColor: toneBg.warning },
+        ]}
+      >
+        <Circle size={12} color={hex.foreground} fill={hex.foreground} />
       </View>
     );
   return (
-    <View className="h-8 w-8 items-center justify-center rounded-full bg-foreground/5">
-      <AlertCircle size={16} color={c.mutedForeground} />
+    <View
+      style={[
+        layout.centered,
+        { height: 32, width: 32, borderRadius: 9999, backgroundColor: `rgba(${ink},0.05)` },
+      ]}
+    >
+      <AlertCircle size={16} color={hex.mutedForeground} />
     </View>
   );
 }

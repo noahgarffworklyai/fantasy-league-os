@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react';
-import { Modal, TextInput, View } from 'react-native';
+import { useState, type ReactNode, useMemo } from 'react';
+import { Modal, StyleSheet, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line as SvgLine, Text as SvgText } from 'react-native-svg';
 import {
@@ -20,9 +20,9 @@ import {
   Wallet,
   X,
 } from 'lucide-react-native';
-import { Pressable, Text } from '@/components/ui/primitives';
+import { Pressable, Text, View } from '@/components/ui/primitives';
 import { Screen } from '@/components/ui/Screen';
-import { Card } from '@/components/ui/Card';
+import { Card, Divider } from '@/components/ui/Card';
 import { Segmented } from '@/components/ui/Segmented';
 import { AICard, AISection, ConfidencePill } from '@/components/ui/AICard';
 import { AvatarImage } from '@/components/ui/AvatarImage';
@@ -36,8 +36,7 @@ import {
   type WaiverTarget,
 } from '@/lib/ai-intelligence';
 import { personAvatar, playerAvatar } from '@/lib/avatars';
-import { useColors } from '@/lib/theme';
-import { cn } from '@/lib/cn';
+import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
 
 // ====================== Player data ======================
 type LiveStatus = 'field' | 'redzone' | 'scored';
@@ -137,6 +136,7 @@ function slotEligible(slot: string, pos: string): boolean {
 }
 
 export default function TeamPage() {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const { active } = useLeague();
   const [tab, setTab] = useState<TabKey>('lineup');
   const [player, setPlayer] = useState<PlayerDetail | null>(null);
@@ -169,7 +169,7 @@ export default function TeamPage() {
 
   return (
     <Screen>
-      <View className="gap-5 px-4 pb-10 pt-1">
+      <View style={layout.screen}>
         <TeamHeader
           teamName={active.teamName ?? `${active.shortName} Squad`}
           record={active.record}
@@ -224,38 +224,39 @@ function TeamHeader({
   rank: string;
   editable: boolean;
 }) {
-  const c = useColors();
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const [name, setName] = useState(teamName);
   const [editing, setEditing] = useState(false);
   return (
-    <View className="px-1 pt-1">
+    <View style={layout.intro}>
       {editing && editable ? (
         <TextInput
           autoFocus
           value={name}
           onChangeText={setName}
           onBlur={() => setEditing(false)}
-          className="text-[34px] font-semibold tracking-tighter2 text-foreground"
+          style={S.heroInput}
         />
       ) : (
-        <Text onPress={() => editable && setEditing(true)} className="text-[34px] font-semibold leading-[36px] tracking-tighter2">
+        <Text variant="hero" onPress={() => editable && setEditing(true)}>
           {name}
         </Text>
       )}
-      <Text className="mt-2 text-[13px] text-muted-foreground">
+      <Text variant="subtitle" style={{ marginTop: 8 }}>
         {record} · {projectedFinish} · {rank}
       </Text>
-      <View className="hidden">{c.background}</View>
     </View>
   );
 }
 
 function TeamSection({ title, caption, children }: { title: string; caption?: string; children: ReactNode }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
-    <View className="gap-3">
-      <View className="flex-row items-end justify-between px-1">
-        <Text className="text-[20px] font-semibold tracking-tighter2">{title}</Text>
-        {caption ? <Text className="text-[12px] text-muted-foreground">{caption}</Text> : null}
+    <View style={layout.sectionBlock}>
+      <View style={layout.sectionHeader}>
+        <Text variant="sectionTitle">{title}</Text>
+        {caption ? <Text variant="caption">{caption}</Text> : null}
       </View>
       {children}
     </View>
@@ -263,9 +264,12 @@ function TeamSection({ title, caption, children }: { title: string; caption?: st
 }
 
 function LiveDot({ status }: { status?: LiveStatus }) {
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   if (!status) return null;
-  const color = status === 'scored' ? 'bg-warning' : status === 'redzone' ? 'bg-danger' : 'bg-success';
-  return <View className={cn('h-2.5 w-2.5 rounded-full', color)} />;
+  const color =
+    status === 'scored' ? hex.warning : status === 'redzone' ? hex.danger : hex.success;
+  return <View style={[S.liveDot, { backgroundColor: color }]} />;
 }
 
 // ====================== Lineup pane ======================
@@ -286,8 +290,9 @@ function LineupPane({
   bench: (PlayerDetail & { trend: string })[];
   onSwap: (slotIdx: number, benchIdx: number) => void;
 }) {
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const { active } = useLeague();
-  const c = useColors();
   const starterProj = starters.reduce((s, r) => s + (r.proj ?? 0), 0);
   const coaching = teamCoaching(active!);
   const [editing, setEditing] = useState(false);
@@ -295,21 +300,22 @@ function LineupPane({
   void leagueId;
 
   return (
-    <View className="gap-5">
+    <View style={layout.section}>
       <TeamSection title="Weekly matchup">
         <Card>
-          <View className="flex-row">
+          <View style={layout.row}>
             <Side label="You" score="118.4" proj="126.2" remaining="5 to play" />
-            <View className="w-px bg-hairline" />
+            <View style={S.vDivider} />
             <Side label="Steel Curtain" score="104.1" proj="112.4" remaining="6 to play" />
           </View>
-          <View className="border-t border-hairline px-6 py-4">
-            <View className="mb-2 flex-row items-center justify-between">
-              <Text className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">Win probability</Text>
-              <Text className="text-[13px] font-semibold tracking-tightish text-success">72%</Text>
+          <Divider />
+          <View style={{ paddingHorizontal: 24, paddingVertical: 16 }}>
+            <View style={[layout.rowBetween, { marginBottom: 8 }]}>
+              <Text variant="eyebrow">Win probability</Text>
+              <Text variant="bodySm" style={{ color: hex.success }}>72%</Text>
             </View>
-            <View className="h-2 overflow-hidden rounded-full bg-muted">
-              <View className="h-full rounded-full bg-success" style={{ width: '72%' }} />
+            <View style={S.progressTrackLg}>
+              <View style={[S.progressFill, { width: '72%', backgroundColor: hex.success }]} />
             </View>
           </View>
         </Card>
@@ -320,28 +326,29 @@ function LineupPane({
         caption={isSynced ? `Recommended · ${platform}` : editing ? 'Tap a slot to swap' : 'Tap Edit to swap starters'}
       >
         <Card>
-          <View className="flex-row items-center justify-between px-6 py-5">
+          <View style={[layout.rowBetween, { paddingHorizontal: 24, paddingVertical: 20 }]}>
             <View>
-              <Text className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">Projected</Text>
-              <Text className="mt-1 text-[28px] font-semibold tracking-tighter2">{starterProj.toFixed(1)}</Text>
+              <Text variant="eyebrow">Projected</Text>
+              <Text variant="scoreLG" style={{ marginTop: 4 }}>{starterProj.toFixed(1)}</Text>
             </View>
-            <View className="flex-row items-center gap-2">
-              <View className="rounded-full bg-success/15 px-2.5 py-1">
-                <Text className="text-[11px] font-semibold tracking-wide text-success">72% win</Text>
+            <View style={[layout.row, { gap: 8 }]}>
+              <View style={surfaces.pillSuccess}>
+                <Text variant="captionSuccess">72% win</Text>
               </View>
               {!isSynced ? (
                 <Pressable
                   onPress={() => setEditing((v) => !v)}
-                  className={cn('rounded-full px-3 py-1', editing ? 'bg-foreground' : 'bg-foreground/5')}
+                  style={[S.editPill, editing ? S.editPillActive : S.editPillIdle]}
                 >
-                  <Text className={cn('text-[11px] font-semibold tracking-wide', editing ? 'text-background' : 'text-foreground')}>
+                  <Text variant="caption" style={{ color: editing ? hex.background : hex.foreground }}>
                     {editing ? 'Done' : 'Edit'}
                   </Text>
                 </Pressable>
               ) : null}
             </View>
           </View>
-          <View className="border-t border-hairline">
+          <Divider />
+          <View>
             {starters.map((r, i) => (
               <PlayerRow
                 key={STARTER_SLOTS[i] + r.name}
@@ -382,31 +389,36 @@ function LineupPane({
           <AICard key={r.id} rec={r} />
         ))}
       </AISection>
-      <View className="hidden">{c.background}</View>
     </View>
   );
 }
 
 function Side({ label, score, proj, remaining }: { label: string; score: string; proj: string; remaining: string }) {
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
-    <View className="flex-1 px-6 py-5">
-      <Text className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">{label}</Text>
-      <Text className="mt-1 text-[28px] font-semibold tracking-tighter2">{score}</Text>
-      <Text className="mt-1 text-[12px] text-muted-foreground">Proj {proj}</Text>
-      <Text className="text-[12px] text-muted-foreground">{remaining}</Text>
+    <View style={S.matchSide}>
+      <Text variant="eyebrow">{label}</Text>
+      <Text variant="scoreLG" style={{ marginTop: 4 }}>{score}</Text>
+      <Text variant="bodyMuted" style={{ marginTop: 4 }}>Proj {proj}</Text>
+      <Text variant="bodyMuted">{remaining}</Text>
     </View>
   );
 }
 
 function PlatformAction({ label, sub }: { label: string; sub: string }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   return (
-    <View className="flex-row items-center justify-between border-t border-hairline px-6 py-4">
-      <View className="min-w-0 flex-1">
-        <Text className="text-[15px] font-semibold tracking-tightish">{label}</Text>
-        <Text className="text-[12px] text-muted-foreground">{sub}</Text>
+    <View>
+      <Divider />
+      <View style={layout.cardFooter}>
+        <View style={[layout.flex1, { minWidth: 0 }]}>
+          <Text variant="body">{label}</Text>
+          <Text variant="bodyMuted">{sub}</Text>
+        </View>
+        <ArrowUpRight size={20} color={c.mutedForeground} />
       </View>
-      <ArrowUpRight size={20} color={c.mutedForeground} />
     </View>
   );
 }
@@ -424,34 +436,41 @@ function PlayerRow({
   editing?: boolean;
   onPress?: () => void;
 }) {
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   return (
     <Pressable onPress={onPress}>
-      <View className={cn('flex-row items-center gap-3 px-5 py-3.5', divided ? 'border-t border-hairline' : '')}>
-        <View className="h-7 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-          <Text className="text-[10px] font-semibold tracking-wider text-muted-foreground">{slot}</Text>
+      {divided ? <Divider /> : null}
+      <View style={layout.listRow}>
+        <View style={S.slotBadge}>
+          <Text variant="caption">{slot}</Text>
         </View>
-        <View className="relative">
-          <AvatarImage src={playerAvatar(player.name + player.team)} name={player.name} className="h-9 w-9" />
+        <View style={S.avatarWrap}>
+          <AvatarImage src={playerAvatar(player.name + player.team)} name={player.name} size={36} />
           {player.live ? (
-            <View className="absolute -bottom-0.5 -right-0.5 rounded-full bg-background p-0.5">
+            <View style={S.liveDotBadge}>
               <LiveDot status={player.live} />
             </View>
           ) : null}
         </View>
-        <View className="min-w-0 flex-1">
-          <Text className="text-[15px] font-medium tracking-tightish" numberOfLines={1}>{player.name}</Text>
-          <Text className="text-[12px] text-muted-foreground" numberOfLines={1}>
+        <View style={[layout.flex1, { minWidth: 0 }]}>
+          <Text variant="body" numberOfLines={1}>{player.name}</Text>
+          <Text variant="bodyMuted" numberOfLines={1}>
             {player.liveNote ?? `${player.pos} · ${player.team} · ${player.opp}`}
           </Text>
         </View>
         {player.status === 'q' ? (
-          <View className="rounded-full bg-warning/25 px-2 py-0.5"><Text className="text-[10px] font-semibold uppercase">Q</Text></View>
+          <View style={[S.statusPill, { backgroundColor: toneBg.warning }]}>
+            <Text variant="caption">Q</Text>
+          </View>
         ) : null}
         {player.status === 'o' ? (
-          <View className="rounded-full bg-danger/15 px-2 py-0.5"><Text className="text-[10px] font-semibold uppercase text-danger">Out</Text></View>
+          <View style={[S.statusPill, { backgroundColor: toneBg.danger }]}>
+            <Text variant="caption" style={{ color: toneFg.danger }}>Out</Text>
+          </View>
         ) : null}
-        <Text className="w-12 text-right text-[15px] font-semibold tabular-nums tracking-tightish">{player.proj?.toFixed(1)}</Text>
+        <Text variant="body" style={S.scoreCol}>{player.proj?.toFixed(1)}</Text>
         {editing ? <Repeat size={16} color={c.foreground} /> : <ChevronRight size={16} color={c.mutedForeground} />}
       </View>
     </Pressable>
@@ -459,32 +478,37 @@ function PlayerRow({
 }
 
 function BenchRow({ player, divided, onPress }: { player: PlayerDetail & { trend: string }; divided?: boolean; onPress?: () => void }) {
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const TrendIcon = player.trend === 'up' ? TrendingUp : player.trend === 'down' ? TrendingDown : Activity;
   const trendColor = player.trend === 'up' ? c.success : player.trend === 'down' ? c.danger : c.mutedForeground;
   return (
     <Pressable onPress={onPress}>
-      <View className={cn('flex-row items-center gap-3 px-5 py-3.5', divided ? 'border-t border-hairline' : '')}>
-        <View className="h-7 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-          <Text className="text-[10px] font-semibold tracking-wider text-muted-foreground">BN</Text>
+      {divided ? <Divider /> : null}
+      <View style={layout.listRow}>
+        <View style={S.slotBadge}>
+          <Text variant="caption">BN</Text>
         </View>
-        <View className="relative">
-          <AvatarImage src={playerAvatar(player.name + player.team)} name={player.name} className="h-9 w-9" />
+        <View style={S.avatarWrap}>
+          <AvatarImage src={playerAvatar(player.name + player.team)} name={player.name} size={36} />
           {player.live ? (
-            <View className="absolute -bottom-0.5 -right-0.5 rounded-full bg-background p-0.5">
+            <View style={S.liveDotBadge}>
               <LiveDot status={player.live} />
             </View>
           ) : null}
         </View>
-        <View className="min-w-0 flex-1">
-          <Text className="text-[15px] font-medium tracking-tightish" numberOfLines={1}>{player.name}</Text>
-          <Text className="text-[12px] text-muted-foreground" numberOfLines={1}>{player.pos} · {player.team} · {player.opp}</Text>
+        <View style={[layout.flex1, { minWidth: 0 }]}>
+          <Text variant="body" numberOfLines={1}>{player.name}</Text>
+          <Text variant="bodyMuted" numberOfLines={1}>{player.pos} · {player.team} · {player.opp}</Text>
         </View>
         <TrendIcon size={16} color={trendColor} />
         {player.status === 'q' ? (
-          <View className="rounded-full bg-warning/25 px-2 py-0.5"><Text className="text-[10px] font-semibold uppercase">Q</Text></View>
+          <View style={[S.statusPill, { backgroundColor: toneBg.warning }]}>
+            <Text variant="caption">Q</Text>
+          </View>
         ) : null}
-        <Text className="w-12 text-right text-[15px] font-semibold tabular-nums tracking-tightish">{player.proj?.toFixed(1)}</Text>
+        <Text variant="body" style={S.scoreCol}>{player.proj?.toFixed(1)}</Text>
       </View>
     </Pressable>
   );
@@ -492,24 +516,27 @@ function BenchRow({ player, divided, onPress }: { player: PlayerDetail & { trend
 
 // ====================== Health pane ======================
 function HealthPane({ onPlayer }: { onPlayer: (p: PlayerDetail) => void }) {
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const injured = [...STARTERS, ...BENCH].filter((p) => p.status === 'q' || p.status === 'o');
   return (
-    <View className="gap-5">
+    <View style={layout.section}>
       <TeamSection title="Roster health">
         <Card>
-          <View className="flex-row px-2 py-5">
+          <View style={layout.healthRow}>
             <Tile value="11" label="Healthy" tone="success" first />
             <Tile value="2" label="Quest." tone="warning" />
             <Tile value="1" label="Out" tone="danger" />
             <Tile value="1" label="IR" tone="muted" />
           </View>
-          <View className="flex-row items-center justify-between border-t border-hairline px-6 py-4">
+          <Divider />
+          <View style={layout.cardFooter}>
             <View>
-              <Text className="text-[13px] font-medium tracking-tightish">Health score</Text>
-              <Text className="text-[12px] text-muted-foreground">Above league average</Text>
+              <Text variant="bodySm">Health score</Text>
+              <Text variant="bodyMuted">Above league average</Text>
             </View>
-            <Text className="text-[22px] font-semibold tracking-tighter2 text-success">82</Text>
+            <Text variant="statValue" style={{ color: hex.success }}>82</Text>
           </View>
         </Card>
       </TeamSection>
@@ -518,16 +545,17 @@ function HealthPane({ onPlayer }: { onPlayer: (p: PlayerDetail) => void }) {
         <Card>
           {injured.map((p, i) => (
             <Pressable key={p.name} onPress={() => onPlayer(p)}>
-              <View className={cn('flex-row items-start gap-3 px-5 py-4', i > 0 ? 'border-t border-hairline' : '')}>
-                <View className="h-10 w-10 items-center justify-center rounded-2xl bg-warning/20">
+              {i > 0 ? <Divider /> : null}
+              <View style={[layout.listRow, { alignItems: 'flex-start' }]}>
+                <View style={[surfaces.iconBox, { backgroundColor: toneBg.warning }]}>
                   <AlertTriangle size={16} color={c.warning} />
                 </View>
-                <View className="min-w-0 flex-1">
-                  <Text className="text-[15px] font-medium tracking-tightish" numberOfLines={1}>{p.name}</Text>
-                  <Text className="text-[12px] text-muted-foreground" numberOfLines={1}>
+                <View style={[layout.flex1, { minWidth: 0 }]}>
+                  <Text variant="body" numberOfLines={1}>{p.name}</Text>
+                  <Text variant="bodyMuted" numberOfLines={1}>
                     {p.pos} · {p.team} · {p.status === 'o' ? 'Out' : 'Questionable'}
                   </Text>
-                  {p.note ? <Text className="mt-1 text-[12px] text-muted-foreground">{p.note}</Text> : null}
+                  {p.note ? <Text variant="bodyMuted" style={{ marginTop: 4 }}>{p.note}</Text> : null}
                 </View>
                 <ChevronRight size={16} color={c.mutedForeground} />
               </View>
@@ -543,18 +571,19 @@ function HealthPane({ onPlayer }: { onPlayer: (p: PlayerDetail) => void }) {
           ) : (
             IR.map((p, i) => (
               <Pressable key={p.name} onPress={() => onPlayer(p)}>
-                <View className={cn('px-5 py-4', i > 0 ? 'border-t border-hairline' : '')}>
-                  <View className="flex-row items-center gap-3">
-                    <View className="h-9 w-10 shrink-0 items-center justify-center rounded-xl bg-muted">
-                      <Text className="text-[11px] font-semibold tracking-wider text-muted-foreground">IR</Text>
+                {i > 0 ? <Divider /> : null}
+                <View style={{ paddingHorizontal: 20, paddingVertical: 16 }}>
+                  <View style={layout.row}>
+                    <View style={[S.slotBadge, { height: 36, borderRadius: 12 }]}>
+                      <Text variant="caption">IR</Text>
                     </View>
-                    <View className="min-w-0 flex-1">
-                      <Text className="text-[15px] font-medium tracking-tightish" numberOfLines={1}>{p.name}</Text>
-                      <Text className="text-[12px] text-muted-foreground" numberOfLines={1}>{p.pos} · {p.team}</Text>
+                    <View style={[layout.flex1, { minWidth: 0, marginLeft: 12 }]}>
+                      <Text variant="body" numberOfLines={1}>{p.name}</Text>
+                      <Text variant="bodyMuted" numberOfLines={1}>{p.pos} · {p.team}</Text>
                     </View>
                     <ChevronRight size={16} color={c.mutedForeground} />
                   </View>
-                  {p.note ? <Text className="mt-3 text-[13px] text-muted-foreground">{p.note}</Text> : null}
+                  {p.note ? <Text variant="bodySm" style={{ marginTop: 12, color: hex.mutedForeground }}>{p.note}</Text> : null}
                 </View>
               </Pressable>
             ))
@@ -564,7 +593,7 @@ function HealthPane({ onPlayer }: { onPlayer: (p: PlayerDetail) => void }) {
 
       <TeamSection title="Team analytics">
         <Card>
-          <View className="flex-row flex-wrap px-6 py-5">
+          <View style={[layout.rowWrap, layout.cardPad]}>
             {[
               ['Snap reliability', '91%'],
               ['Injury risk', 'Low'],
@@ -572,8 +601,8 @@ function HealthPane({ onPlayer }: { onPlayer: (p: PlayerDetail) => void }) {
               ['Bye-week pain', 'Wk 10'],
               ['Depth score', 'B+'],
               ['Backup readiness', 'High'],
-            ].map(([l, v], i) => (
-              <View key={l} className={cn('w-1/2', i < 4 ? 'pb-5' : '')}>
+            ].map(([l, v]) => (
+              <View key={l} style={layout.half}>
                 <TrendStat label={l} value={v} />
               </View>
             ))}
@@ -585,11 +614,12 @@ function HealthPane({ onPlayer }: { onPlayer: (p: PlayerDetail) => void }) {
 }
 
 function Tile({ value, label, tone, first }: { value: string; label: string; tone: 'success' | 'warning' | 'danger' | 'muted'; first?: boolean }) {
-  const color = tone === 'success' ? 'text-success' : tone === 'warning' ? 'text-warning' : tone === 'danger' ? 'text-danger' : 'text-muted-foreground';
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+  const fgTone = tone === 'muted' ? 'neutral' : tone;
   return (
-    <View className={cn('flex-1 items-center', first ? '' : 'border-l border-hairline')}>
-      <Text className={cn('text-[28px] font-semibold tracking-tighter2', color)}>{value}</Text>
-      <Text className="mt-1 text-[11px] font-medium uppercase tracking-widest text-muted-foreground">{label}</Text>
+    <View style={first ? layout.healthCell : layout.healthCellBorder}>
+      <Text variant="scoreLG" style={{ color: toneFg[fgTone] }}>{value}</Text>
+      <Text variant="eyebrow" style={{ marginTop: 4 }}>{label}</Text>
     </View>
   );
 }
@@ -597,21 +627,22 @@ function Tile({ value, label, tone, first }: { value: string; label: string; ton
 function TrendStat({ label, value }: { label: string; value: string }) {
   return (
     <View>
-      <Text className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">{label}</Text>
-      <Text className="mt-1.5 text-[18px] font-semibold tracking-tighter2">{value}</Text>
+      <Text variant="eyebrow">{label}</Text>
+      <Text variant="titleLg" style={{ marginTop: 6 }}>{value}</Text>
     </View>
   );
 }
 
 function EmptyState({ icon: IconComp, title, sub }: { icon: LucideIcon; title: string; sub: string }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   return (
-    <View className="items-center gap-2 px-6 py-10">
-      <View className="h-12 w-12 items-center justify-center rounded-2xl bg-muted">
+    <View style={{ alignItems: 'center', gap: 8, paddingHorizontal: 24, paddingVertical: 40 }}>
+      <View style={[surfaces.iconBox, { backgroundColor: hex.muted }]}>
         <IconComp size={20} color={c.mutedForeground} />
       </View>
-      <Text className="text-[15px] font-medium tracking-tightish">{title}</Text>
-      <Text className="text-[12px] text-muted-foreground">{sub}</Text>
+      <Text variant="body">{title}</Text>
+      <Text variant="bodyMuted">{sub}</Text>
     </View>
   );
 }
@@ -621,6 +652,8 @@ type TradeMode = 'hub' | 'pickManager' | 'machine';
 type Prefill = { mgrId: string; give: string[]; receive: string[] } | null;
 
 function TradePane({ synced, platform, onPlayer }: { synced: boolean; platform?: string; onPlayer: (p: PlayerDetail) => void }) {
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const [mode, setMode] = useState<TradeMode>('hub');
   const [chatWith, setChatWith] = useState<string | null>(null);
@@ -666,26 +699,29 @@ function TradePane({ synced, platform, onPlayer }: { synced: boolean; platform?:
   }
   if (mode === 'pickManager') {
     return (
-      <View className="gap-4">
-        <View className="flex-row items-center justify-between">
-          <Pressable onPress={() => setMode('hub')}><Text className="text-[14px] font-semibold text-success">← Trade</Text></Pressable>
-          <Text className="text-[15px] font-semibold tracking-tightish">Send a trade</Text>
-          <View className="w-12" />
+      <View style={layout.sectionBlock}>
+        <View style={S.navBar}>
+          <Pressable onPress={() => setMode('hub')}><Text variant="bodySm" style={{ color: hex.success }}>← Trade</Text></Pressable>
+          <Text variant="body">Send a trade</Text>
+          <View style={S.navSpacer} />
         </View>
         <Card>
           {LEAGUE_MANAGERS.map((m, i) => (
-            <View key={m.id} className={cn('flex-row items-center gap-3 px-5 py-3.5', i > 0 ? 'border-t border-hairline' : '')}>
-              <AvatarImage src={personAvatar(m.id + m.name)} name={m.name} className="h-10 w-10" />
-              <View className="min-w-0 flex-1">
-                <Text className="text-[15px] font-medium tracking-tightish" numberOfLines={1}>{m.name}</Text>
-                <Text className="text-[12px] text-muted-foreground" numberOfLines={1}>{m.team}</Text>
+            <View key={m.id}>
+              {i > 0 ? <Divider /> : null}
+              <View style={layout.listRow}>
+                <AvatarImage src={personAvatar(m.id + m.name)} name={m.name} size={40} />
+                <View style={[layout.flex1, { minWidth: 0 }]}>
+                  <Text variant="body" numberOfLines={1}>{m.name}</Text>
+                  <Text variant="bodyMuted" numberOfLines={1}>{m.team}</Text>
+                </View>
+                <Pressable onPress={() => setChatWith(m.id)} style={S.iconCircle}>
+                  <MessageCircle size={16} color={c.foreground} />
+                </Pressable>
+                <Pressable onPress={() => setProposeTo(m.id)} style={S.proposeBtn}>
+                  <Text variant="caption" style={{ color: hex.background }}>Propose</Text>
+                </Pressable>
               </View>
-              <Pressable onPress={() => setChatWith(m.id)} className="h-9 w-9 items-center justify-center rounded-full bg-muted">
-                <MessageCircle size={16} color={c.foreground} />
-              </Pressable>
-              <Pressable onPress={() => setProposeTo(m.id)} className="rounded-full bg-foreground px-3 py-2">
-                <Text className="text-[12px] font-semibold text-background">Propose</Text>
-              </Pressable>
             </View>
           ))}
         </Card>
@@ -694,21 +730,21 @@ function TradePane({ synced, platform, onPlayer }: { synced: boolean; platform?:
   }
 
   return (
-    <View className="gap-5">
-      <View className="flex-row gap-3">
-        <Pressable onPress={() => setMode('pickManager')} className="flex-1 rounded-[28px] border border-hairline bg-surface-elevated p-5">
-          <View className="h-11 w-11 items-center justify-center rounded-2xl bg-foreground">
+    <View style={layout.section}>
+      <View style={[layout.row, { gap: 12 }]}>
+        <Pressable onPress={() => setMode('pickManager')} style={S.tradeTile}>
+          <View style={S.tradeTileIcon}>
             <Send size={20} color={c.background} />
           </View>
-          <Text className="mt-4 text-[16px] font-semibold tracking-tightish">Send a trade</Text>
-          <Text className="mt-1 text-[12px] leading-snug text-muted-foreground">Pick a manager, chat privately, or build a proposal.</Text>
+          <Text variant="titleMd" style={{ marginTop: 16 }}>Send a trade</Text>
+          <Text variant="bodyMuted" style={{ marginTop: 4 }}>Pick a manager, chat privately, or build a proposal.</Text>
         </Pressable>
-        <Pressable onPress={() => setMode('machine')} className="flex-1 rounded-[28px] border border-hairline bg-surface-elevated p-5">
-          <View className="h-11 w-11 items-center justify-center rounded-2xl bg-foreground">
+        <Pressable onPress={() => setMode('machine')} style={S.tradeTile}>
+          <View style={S.tradeTileIcon}>
             <Repeat size={20} color={c.background} />
           </View>
-          <Text className="mt-4 text-[16px] font-semibold tracking-tightish">Mock trade machine</Text>
-          <Text className="mt-1 text-[12px] leading-snug text-muted-foreground">Explore needs, generate trades, send when one fits.</Text>
+          <Text variant="titleMd" style={{ marginTop: 16 }}>Mock trade machine</Text>
+          <Text variant="bodyMuted" style={{ marginTop: 4 }}>Explore needs, generate trades, send when one fits.</Text>
         </Pressable>
       </View>
 
@@ -720,16 +756,17 @@ function TradePane({ synced, platform, onPlayer }: { synced: boolean; platform?:
             const trendColor = trend === 'up' ? c.success : trend === 'down' ? c.danger : c.mutedForeground;
             return (
               <Pressable key={p.name} onPress={() => onPlayer(p)}>
-                <View className={cn('flex-row items-center gap-3 px-5 py-3.5', i > 0 ? 'border-t border-hairline' : '')}>
-                  <View className="h-9 w-10 shrink-0 items-center justify-center rounded-xl bg-muted">
-                    <Text className="text-[11px] font-semibold tracking-wider text-muted-foreground">{p.pos}</Text>
+                {i > 0 ? <Divider /> : null}
+                <View style={layout.listRow}>
+                  <View style={[S.slotBadge, { height: 36, borderRadius: 12 }]}>
+                    <Text variant="caption">{p.pos}</Text>
                   </View>
-                  <View className="min-w-0 flex-1">
-                    <Text className="text-[15px] font-medium tracking-tightish" numberOfLines={1}>{p.name}</Text>
-                    <Text className="text-[12px] text-muted-foreground" numberOfLines={1}>{p.team}</Text>
+                  <View style={[layout.flex1, { minWidth: 0 }]}>
+                    <Text variant="body" numberOfLines={1}>{p.name}</Text>
+                    <Text variant="bodyMuted" numberOfLines={1}>{p.team}</Text>
                   </View>
                   <TrendIcon size={16} color={trendColor} />
-                  <Text className="w-12 text-right text-[15px] font-semibold tabular-nums tracking-tightish">{p.value}</Text>
+                  <Text variant="body" style={S.scoreCol}>{p.value}</Text>
                 </View>
               </Pressable>
             );
@@ -813,7 +850,8 @@ function generateTrades(needs: Need[], seed: number, include: string[] = []): Ge
 }
 
 function TradeMachine({ onBack, onSendTrade }: { onBack: () => void; onSendTrade: (p: { mgrId: string; give: string[]; receive: string[] }) => void }) {
-  const c = useColors();
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const [needs, setNeeds] = useState<Need[]>([]);
   const [include, setInclude] = useState<string[]>([]);
   const [seed, setSeed] = useState(0);
@@ -831,66 +869,70 @@ function TradeMachine({ onBack, onSendTrade }: { onBack: () => void; onSendTrade
   }, {});
 
   return (
-    <View className="gap-4">
-      <View className="flex-row items-center justify-between">
-        <Pressable onPress={onBack}><Text className="text-[14px] font-semibold text-success">← Trade</Text></Pressable>
-        <Text className="text-[15px] font-semibold tracking-tightish">Mock trade machine</Text>
-        <View className="w-12" />
+    <View style={layout.sectionBlock}>
+      <View style={S.navBar}>
+        <Pressable onPress={onBack}><Text variant="bodySm" style={{ color: hex.success }}>← Trade</Text></Pressable>
+        <Text variant="body">Mock trade machine</Text>
+        <View style={S.navSpacer} />
       </View>
 
       <TeamSection title="Your roster" caption="Tap to include in mock">
         <Card>
-          <View className="flex-row px-1 py-3">
+          <View style={[layout.healthRow, { paddingHorizontal: 4, paddingVertical: 12 }]}>
             {(['QB', 'RB', 'WR', 'TE'] as Need[]).map((pos, i) => (
-              <View key={pos} className={cn('flex-1 items-center', i > 0 ? 'border-l border-hairline' : '')}>
-                <Text className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{pos}</Text>
-                <Text className="mt-0.5 text-[15px] font-semibold tabular-nums">{byPos[pos] ?? 0}</Text>
+              <View key={pos} style={i > 0 ? layout.healthCellBorder : layout.healthCell}>
+                <Text variant="caption">{pos}</Text>
+                <Text variant="body" style={{ marginTop: 2 }}>{byPos[pos] ?? 0}</Text>
               </View>
             ))}
           </View>
-          <View className="border-t border-hairline">
-            {MY_PLAYERS.map((p, i) => {
-              const picked = include.includes(p.id);
-              return (
-                <Pressable key={p.id} onPress={() => toggleInclude(p.id)}>
-                  <View className={cn('flex-row items-center gap-3 px-5 py-3.5', i > 0 ? 'border-t border-hairline' : '')}>
-                    <View className="h-10 w-10 items-center justify-center rounded-2xl bg-muted">
-                      <Text className="text-[11px] font-semibold tracking-wider text-muted-foreground">{p.pos}</Text>
-                    </View>
-                    <View className="min-w-0 flex-1">
-                      <Text className="text-[15px] font-medium tracking-tightish" numberOfLines={1}>{p.name}</Text>
-                      <Text className="text-[12px] text-muted-foreground">Value {p.value}</Text>
-                    </View>
-                    <View className={cn('h-7 min-w-[64px] items-center justify-center rounded-full px-2', picked ? 'bg-foreground' : 'bg-muted')}>
-                      <Text className={cn('text-[11px] font-semibold', picked ? 'text-background' : 'text-muted-foreground')}>{picked ? 'Included' : 'Include'}</Text>
-                    </View>
+          <Divider />
+          {MY_PLAYERS.map((p, i) => {
+            const picked = include.includes(p.id);
+            return (
+              <Pressable key={p.id} onPress={() => toggleInclude(p.id)}>
+                {i > 0 ? <Divider /> : null}
+                <View style={layout.listRow}>
+                  <View style={[surfaces.iconBox, { backgroundColor: hex.muted }]}>
+                    <Text variant="caption">{p.pos}</Text>
                   </View>
-                </Pressable>
-              );
-            })}
-          </View>
+                  <View style={[layout.flex1, { minWidth: 0 }]}>
+                    <Text variant="body" numberOfLines={1}>{p.name}</Text>
+                    <Text variant="bodyMuted">Value {p.value}</Text>
+                  </View>
+                  <View style={[S.selectPill, picked ? S.selectPillOn : S.selectPillOff]}>
+                    <Text variant="caption" style={{ color: picked ? hex.background : hex.mutedForeground }}>
+                      {picked ? 'Included' : 'Include'}
+                    </Text>
+                  </View>
+                </View>
+              </Pressable>
+            );
+          })}
         </Card>
       </TeamSection>
 
       <TeamSection title="Trade builder" caption="Tag positions to shape the trade">
         <Card>
-          <View className="gap-4 p-5">
+          <View style={{ gap: 16, padding: 20 }}>
             <View>
-              <Text className="mb-2 text-[11px] font-medium uppercase tracking-widest text-muted-foreground">Position tags</Text>
-              <View className="flex-row gap-2">
+              <Text variant="eyebrow" style={{ marginBottom: 8 }}>Position tags</Text>
+              <View style={[layout.row, { gap: 8 }]}>
                 {(['QB', 'RB', 'WR', 'TE'] as Need[]).map((n) => {
                   const on = needs.includes(n);
                   return (
-                    <Pressable key={n} onPress={() => toggleNeed(n)} className={cn('h-14 flex-1 items-center justify-center rounded-2xl', on ? 'bg-foreground' : 'bg-muted')}>
-                      <Text className={cn('text-[15px] tracking-tightish', on ? 'text-background' : 'text-foreground')}>{n}</Text>
-                      <Text className={cn('text-[10px] font-medium', on ? 'text-background/70' : 'text-muted-foreground')}>{on ? 'Targeted' : 'Tap'}</Text>
+                    <Pressable key={n} onPress={() => toggleNeed(n)} style={[S.needTag, on ? S.needTagOn : S.needTagOff]}>
+                      <Text variant="body" style={{ color: on ? hex.background : hex.foreground }}>{n}</Text>
+                      <Text variant="caption" style={{ color: on ? 'rgba(252,252,252,0.7)' : hex.mutedForeground }}>
+                        {on ? 'Targeted' : 'Tap'}
+                      </Text>
                     </Pressable>
                   );
                 })}
               </View>
             </View>
-            <Pressable onPress={generate} className="h-11 items-center justify-center rounded-full bg-foreground">
-              <Text className="text-[13px] font-semibold text-background">{generated.length ? 'Mock again' : 'Generate'}</Text>
+            <Pressable onPress={generate} style={S.generateBtn}>
+              <Text variant="button" style={{ color: hex.background }}>{generated.length ? 'Mock again' : 'Generate'}</Text>
             </Pressable>
           </View>
         </Card>
@@ -898,40 +940,45 @@ function TradeMachine({ onBack, onSendTrade }: { onBack: () => void; onSendTrade
 
       {generated.length > 0 ? (
         <TeamSection title="Generated trades" caption={`Round ${seed}`}>
-          <View className="gap-3">
+          <View style={layout.stackSm}>
             {generated.map((t) => (
               <Card key={t.id}>
-                <View className="p-4">
-                  <View className="flex-row items-center gap-3">
-                    <AvatarImage src={personAvatar(t.mgrId + t.mgrName)} name={t.mgrName} className="h-9 w-9" />
-                    <View className="min-w-0 flex-1">
-                      <Text className="text-[14px] font-semibold tracking-tightish" numberOfLines={1}>{t.mgrName}</Text>
-                      <Text className="text-[12px] text-muted-foreground" numberOfLines={1}>{t.team}</Text>
+                <View style={{ padding: 16 }}>
+                  <View style={layout.row}>
+                    <AvatarImage src={personAvatar(t.mgrId + t.mgrName)} name={t.mgrName} size={36} />
+                    <View style={[layout.flex1, { minWidth: 0, marginLeft: 12 }]}>
+                      <Text variant="bodySm" numberOfLines={1}>{t.mgrName}</Text>
+                      <Text variant="bodyMuted" numberOfLines={1}>{t.team}</Text>
                     </View>
-                    <View className={cn('h-8 w-8 items-center justify-center rounded-full', t.grade === 'A' ? 'bg-success' : t.grade === 'B' ? 'bg-warning' : 'bg-destructive')}>
-                      <Text className="text-[13px] font-bold text-background">{t.grade}</Text>
+                    <View
+                      style={[
+                        S.gradeBadge,
+                        { backgroundColor: t.grade === 'A' ? hex.success : t.grade === 'B' ? hex.warning : hex.danger },
+                      ]}
+                    >
+                      <Text variant="bodySm" style={{ color: hex.background, fontWeight: '700' }}>{t.grade}</Text>
                     </View>
                   </View>
-                  <View className="mt-3 flex-row gap-2">
-                    <View className="flex-1 rounded-2xl bg-muted p-3">
-                      <Text className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">You give</Text>
+                  <View style={[layout.row, { gap: 8, marginTop: 12 }]}>
+                    <View style={S.tradeCol}>
+                      <Text variant="caption">You give</Text>
                       {t.give.map((p) => (
-                        <Text key={p.id} className="mt-1 text-[13px] font-medium tracking-tightish">{p.name} · {p.pos} {p.value}</Text>
+                        <Text key={p.id} variant="bodySm" style={{ marginTop: 4 }}>{p.name} · {p.pos} {p.value}</Text>
                       ))}
                     </View>
-                    <View className="flex-1 rounded-2xl bg-muted p-3">
-                      <Text className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">You receive</Text>
+                    <View style={S.tradeCol}>
+                      <Text variant="caption">You receive</Text>
                       {t.receive.map((p) => (
-                        <Text key={p.id} className="mt-1 text-[13px] font-medium tracking-tightish">{p.name} · {p.pos} {p.value}</Text>
+                        <Text key={p.id} variant="bodySm" style={{ marginTop: 4 }}>{p.name} · {p.pos} {p.value}</Text>
                       ))}
                     </View>
                   </View>
-                  <Text className="mt-3 text-[13px] leading-relaxed text-muted-foreground">{t.why}</Text>
+                  <Text variant="bodySm" style={{ marginTop: 12, color: hex.mutedForeground }}>{t.why}</Text>
                   <Pressable
                     onPress={() => onSendTrade({ mgrId: t.mgrId, give: t.give.map((p) => p.id).filter((id) => MY_PLAYERS.some((m) => m.id === id)), receive: t.receive.map((p) => p.id) })}
-                    className="mt-3 h-10 items-center justify-center rounded-full bg-foreground"
+                    style={S.sendBtn}
                   >
-                    <Text className="text-[13px] font-semibold text-background">Send trade</Text>
+                    <Text variant="button" style={{ color: hex.background }}>Send trade</Text>
                   </Pressable>
                 </View>
               </Card>
@@ -939,9 +986,8 @@ function TradeMachine({ onBack, onSendTrade }: { onBack: () => void; onSendTrade
           </View>
         </TeamSection>
       ) : (
-        <Text className="px-2 text-[12px] text-muted-foreground">Choose positions above, then generate to see trade ideas.</Text>
+        <Text variant="bodyMuted" style={{ paddingHorizontal: 8 }}>Choose positions above, then generate to see trade ideas.</Text>
       )}
-      <View className="hidden">{c.background}</View>
     </View>
   );
 }
@@ -967,6 +1013,8 @@ function TradeBuilder({
   initialGive?: string[];
   initialReceive?: string[];
 }) {
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const [give, setGive] = useState<string[]>(initialGive ?? []);
   const [receive, setReceive] = useState<string[]>(initialReceive ?? []);
   const [sent, setSent] = useState(false);
@@ -974,7 +1022,12 @@ function TradeBuilder({
   const toggle = (set: React.Dispatch<React.SetStateAction<string[]>>, id: string) =>
     set((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
   const evaluation = evaluateTrade({ give, receive });
-  const recColor = evaluation.recommendation === 'Accept' ? 'bg-success' : evaluation.recommendation === 'Counter' ? 'bg-warning' : 'bg-destructive';
+  const recBg =
+    evaluation.recommendation === 'Accept'
+      ? hex.success
+      : evaluation.recommendation === 'Counter'
+        ? hex.warning
+        : hex.danger;
   const activeMgrId = manager?.id ?? '';
   const activeMgr = manager ?? LEAGUE_MANAGERS.find((m) => m.id === activeMgrId);
   const theirPool = MANAGER_POOLS[activeMgrId] ?? THEIR_PLAYERS;
@@ -994,23 +1047,23 @@ function TradeBuilder({
   };
 
   return (
-    <View className="gap-4">
-      <View className="flex-row items-center justify-between">
-        <Pressable onPress={onBack}><Text className="text-[14px] font-semibold text-success">← Trade</Text></Pressable>
-        <View className="items-center">
-          <Text className="text-[10px] uppercase tracking-widest text-muted-foreground">{subtitle ?? (activeMgr ? `To ${activeMgr.name}` : 'Builder')}</Text>
-          <Text className="text-[15px] font-semibold tracking-tightish">{title}</Text>
+    <View style={layout.sectionBlock}>
+      <View style={S.navBar}>
+        <Pressable onPress={onBack}><Text variant="bodySm" style={{ color: hex.success }}>← Trade</Text></Pressable>
+        <View style={{ alignItems: 'center' }}>
+          <Text variant="caption">{subtitle ?? (activeMgr ? `To ${activeMgr.name}` : 'Builder')}</Text>
+          <Text variant="body">{title}</Text>
         </View>
-        <View className="w-12" />
+        <View style={S.navSpacer} />
       </View>
 
-      <View className="flex-row items-center gap-2 px-1">
+      <View style={[layout.row, { gap: 8, paddingHorizontal: 4 }]}>
         {[1, 2, 3].map((s) => (
-          <View key={s} className="flex-1 flex-row items-center gap-2">
-            <View className={cn('h-6 w-6 items-center justify-center rounded-full', step >= s ? 'bg-foreground' : 'bg-muted')}>
-              <Text className={cn('text-[11px] font-semibold', step >= s ? 'text-background' : 'text-muted-foreground')}>{s}</Text>
+          <View key={s} style={[layout.row, layout.flex1, { gap: 8 }]}>
+            <View style={[S.stepDot, step >= s ? S.stepDotActive : S.stepDotIdle]}>
+              <Text variant="caption" style={{ color: step >= s ? hex.background : hex.mutedForeground }}>{s}</Text>
             </View>
-            <Text className={cn('text-[11px] font-semibold uppercase tracking-widest', step === s ? 'text-foreground' : 'text-muted-foreground')}>
+            <Text variant="caption" style={{ color: step === s ? hex.foreground : hex.mutedForeground }}>
               {s === 1 ? 'Give' : s === 2 ? 'Receive' : 'Summary'}
             </Text>
           </View>
@@ -1041,23 +1094,23 @@ function TradeBuilder({
         <>
           <TeamSection title="Trade summary">
             <Card>
-              <View className="flex-row">
-                <View className="flex-1 p-4">
-                  <Text className="text-[10px] uppercase tracking-widest text-muted-foreground">You give</Text>
-                  <Text className="mt-1 text-[22px] font-semibold tabular-nums tracking-tighter2">{giveTotal}</Text>
+              <View style={layout.row}>
+                <View style={[layout.flex1, { padding: 16 }]}>
+                  <Text variant="caption">You give</Text>
+                  <Text variant="statValue" style={{ marginTop: 4 }}>{giveTotal}</Text>
                   {MY_PLAYERS.filter((p) => give.includes(p.id)).map((p) => (
-                    <Text key={p.id} className="mt-1 text-[13px] font-medium tracking-tightish">{p.name} · {p.pos}</Text>
+                    <Text key={p.id} variant="bodySm" style={{ marginTop: 4 }}>{p.name} · {p.pos}</Text>
                   ))}
-                  {give.length === 0 ? <Text className="mt-1 text-[12px] text-muted-foreground">None</Text> : null}
+                  {give.length === 0 ? <Text variant="bodyMuted" style={{ marginTop: 4 }}>None</Text> : null}
                 </View>
-                <View className="w-px bg-hairline" />
-                <View className="flex-1 p-4">
-                  <Text className="text-[10px] uppercase tracking-widest text-muted-foreground">You receive</Text>
-                  <Text className="mt-1 text-[22px] font-semibold tabular-nums tracking-tighter2">{recvTotal}</Text>
+                <View style={S.vDivider} />
+                <View style={[layout.flex1, { padding: 16 }]}>
+                  <Text variant="caption">You receive</Text>
+                  <Text variant="statValue" style={{ marginTop: 4 }}>{recvTotal}</Text>
                   {theirPool.filter((p) => receive.includes(p.id)).map((p) => (
-                    <Text key={p.id} className="mt-1 text-[13px] font-medium tracking-tightish">{p.name} · {p.pos}</Text>
+                    <Text key={p.id} variant="bodySm" style={{ marginTop: 4 }}>{p.name} · {p.pos}</Text>
                   ))}
-                  {receive.length === 0 ? <Text className="mt-1 text-[12px] text-muted-foreground">None</Text> : null}
+                  {receive.length === 0 ? <Text variant="bodyMuted" style={{ marginTop: 4 }}>None</Text> : null}
                 </View>
               </View>
             </Card>
@@ -1065,15 +1118,15 @@ function TradeBuilder({
 
           <TeamSection title="AI insights" caption="Pitch for both sides">
             <Card>
-              <View className="p-5">
-                <View className="flex-row items-center justify-between">
-                  <View className={cn('rounded-full px-3 py-1', recColor)}>
-                    <Text className="text-[12px] font-semibold text-background">{evaluation.recommendation}</Text>
+              <View style={{ padding: 20 }}>
+                <View style={layout.rowBetween}>
+                  <View style={[S.statusPill, { backgroundColor: recBg, paddingHorizontal: 12, paddingVertical: 4 }]}>
+                    <Text variant="bodySm" style={{ color: hex.background }}>{evaluation.recommendation}</Text>
                   </View>
                   <ConfidencePill confidence={evaluation.confidence} />
                 </View>
-                <Text className="mt-3 text-[14px] leading-relaxed">{pitch}</Text>
-                <View className="mt-4 flex-row flex-wrap gap-2">
+                <Text variant="bodySm" style={{ marginTop: 12 }}>{pitch}</Text>
+                <View style={[layout.rowWrap, { gap: 8, marginTop: 16 }]}>
                   <EvalCell label="Net value" value={`${delta > 0 ? '+' : ''}${delta}`} />
                   <EvalCell label="Roster impact" value={evaluation.rosterImpact} />
                   <EvalCell label="Playoff impact" value={evaluation.playoffImpact} />
@@ -1085,25 +1138,25 @@ function TradeBuilder({
         </>
       ) : null}
 
-      <View className="flex-row gap-2">
-        <Pressable onPress={() => (step === 1 ? onBack() : setStep((s) => (s - 1) as 1 | 2 | 3))} className="h-11 flex-1 items-center justify-center rounded-full bg-foreground/5">
-          <Text className="text-[13px] font-semibold">{step === 1 ? 'Cancel' : 'Back'}</Text>
+      <View style={S.actionRow}>
+        <Pressable onPress={() => (step === 1 ? onBack() : setStep((s) => (s - 1) as 1 | 2 | 3))} style={[S.actionBtn, S.actionBtnSecondary]}>
+          <Text variant="button">{step === 1 ? 'Cancel' : 'Back'}</Text>
         </Pressable>
         {step < 3 ? (
           <Pressable
             onPress={() => setStep((s) => (s + 1) as 1 | 2 | 3)}
             disabled={step === 1 ? give.length === 0 : receive.length === 0}
-            className={cn('h-11 flex-1 items-center justify-center rounded-full bg-foreground', (step === 1 ? give.length === 0 : receive.length === 0) ? 'opacity-50' : '')}
+            style={[S.actionBtn, S.actionBtnPrimary, (step === 1 ? give.length === 0 : receive.length === 0) ? S.actionBtnDisabled : null]}
           >
-            <Text className="text-[13px] font-semibold text-background">Continue</Text>
+            <Text variant="button" style={{ color: hex.background }}>Continue</Text>
           </Pressable>
         ) : (
           <Pressable
             onPress={handleSend}
             disabled={sent || give.length === 0 || receive.length === 0}
-            className={cn('h-11 flex-1 items-center justify-center rounded-full bg-foreground', sent || give.length === 0 || receive.length === 0 ? 'opacity-50' : '')}
+            style={[S.actionBtn, S.actionBtnPrimary, sent || give.length === 0 || receive.length === 0 ? S.actionBtnDisabled : null]}
           >
-            <Text className="text-[13px] font-semibold text-background">{sent ? 'Sent ✓' : synced ? `Send via ${platform}` : 'Send proposal'}</Text>
+            <Text variant="button" style={{ color: hex.background }}>{sent ? 'Sent ✓' : synced ? `Send via ${platform}` : 'Send proposal'}</Text>
           </Pressable>
         )}
       </View>
@@ -1112,18 +1165,23 @@ function TradeBuilder({
 }
 
 function RosterPickRow({ name, pos, value, selected, divided, onPress }: { name: string; pos: string; value: number; selected: boolean; divided?: boolean; onPress: () => void }) {
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
     <Pressable onPress={onPress}>
-      <View className={cn('flex-row items-center gap-3 px-5 py-3.5', divided ? 'border-t border-hairline' : '')}>
-        <View className="h-10 w-10 items-center justify-center rounded-2xl bg-muted">
-          <Text className="text-[11px] font-semibold tracking-wider text-muted-foreground">{pos}</Text>
+      {divided ? <Divider /> : null}
+      <View style={layout.listRow}>
+        <View style={[surfaces.iconBox, { backgroundColor: hex.muted }]}>
+          <Text variant="caption">{pos}</Text>
         </View>
-        <View className="min-w-0 flex-1">
-          <Text className="text-[15px] font-medium tracking-tightish" numberOfLines={1}>{name}</Text>
-          <Text className="text-[12px] text-muted-foreground">Value {value}</Text>
+        <View style={[layout.flex1, { minWidth: 0 }]}>
+          <Text variant="body" numberOfLines={1}>{name}</Text>
+          <Text variant="bodyMuted">Value {value}</Text>
         </View>
-        <View className={cn('h-7 min-w-[72px] items-center justify-center rounded-full px-2', selected ? 'bg-foreground' : 'bg-muted')}>
-          <Text className={cn('text-[11px] font-semibold', selected ? 'text-background' : 'text-muted-foreground')}>{selected ? 'Selected' : 'Select'}</Text>
+        <View style={[S.selectPill, selected ? S.selectPillOn : S.selectPillOff, { minWidth: 72 }]}>
+          <Text variant="caption" style={{ color: selected ? hex.background : hex.mutedForeground }}>
+            {selected ? 'Selected' : 'Select'}
+          </Text>
         </View>
       </View>
     </Pressable>
@@ -1131,32 +1189,38 @@ function RosterPickRow({ name, pos, value, selected, divided, onPress }: { name:
 }
 
 function EvalCell({ label, value }: { label: string; value: string }) {
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
-    <View className="w-[48%] rounded-2xl bg-background p-3">
-      <Text className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</Text>
-      <Text className="mt-0.5 text-[13px] font-medium">{value}</Text>
+    <View style={S.evalCell}>
+      <Text variant="caption">{label}</Text>
+      <Text variant="bodySm" style={{ marginTop: 2 }}>{value}</Text>
     </View>
   );
 }
 
 function TradeIdeaCard({ idea, synced, platform }: { idea: TradeIdea; synced: boolean; platform?: string }) {
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
-    <View className="rounded-[30px] bg-surface-elevated p-4">
-      <View className="flex-row items-center justify-between">
-        <Text className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">{idea.type}</Text>
-        <Text className="text-[11px] text-muted-foreground">{idea.likelihood}% likely</Text>
+    <View style={S.ideaCard}>
+      <View style={layout.rowBetween}>
+        <Text variant="caption">{idea.type}</Text>
+        <Text variant="caption">{idea.likelihood}% likely</Text>
       </View>
-      <Text className="mt-1 text-[15px] font-semibold tracking-tightish">Target: {idea.target}</Text>
-      <Text className="text-[12px] text-muted-foreground">Offer: {idea.offer}</Text>
-      <Text className="mt-2 text-[12px] leading-relaxed text-muted-foreground">{idea.reason}</Text>
-      <Pressable className="mt-3 items-center rounded-full bg-foreground/5 py-2">
-        <Text className="text-[12px] font-semibold">{synced ? `Build in ${platform}` : 'Propose trade'}</Text>
+      <Text variant="body" style={{ marginTop: 4 }}>Target: {idea.target}</Text>
+      <Text variant="bodyMuted">Offer: {idea.offer}</Text>
+      <Text variant="bodyMuted" style={{ marginTop: 8 }}>{idea.reason}</Text>
+      <Pressable style={[S.editPillIdle, { marginTop: 12, alignItems: 'center', paddingVertical: 8 }]}>
+        <Text variant="caption">{synced ? `Build in ${platform}` : 'Propose trade'}</Text>
       </Pressable>
     </View>
   );
 }
 
 function PrivateChat({ manager, onBack, synced, platform }: { manager: { id: string; name: string; team: string }; onBack: () => void; synced: boolean; platform?: string }) {
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   type Msg = { from: 'me' | 'them'; text?: string; trade?: { give: string[]; receive: string[] } };
   const [messages, setMessages] = useState<Msg[]>([
@@ -1185,35 +1249,39 @@ function PrivateChat({ manager, onBack, synced, platform }: { manager: { id: str
   }
 
   return (
-    <View className="gap-4">
-      <View className="flex-row items-center justify-between">
-        <Pressable onPress={onBack}><Text className="text-[14px] font-semibold text-success">← Trade</Text></Pressable>
-        <View className="items-center">
-          <Text className="text-[10px] uppercase tracking-widest text-muted-foreground">Private</Text>
-          <Text className="text-[15px] font-semibold tracking-tightish">{manager.name}</Text>
+    <View style={layout.sectionBlock}>
+      <View style={S.navBar}>
+        <Pressable onPress={onBack}><Text variant="bodySm" style={{ color: hex.success }}>← Trade</Text></Pressable>
+        <View style={{ alignItems: 'center' }}>
+          <Text variant="caption">Private</Text>
+          <Text variant="body">{manager.name}</Text>
         </View>
-        <View className="w-12" />
+        <View style={S.navSpacer} />
       </View>
       <Card>
-        <View className="gap-3 p-5">
+        <View style={{ gap: 12, padding: 20 }}>
           {messages.map((m, i) => (
-            <View key={i} className={cn('flex-row', m.from === 'me' ? 'justify-end' : 'justify-start')}>
+            <View key={i} style={[layout.row, { justifyContent: m.from === 'me' ? 'flex-end' : 'flex-start' }]}>
               {m.trade ? (
-                <View className={cn('max-w-[80%] rounded-2xl px-4 py-3', m.from === 'me' ? 'bg-foreground' : 'bg-muted')}>
-                  <Text className={cn('text-[10px] uppercase tracking-widest', m.from === 'me' ? 'text-background/70' : 'text-muted-foreground')}>Trade proposal</Text>
-                  <Text className={cn('mt-1 text-[13px] font-semibold', m.from === 'me' ? 'text-background' : 'text-foreground')}>You give: {m.trade.give.join(', ')}</Text>
-                  <Text className={cn('text-[13px] font-semibold', m.from === 'me' ? 'text-background' : 'text-foreground')}>You get: {m.trade.receive.join(', ')}</Text>
+                <View style={[S.chatBubble, m.from === 'me' ? S.chatBubbleMe : S.chatBubbleThem, { maxWidth: '80%' }]}>
+                  <Text variant="caption" style={{ color: m.from === 'me' ? 'rgba(252,252,252,0.7)' : hex.mutedForeground }}>Trade proposal</Text>
+                  <Text variant="bodySm" style={{ marginTop: 4, color: m.from === 'me' ? hex.background : hex.foreground }}>
+                    You give: {m.trade.give.join(', ')}
+                  </Text>
+                  <Text variant="bodySm" style={{ color: m.from === 'me' ? hex.background : hex.foreground }}>
+                    You get: {m.trade.receive.join(', ')}
+                  </Text>
                 </View>
               ) : (
-                <View className={cn('max-w-[75%] rounded-2xl px-4 py-2', m.from === 'me' ? 'bg-foreground' : 'bg-muted')}>
-                  <Text className={cn('text-[14px]', m.from === 'me' ? 'text-background' : 'text-foreground')}>{m.text}</Text>
+                <View style={[S.chatBubble, m.from === 'me' ? S.chatBubbleMe : S.chatBubbleThem, { maxWidth: '75%', paddingVertical: 8 }]}>
+                  <Text variant="bodySm" style={{ color: m.from === 'me' ? hex.background : hex.foreground }}>{m.text}</Text>
                 </View>
               )}
             </View>
           ))}
         </View>
-        <View className="flex-row items-center gap-2 border-t border-hairline p-3">
-          <Pressable onPress={() => setBuilding(true)} className="h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted">
+        <View style={S.chatInputRow}>
+          <Pressable onPress={() => setBuilding(true)} style={[S.iconCircle, { width: 44, height: 44 }]}>
             <Repeat size={16} color={c.foreground} />
           </Pressable>
           <TextInput
@@ -1221,7 +1289,7 @@ function PrivateChat({ manager, onBack, synced, platform }: { manager: { id: str
             onChangeText={setDraft}
             placeholder="Message..."
             placeholderTextColor={c.mutedForeground}
-            className="h-11 flex-1 rounded-full bg-muted px-4 text-[14px] text-foreground"
+            style={S.chatInput}
           />
           <Pressable
             onPress={() => {
@@ -1229,7 +1297,7 @@ function PrivateChat({ manager, onBack, synced, platform }: { manager: { id: str
               setMessages((m) => [...m, { from: 'me', text: draft }]);
               setDraft('');
             }}
-            className="h-11 w-11 items-center justify-center rounded-full bg-foreground"
+            style={[S.primaryCircle, { width: 44, height: 44 }]}
           >
             <Send size={16} color={c.background} />
           </Pressable>
@@ -1243,6 +1311,8 @@ function PrivateChat({ manager, onBack, synced, platform }: { manager: { id: str
 type Claim = { id: string; add: string; pos: string; team: string; drop: string; bid: number; priority: number };
 
 function WaiversPane({ synced, platform, onPlayer }: { synced: boolean; platform?: string; onPlayer: (p: PlayerDetail) => void }) {
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const [claims, setClaims] = useState<Claim[]>([
     { id: 'c1', add: 'Tank Bigsby', pos: 'RB', team: 'JAX', drop: 'M. Pittman', bid: 22, priority: 1 },
@@ -1257,26 +1327,27 @@ function WaiversPane({ synced, platform, onPlayer }: { synced: boolean; platform
   const removeClaim = (id: string) => setClaims((cs) => cs.filter((claim) => claim.id !== id));
 
   return (
-    <View className="gap-5">
+    <View style={layout.section}>
       <TeamSection title="FAAB budget">
         <Card>
-          <View className="flex-row items-center justify-between px-6 py-5">
+          <View style={[layout.rowBetween, { paddingHorizontal: 24, paddingVertical: 20 }]}>
             <View>
-              <Text className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">Remaining</Text>
-              <Text className="mt-1 text-[28px] font-semibold tracking-tighter2">${faabRemaining}</Text>
-              <Text className="text-[12px] text-muted-foreground">of ${faabTotal} season budget</Text>
+              <Text variant="eyebrow">Remaining</Text>
+              <Text variant="scoreLG" style={{ marginTop: 4 }}>${faabRemaining}</Text>
+              <Text variant="bodyMuted">of ${faabTotal} season budget</Text>
             </View>
-            <View className="h-12 w-12 items-center justify-center rounded-2xl bg-foreground">
+            <View style={S.walletIcon}>
               <Wallet size={20} color={c.background} />
             </View>
           </View>
-          <View className="border-t border-hairline px-6 py-4">
-            <View className="h-2 overflow-hidden rounded-full bg-muted">
-              <View className="h-full rounded-full bg-foreground" style={{ width: `${(faabSpent / faabTotal) * 100}%` }} />
+          <Divider />
+          <View style={{ paddingHorizontal: 24, paddingVertical: 16 }}>
+            <View style={S.progressTrackLg}>
+              <View style={[S.progressFill, { width: `${(faabSpent / faabTotal) * 100}%`, backgroundColor: hex.foreground }]} />
             </View>
-            <View className="mt-2 flex-row items-center justify-between">
-              <Text className="text-[12px] text-muted-foreground">Bids placed ${faabSpent}</Text>
-              <Text className="text-[12px] text-muted-foreground">{claims.length} pending</Text>
+            <View style={[layout.rowBetween, { marginTop: 8 }]}>
+              <Text variant="bodyMuted">Bids placed ${faabSpent}</Text>
+              <Text variant="bodyMuted">{claims.length} pending</Text>
             </View>
           </View>
         </Card>
@@ -1288,36 +1359,41 @@ function WaiversPane({ synced, platform, onPlayer }: { synced: boolean; platform
             <EmptyState icon={Wallet} title="No pending claims" sub="Add players from the pool below." />
           ) : (
             claims.map((claim, i) => (
-              <View key={claim.id} className={cn('px-5 py-4', i > 0 ? 'border-t border-hairline' : '')}>
-                <View className="flex-row items-center gap-3">
-                  <View className="h-9 w-9 items-center justify-center rounded-full bg-muted">
-                    <Text className="text-[12px] font-semibold">{claim.priority}</Text>
-                  </View>
-                  <Pressable onPress={() => onPlayer({ name: claim.add, pos: claim.pos, team: claim.team })} className="min-w-0 flex-1">
-                    <Text className="text-[14px] tracking-tightish" numberOfLines={1}>Add <Text className="font-semibold">{claim.add}</Text></Text>
-                    <Text className="text-[12px] text-muted-foreground" numberOfLines={1}>Drop {claim.drop}</Text>
-                  </Pressable>
-                  {hosted ? (
-                    <Pressable onPress={() => removeClaim(claim.id)} className="h-8 w-8 items-center justify-center rounded-full bg-danger/10">
-                      <X size={16} color={c.danger} />
-                    </Pressable>
-                  ) : null}
-                </View>
-                <View className="mt-3 flex-row items-center gap-2">
-                  <Text className="text-[11px] uppercase tracking-widest text-muted-foreground">FAAB</Text>
-                  {hosted ? (
-                    <View className="flex-row items-center gap-2 rounded-full bg-muted px-1.5 py-1">
-                      <Pressable onPress={() => adjustBid(claim.id, -1)} className="h-7 w-7 items-center justify-center rounded-full bg-background">
-                        <Minus size={14} color={c.foreground} />
-                      </Pressable>
-                      <Text className="min-w-[40px] text-center text-[14px] font-semibold tabular-nums">${claim.bid}</Text>
-                      <Pressable onPress={() => adjustBid(claim.id, 1)} className="h-7 w-7 items-center justify-center rounded-full bg-background">
-                        <Plus size={14} color={c.foreground} />
-                      </Pressable>
+              <View key={claim.id}>
+                {i > 0 ? <Divider /> : null}
+                <View style={{ paddingHorizontal: 20, paddingVertical: 16 }}>
+                  <View style={layout.row}>
+                    <View style={[S.iconCircle, { width: 36, height: 36 }]}>
+                      <Text variant="bodySm">{claim.priority}</Text>
                     </View>
-                  ) : (
-                    <View className="rounded-full bg-foreground/5 px-3 py-1"><Text className="text-[12px] font-semibold">${claim.bid}</Text></View>
-                  )}
+                    <Pressable onPress={() => onPlayer({ name: claim.add, pos: claim.pos, team: claim.team })} style={[layout.flex1, { minWidth: 0, marginLeft: 12 }]}>
+                      <Text variant="bodySm" numberOfLines={1}>
+                        Add <Text variant="bodySm">{claim.add}</Text>
+                      </Text>
+                      <Text variant="bodyMuted" numberOfLines={1}>Drop {claim.drop}</Text>
+                    </Pressable>
+                    {hosted ? (
+                      <Pressable onPress={() => removeClaim(claim.id)} style={S.dangerIconBtn}>
+                        <X size={16} color={c.danger} />
+                      </Pressable>
+                    ) : null}
+                  </View>
+                  <View style={[layout.row, { gap: 8, marginTop: 12 }]}>
+                    <Text variant="eyebrow">FAAB</Text>
+                    {hosted ? (
+                      <View style={S.faabStepper}>
+                        <Pressable onPress={() => adjustBid(claim.id, -1)} style={S.faabStepBtn}>
+                          <Minus size={14} color={c.foreground} />
+                        </Pressable>
+                        <Text variant="bodySm" style={{ minWidth: 40, textAlign: 'center' }}>${claim.bid}</Text>
+                        <Pressable onPress={() => adjustBid(claim.id, 1)} style={S.faabStepBtn}>
+                          <Plus size={14} color={c.foreground} />
+                        </Pressable>
+                      </View>
+                    ) : (
+                      <View style={surfaces.pillMuted}><Text variant="bodySm">${claim.bid}</Text></View>
+                    )}
+                  </View>
                 </View>
               </View>
             ))
@@ -1328,30 +1404,33 @@ function WaiversPane({ synced, platform, onPlayer }: { synced: boolean; platform
       <TeamSection title="Available players" caption="Free-agent pool">
         <Card>
           {AVAILABLE_PLAYERS.map((p, i) => (
-            <View key={p.name} className={cn('flex-row items-center gap-3 px-5 py-3.5', i > 0 ? 'border-t border-hairline' : '')}>
-              <Pressable onPress={() => onPlayer(p)} className="min-w-0 flex-1 flex-row items-center gap-3">
-                <View className="h-9 w-10 shrink-0 items-center justify-center rounded-xl bg-muted">
-                  <Text className="text-[11px] font-semibold tracking-wider text-muted-foreground">{p.pos}</Text>
-                </View>
-                <View className="min-w-0 flex-1">
-                  <Text className="text-[15px] font-medium tracking-tightish" numberOfLines={1}>{p.name}</Text>
-                  <Text className="text-[12px] text-muted-foreground" numberOfLines={1}>{p.team} · {p.ownership} rostered</Text>
-                </View>
-                <Text className="w-12 text-right text-[15px] font-semibold tabular-nums tracking-tightish">{p.proj?.toFixed(1)}</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setClaims((cs) => [...cs, { id: `c${Date.now()}`, add: p.name, pos: p.pos, team: p.team, drop: '—', bid: 1, priority: cs.length + 1 }])}
-                className="h-9 w-9 items-center justify-center rounded-full bg-foreground"
-              >
-                <UserPlus size={16} color={c.background} />
-              </Pressable>
+            <View key={p.name}>
+              {i > 0 ? <Divider /> : null}
+              <View style={layout.listRow}>
+                <Pressable onPress={() => onPlayer(p)} style={[layout.row, layout.flex1, { minWidth: 0 }]}>
+                  <View style={[S.slotBadge, { height: 36, borderRadius: 12 }]}>
+                    <Text variant="caption">{p.pos}</Text>
+                  </View>
+                  <View style={[layout.flex1, { minWidth: 0, marginLeft: 12 }]}>
+                    <Text variant="body" numberOfLines={1}>{p.name}</Text>
+                    <Text variant="bodyMuted" numberOfLines={1}>{p.team} · {p.ownership} rostered</Text>
+                  </View>
+                  <Text variant="body" style={S.scoreCol}>{p.proj?.toFixed(1)}</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setClaims((cs) => [...cs, { id: `c${Date.now()}`, add: p.name, pos: p.pos, team: p.team, drop: '—', bid: 1, priority: cs.length + 1 }])}
+                  style={S.primaryCircle}
+                >
+                  <UserPlus size={16} color={c.background} />
+                </Pressable>
+              </View>
             </View>
           ))}
         </Card>
       </TeamSection>
 
       <TeamSection title="AI top targets">
-        <View className="gap-3">
+        <View style={layout.stackSm}>
           {waiverTargets.map((w) => (
             <WaiverCard key={w.id} target={w} synced={synced} platform={platform} />
           ))}
@@ -1362,30 +1441,34 @@ function WaiversPane({ synced, platform, onPlayer }: { synced: boolean; platform
 }
 
 function WaiverCard({ target, synced, platform }: { target: WaiverTarget; synced: boolean; platform?: string }) {
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+  const { scheme } = useTheme();
+  const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
   return (
-    <View className="rounded-[30px] bg-surface-elevated p-4">
-      <View className="flex-row items-start gap-3">
-        <View className="h-10 w-10 items-center justify-center rounded-2xl bg-foreground/5">
-          <Text className="text-[11px] font-semibold">{target.pos}</Text>
+    <View style={S.waiverCard}>
+      <View style={layout.rowStart}>
+        <View style={[surfaces.iconBox, { backgroundColor: `rgba(${ink},0.06)` }]}>
+          <Text variant="caption">{target.pos}</Text>
         </View>
-        <View className="min-w-0 flex-1">
-          <View className="flex-row items-center gap-2">
+        <View style={[layout.flex1, { minWidth: 0 }]}>
+          <View style={[layout.row, { gap: 8 }]}>
             <ConfidencePill confidence={target.confidence} />
-            <Text className="text-[11px] text-muted-foreground">{target.team}</Text>
+            <Text variant="caption">{target.team}</Text>
           </View>
-          <Text className="mt-1 text-[15px] font-semibold tracking-tightish">{target.add}</Text>
-          <Text className="text-[12px] text-muted-foreground">Drop {target.drop} · {target.projectedImpact}</Text>
-          <Text className="mt-2 text-[12px] leading-relaxed text-muted-foreground">{target.reason}</Text>
+          <Text variant="body" style={{ marginTop: 4 }}>{target.add}</Text>
+          <Text variant="bodyMuted">Drop {target.drop} · {target.projectedImpact}</Text>
+          <Text variant="bodyMuted" style={{ marginTop: 8 }}>{target.reason}</Text>
         </View>
-        <View className="items-end">
-          <Text className="text-[18px] font-semibold tabular-nums">{target.opportunity}</Text>
-          <Text className="text-[9px] uppercase tracking-widest text-muted-foreground">Opp</Text>
+        <View style={layout.alignEnd}>
+          <Text variant="titleLg">{target.opportunity}</Text>
+          <Text variant="caption">Opp</Text>
         </View>
       </View>
-      <View className="mt-3 flex-row items-center gap-2">
-        <View className="rounded-full bg-foreground/5 px-3 py-1.5"><Text className="text-[11px] font-semibold">FAAB ${target.faab}</Text></View>
-        <Pressable className="flex-1 items-center rounded-full bg-foreground py-2">
-          <Text className="text-[12px] font-semibold text-background">{synced ? `Open in ${platform}` : 'Add Waiver Claim'}</Text>
+      <View style={[layout.row, { gap: 8, marginTop: 12 }]}>
+        <View style={surfaces.pillMuted}><Text variant="caption">FAAB ${target.faab}</Text></View>
+        <Pressable style={[S.sendBtn, layout.flex1, { marginTop: 0, height: 36 }]}>
+          <Text variant="caption" style={{ color: hex.background }}>{synced ? `Open in ${platform}` : 'Add Waiver Claim'}</Text>
         </Pressable>
       </View>
     </View>
@@ -1420,72 +1503,74 @@ function PlayerSheet({
   canDrop?: boolean;
   onRequestDrop?: (p: PlayerDetail) => void;
 }) {
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<ProfileTab>('overview');
   if (!player) return null;
   return (
     <Modal visible={!!player} animationType="slide" onRequestClose={onClose}>
-      <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
-        <View className="flex-row items-center justify-between px-5 pb-2 pt-4">
-          <Pressable onPress={onClose} className="h-9 w-9 items-center justify-center rounded-full bg-muted">
+      <View style={[S.sheetRoot, { paddingTop: insets.top }]}>
+        <View style={S.sheetHeader}>
+          <Pressable onPress={onClose} style={S.iconCircleSm}>
             <X size={16} color={c.foreground} />
           </Pressable>
-          <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Player profile</Text>
-          <View className="h-9 w-9" />
+          <Text variant="eyebrow">Player profile</Text>
+          <View style={{ width: 36, height: 36 }} />
         </View>
-        <View className="flex-1 px-5">
-          <View className="rounded-[28px] bg-surface-elevated p-5">
-            <View className="flex-row items-start gap-3">
-              <AvatarImage src={playerAvatar(player.name + player.team)} name={player.name} className="h-14 w-14" />
-              <View className="min-w-0 flex-1">
-                <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+        <View style={S.sheetBody}>
+          <View style={S.profileCard}>
+            <View style={layout.rowStart}>
+              <AvatarImage src={playerAvatar(player.name + player.team)} name={player.name} size={56} />
+              <View style={[layout.flex1, { minWidth: 0 }]}>
+                <Text variant="eyebrow">
                   {player.pos} · {player.team}{player.rank ? ` · ${player.rank}` : ''}
                 </Text>
-                <Text className="text-[22px] font-semibold tracking-tighter2" numberOfLines={1}>{player.name}</Text>
-                {player.opp ? <Text className="mt-0.5 text-[12px] text-muted-foreground">{player.opp}</Text> : null}
+                <Text variant="statValue" numberOfLines={1}>{player.name}</Text>
+                {player.opp ? <Text variant="bodyMuted" style={{ marginTop: 2 }}>{player.opp}</Text> : null}
               </View>
-              <View className="items-end">
-                <Text className="text-[24px] font-semibold tabular-nums">{player.proj?.toFixed(1) ?? '—'}</Text>
-                <Text className="text-[10px] uppercase tracking-widest text-muted-foreground">proj</Text>
+              <View style={layout.alignEnd}>
+                <Text variant="scoreLG">{player.proj?.toFixed(1) ?? '—'}</Text>
+                <Text variant="caption">proj</Text>
               </View>
             </View>
 
             {player.status === 'q' ? (
-              <View className="mt-3 flex-row items-center gap-2 rounded-2xl bg-warning/15 px-3 py-2">
+              <View style={[layout.row, { gap: 8, marginTop: 12, borderRadius: 16, backgroundColor: toneBg.warning, paddingHorizontal: 12, paddingVertical: 8 }]}>
                 <AlertTriangle size={14} color={c.warning} />
-                <Text className="text-[12px] font-medium">Questionable</Text>
-                {player.note ? <Text className="text-[12px] text-muted-foreground">· {player.note}</Text> : null}
+                <Text variant="bodyMuted">Questionable</Text>
+                {player.note ? <Text variant="bodyMuted">· {player.note}</Text> : null}
               </View>
             ) : null}
             {player.status === 'o' ? (
-              <View className="mt-3 flex-row items-center gap-2 rounded-2xl bg-danger/15 px-3 py-2">
+              <View style={[layout.row, { gap: 8, marginTop: 12, borderRadius: 16, backgroundColor: toneBg.danger, paddingHorizontal: 12, paddingVertical: 8 }]}>
                 <AlertTriangle size={14} color={c.danger} />
-                <Text className="text-[12px] font-medium text-danger">Out</Text>
+                <Text variant="bodyMuted" style={{ color: toneFg.danger }}>Out</Text>
               </View>
             ) : null}
 
-            <View className="mt-4 flex-row gap-2">
-              <Pressable className="h-11 flex-1 items-center justify-center rounded-full bg-background">
-                <Text className="text-[13px] font-semibold">Compare</Text>
+            <View style={S.profileActions}>
+              <Pressable style={[S.profileBtn, { backgroundColor: hex.background }]}>
+                <Text variant="button">Compare</Text>
               </Pressable>
-              <Pressable className="h-11 flex-1 items-center justify-center rounded-full bg-foreground">
-                <Text className="text-[13px] font-semibold text-background">{synced ? `Open in ${platform}` : 'Edit lineup'}</Text>
+              <Pressable style={[S.profileBtn, { backgroundColor: hex.foreground }]}>
+                <Text variant="button" style={{ color: hex.background }}>{synced ? `Open in ${platform}` : 'Edit lineup'}</Text>
               </Pressable>
             </View>
             {canDrop ? (
-              <Pressable onPress={() => onRequestDrop?.(player)} className="mt-2 h-11 w-full flex-row items-center justify-center gap-1.5 rounded-full bg-destructive/10">
+              <Pressable onPress={() => onRequestDrop?.(player)} style={S.dropBtn}>
                 <X size={16} color={c.destructive} />
-                <Text className="text-[13px] font-semibold text-destructive">Drop player</Text>
+                <Text variant="button" style={{ color: c.destructive }}>Drop player</Text>
               </Pressable>
             ) : null}
           </View>
 
-          <View className="mt-4">
+          <View style={{ marginTop: 16 }}>
             <Segmented tabs={(['overview', 'performance', 'health', 'community'] as ProfileTab[]).map((t) => ({ key: t, label: t[0].toUpperCase() + t.slice(1) }))} value={tab} onChange={setTab} />
           </View>
 
-          <View className="mt-4 flex-1">
+          <View style={[layout.fill, { marginTop: 16 }]}>
             {tab === 'overview' ? <ProfileOverview player={player} /> : null}
             {tab === 'performance' ? <ProfilePerformance /> : null}
             {tab === 'health' ? <ProfileHealth player={player} /> : null}
@@ -1498,23 +1583,25 @@ function PlayerSheet({
 }
 
 function ProfileOverview({ player }: { player: PlayerDetail }) {
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
-    <View className="gap-4">
-      <View className="flex-row gap-2">
+    <View style={layout.sectionBlock}>
+      <View style={[layout.row, { gap: 8 }]}>
         <SheetStat label="Proj" value={player.proj?.toFixed(1) ?? '—'} />
         <SheetStat label="Avg" value={player.avg?.toFixed(1) ?? '—'} />
         <SheetStat label="Total" value={player.seasonPts?.toFixed(0) ?? '—'} />
         <SheetStat label="Value" value={player.value?.toString() ?? '—'} />
       </View>
       {player.ownership ? (
-        <View className="flex-row items-center justify-between rounded-2xl bg-surface-elevated px-4 py-3">
-          <Text className="text-[12px] text-muted-foreground">Rostered</Text>
-          <Text className="text-[12px] font-semibold">{player.ownership}</Text>
+        <View style={S.rosteredRow}>
+          <Text variant="bodyMuted">Rostered</Text>
+          <Text variant="bodySm">{player.ownership}</Text>
         </View>
       ) : null}
-      <View className="rounded-2xl bg-surface-elevated p-4">
-        <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Fantasy outlook</Text>
-        <Text className="mt-1 text-[13px] leading-snug tracking-tightish">
+      <View style={S.outlookCard}>
+        <Text variant="eyebrow">Fantasy outlook</Text>
+        <Text variant="bodySm" style={{ marginTop: 4 }}>
           High-floor producer with consistent volume regardless of game script. Schedule turns favorable through the playoff stretch.
         </Text>
       </View>
@@ -1523,6 +1610,8 @@ function ProfileOverview({ player }: { player: PlayerDetail }) {
 }
 
 function ProfilePerformance() {
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const log = PROFILE_GAME_LOG;
   const avg = log.reduce((s, g) => s + g.pts, 0) / log.length;
@@ -1545,18 +1634,21 @@ function ProfilePerformance() {
   const yTicks = [0, yMax / 2, yMax];
 
   return (
-    <View className="gap-4">
-      <View className="rounded-2xl bg-surface-elevated p-4">
-        <View className="mb-3 flex-row items-center justify-between">
+    <View style={layout.sectionBlock}>
+      <View style={S.chartCard}>
+        <View style={[layout.rowBetween, { marginBottom: 12 }]}>
           <View>
-            <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Points per week</Text>
-            <Text className="mt-0.5 text-[13px] tracking-tightish">
-              Trend <Text className={trendDir === 'up' ? 'text-success' : 'text-danger'}>{trendDir === 'up' ? '▲' : '▼'} {Math.abs(slope).toFixed(2)} pts/wk</Text>
+            <Text variant="eyebrow">Points per week</Text>
+            <Text variant="bodySm" style={{ marginTop: 2 }}>
+              Trend{' '}
+              <Text variant="bodySm" style={{ color: trendDir === 'up' ? hex.success : hex.danger }}>
+                {trendDir === 'up' ? '▲' : '▼'} {Math.abs(slope).toFixed(2)} pts/wk
+              </Text>
             </Text>
           </View>
-          <View className="items-end">
-            <Text className="text-[18px] font-semibold tabular-nums">{avg.toFixed(1)}</Text>
-            <Text className="text-[10px] uppercase tracking-widest text-muted-foreground">avg</Text>
+          <View style={layout.alignEnd}>
+            <Text variant="titleLg">{avg.toFixed(1)}</Text>
+            <Text variant="caption">avg</Text>
           </View>
         </View>
         <Svg viewBox={`0 0 ${W} ${H}`} width="100%" height={176}>
@@ -1584,12 +1676,15 @@ function ProfilePerformance() {
         </Svg>
       </View>
 
-      <View className="overflow-hidden rounded-2xl bg-surface-elevated">
+      <View style={surfaces.roundedCard}>
         {log.map((g, i) => (
-          <View key={g.wk} className={cn('flex-row items-center justify-between px-4 py-2.5', i > 0 ? 'border-t border-foreground/5' : '')}>
-            <Text className="w-10 text-[13px] text-muted-foreground tabular-nums">W{g.wk}</Text>
-            <Text className="flex-1 text-[13px] text-muted-foreground">{g.opp}</Text>
-            <Text className="text-[13px] font-semibold tabular-nums">{g.pts.toFixed(1)}</Text>
+          <View key={g.wk}>
+            {i > 0 ? <View style={S.logRowBorder} /> : null}
+            <View style={S.logRow}>
+              <Text variant="bodySm" style={{ width: 40, color: hex.mutedForeground }}>W{g.wk}</Text>
+              <Text variant="bodySm" style={[layout.flex1, { color: hex.mutedForeground }]}>{g.opp}</Text>
+              <Text variant="bodySm">{g.pts.toFixed(1)}</Text>
+            </View>
           </View>
         ))}
       </View>
@@ -1598,21 +1693,23 @@ function ProfilePerformance() {
 }
 
 function ProfileHealth({ player }: { player: PlayerDetail }) {
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const injured = player.status === 'q' || player.status === 'o';
   return (
-    <View className="gap-4">
-      <View className="rounded-2xl bg-surface-elevated p-4">
-        <View className="flex-row items-center justify-between">
+    <View style={layout.sectionBlock}>
+      <View style={S.chartCard}>
+        <View style={layout.rowBetween}>
           <View>
-            <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Fantasy doctor</Text>
-            <Text className="mt-0.5 text-[15px] font-semibold tracking-tightish">{injured ? 'Monitor closely' : 'Cleared to play'}</Text>
+            <Text variant="eyebrow">Fantasy doctor</Text>
+            <Text variant="body" style={{ marginTop: 2 }}>{injured ? 'Monitor closely' : 'Cleared to play'}</Text>
           </View>
-          <View className="items-end">
-            <Text className="text-[22px] font-semibold tabular-nums">{injured ? '72%' : '97%'}</Text>
-            <Text className="text-[10px] uppercase tracking-widest text-muted-foreground">to play</Text>
+          <View style={layout.alignEnd}>
+            <Text variant="statValue">{injured ? '72%' : '97%'}</Text>
+            <Text variant="caption">to play</Text>
           </View>
         </View>
-        <View className="mt-3 flex-row flex-wrap gap-2">
+        <View style={[layout.rowWrap, { gap: 8, marginTop: 12 }]}>
           <SheetStat label="Body part" value={injured ? 'Calf' : '—'} half />
           <SheetStat label="Severity" value={injured ? 'Mild' : 'None'} half />
           <SheetStat label="Practice" value={injured ? 'Limited' : 'Full'} half />
@@ -1620,8 +1717,8 @@ function ProfileHealth({ player }: { player: PlayerDetail }) {
         </View>
       </View>
       {player.note ? (
-        <View className="rounded-2xl bg-surface-elevated p-4">
-          <Text className="text-[13px] leading-snug tracking-tightish">{player.note}</Text>
+        <View style={S.outlookCard}>
+          <Text variant="bodySm">{player.note}</Text>
         </View>
       ) : null}
     </View>
@@ -1629,11 +1726,13 @@ function ProfileHealth({ player }: { player: PlayerDetail }) {
 }
 
 function ProfileCommunity({ player }: { player: PlayerDetail }) {
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   return (
-    <View className="rounded-2xl bg-surface-elevated p-4">
+    <View style={S.outlookCard}>
       <MessageCircle size={16} color={c.mutedForeground} />
-      <Text className="mt-2 text-[13px] leading-snug tracking-tightish text-muted-foreground">
+      <Text variant="bodySm" style={{ marginTop: 8, color: hex.mutedForeground }}>
         Community discussion for {player.name} will appear here. Share takes, ask questions, and react.
       </Text>
     </View>
@@ -1641,10 +1740,12 @@ function ProfileCommunity({ player }: { player: PlayerDetail }) {
 }
 
 function SheetStat({ label, value, half }: { label: string; value: string; half?: boolean }) {
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
-    <View className={cn('items-center rounded-2xl bg-background px-3 py-2.5', half ? 'w-[48%]' : 'flex-1')}>
-      <Text className="text-[18px] font-semibold tracking-tighter2 tabular-nums">{value}</Text>
-      <Text className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</Text>
+    <View style={[S.sheetStat, half ? S.sheetStatHalf : S.sheetStatFlex]}>
+      <Text variant="titleLg">{value}</Text>
+      <Text variant="caption">{label}</Text>
     </View>
   );
 }
@@ -1665,37 +1766,42 @@ function SwapSheet({
   onClose: () => void;
   onPick: (benchIdx: number) => void;
 }) {
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={open && !!currentStarter} transparent animationType="slide" onRequestClose={onClose}>
-      <View className="flex-1 justify-end bg-black/50">
-        <Pressable className="flex-1" onPress={onClose} />
-        <View className="rounded-t-[28px] bg-background pt-2" style={{ paddingBottom: Math.max(insets.bottom, 16) }}>
-          <View className="items-center pb-3"><View className="h-1.5 w-10 rounded-full bg-foreground/15" /></View>
-          <View className="flex-row items-center justify-between px-5 pb-3">
+      <View style={[StyleSheet.absoluteFillObject, { justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
+        <View style={[S.swapSheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+          <View style={S.swapHandle}>
+            <View style={S.swapHandleBar} />
+          </View>
+          <View style={[layout.rowBetween, { paddingHorizontal: 20, paddingBottom: 12 }]}>
             <View>
-              <Text className="text-[10px] uppercase tracking-widest text-muted-foreground">Swap {slot}</Text>
-              <Text className="text-[17px] font-semibold tracking-tighter2">{currentStarter?.name}</Text>
+              <Text variant="caption">Swap {slot}</Text>
+              <Text variant="titleLg">{currentStarter?.name}</Text>
             </View>
-            <Pressable onPress={onClose} className="h-8 w-8 items-center justify-center rounded-full bg-foreground/5">
+            <Pressable onPress={onClose} style={S.iconCircleSm}>
               <X size={16} color={c.foreground} />
             </Pressable>
           </View>
-          <View className="px-4 pb-4">
-            <Text className="px-2 pb-2 text-[11px] uppercase tracking-widest text-muted-foreground">Bench · eligible</Text>
-            <View className="overflow-hidden rounded-[24px] bg-surface-elevated">
+          <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+            <Text variant="eyebrow" style={{ paddingHorizontal: 8, paddingBottom: 8 }}>Bench · eligible</Text>
+            <View style={surfaces.roundedCard}>
               {bench.map((p, i) => {
                 const eligible = slotEligible(slot, p.pos);
                 return (
-                  <Pressable key={p.name} disabled={!eligible} onPress={() => onPick(i)} className={cn(!eligible ? 'opacity-40' : '')}>
-                    <View className={cn('flex-row items-center gap-3 px-4 py-3', i > 0 ? 'border-t border-hairline' : '')}>
-                      <AvatarImage src={playerAvatar(p.name + p.team)} name={p.name} className="h-10 w-10" />
-                      <View className="min-w-0 flex-1">
-                        <Text className="text-[15px] font-medium tracking-tightish" numberOfLines={1}>{p.name}</Text>
-                        <Text className="text-[12px] text-muted-foreground" numberOfLines={1}>{p.pos} · {p.team} · {eligible ? 'Eligible' : 'Not eligible'}</Text>
+                  <Pressable key={p.name} disabled={!eligible} onPress={() => onPick(i)} style={!eligible ? { opacity: 0.4 } : undefined}>
+                    {i > 0 ? <Divider /> : null}
+                    <View style={[layout.listRow, { paddingHorizontal: 16, paddingVertical: 12 }]}>
+                      <AvatarImage src={playerAvatar(p.name + p.team)} name={p.name} size={40} />
+                      <View style={[layout.flex1, { minWidth: 0 }]}>
+                        <Text variant="body" numberOfLines={1}>{p.name}</Text>
+                        <Text variant="bodyMuted" numberOfLines={1}>{p.pos} · {p.team} · {eligible ? 'Eligible' : 'Not eligible'}</Text>
                       </View>
-                      <Text className="w-12 text-right text-[15px] font-semibold tabular-nums">{p.proj?.toFixed(1)}</Text>
+                      <Text variant="body" style={S.scoreCol}>{p.proj?.toFixed(1)}</Text>
                     </View>
                   </Pressable>
                 );
@@ -1710,31 +1816,379 @@ function SwapSheet({
 
 // ====================== Confirm drop ======================
 function ConfirmDropDialog({ player, onCancel, onConfirm }: { player: PlayerDetail | null; onCancel: () => void; onConfirm: () => void }) {
+  const S = useTeamStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   return (
     <Modal visible={!!player} transparent animationType="fade" onRequestClose={onCancel}>
-      <Pressable onPress={onCancel} className="flex-1 items-center justify-center bg-black/60 px-6">
-        <Pressable onPress={(e) => e.stopPropagation()} className="w-full max-w-[360px] overflow-hidden rounded-[24px] bg-background">
-          <View className="items-center gap-3 px-5 pb-4 pt-5">
-            <View className="h-11 w-11 items-center justify-center rounded-full bg-destructive/15">
+      <View style={[StyleSheet.absoluteFillObject, { alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 24 }]}>
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={onCancel} />
+        <View style={S.confirmDialog}>
+          <View style={{ alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingBottom: 16, paddingTop: 20 }}>
+            <View style={S.confirmIcon}>
               <AlertTriangle size={20} color={c.destructive} />
             </View>
-            <Text className="text-[17px] font-semibold tracking-tighter2">Drop {player?.name}?</Text>
-            <Text className="text-center text-[13px] leading-snug text-muted-foreground">
+            <Text variant="titleLg">Drop {player?.name}?</Text>
+            <Text variant="bodySm" style={{ textAlign: 'center', color: hex.mutedForeground }}>
               They'll return to the free-agent pool. This roster spot will be empty until you add a replacement.
             </Text>
           </View>
-          <View className="flex-row border-t border-hairline">
-            <Pressable onPress={onCancel} className="h-12 flex-1 items-center justify-center">
-              <Text className="text-[14px] font-semibold tracking-tightish">Cancel</Text>
+          <View style={layout.row}>
+            <Pressable onPress={onCancel} style={[S.confirmAction, layout.flex1]}>
+              <Text variant="bodySm">Cancel</Text>
             </Pressable>
-            <View className="w-px bg-hairline" />
-            <Pressable onPress={onConfirm} className="h-12 flex-1 items-center justify-center">
-              <Text className="text-[14px] font-semibold tracking-tightish text-destructive">Drop</Text>
+            <View style={S.vDivider} />
+            <Pressable onPress={onConfirm} style={[S.confirmAction, layout.flex1]}>
+              <Text variant="bodySm" style={{ color: c.destructive }}>Drop</Text>
             </Pressable>
           </View>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
+}
+
+function useTeamStyles() {
+  const { hex, toneBg } = useThemeTokens();
+  const { scheme } = useTheme();
+  const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
+  return useMemo(() => StyleSheet.create({
+
+  heroInput: {
+    fontSize: 34,
+    fontWeight: '600',
+    letterSpacing: -0.6,
+    color: hex.foreground,
+  },
+  matchSide: { flex: 1, paddingHorizontal: 24, paddingVertical: 20 },
+  vDivider: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: hex.hairline,
+    alignSelf: 'stretch',
+  },
+  progressTrackLg: {
+    height: 8,
+    overflow: 'hidden',
+    borderRadius: 9999,
+    backgroundColor: hex.muted,
+  },
+  progressFill: { height: '100%', borderRadius: 9999 },
+  editPill: { borderRadius: 9999, paddingHorizontal: 12, paddingVertical: 4 },
+  editPillActive: { backgroundColor: hex.foreground },
+  editPillIdle: { backgroundColor: `rgba(${ink},0.06)` },
+  slotBadge: {
+    height: 28,
+    width: 36,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: hex.muted,
+  },
+  avatarWrap: { position: 'relative' },
+  liveDotBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    borderRadius: 9999,
+    backgroundColor: hex.background,
+    padding: 2,
+  },
+  liveDot: { width: 10, height: 10, borderRadius: 9999 },
+  scoreCol: { width: 48, textAlign: 'right' },
+  statusPill: { borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 2 },
+  navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  navSpacer: { width: 48 },
+  tradeTile: {
+    flex: 1,
+    borderRadius: 28,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: hex.hairline,
+    backgroundColor: hex.surfaceElevated,
+    padding: 20,
+  },
+  tradeTileIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: hex.foreground,
+  },
+  iconCircle: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9999,
+    backgroundColor: hex.muted,
+  },
+  iconCircleSm: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9999,
+    backgroundColor: hex.muted,
+  },
+  primaryCircle: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9999,
+    backgroundColor: hex.foreground,
+  },
+  proposeBtn: {
+    borderRadius: 9999,
+    backgroundColor: hex.foreground,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  selectPill: {
+    height: 28,
+    minWidth: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9999,
+    paddingHorizontal: 8,
+  },
+  selectPillOn: { backgroundColor: hex.foreground },
+  selectPillOff: { backgroundColor: hex.muted },
+  needTag: {
+    height: 56,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+  },
+  needTagOn: { backgroundColor: hex.foreground },
+  needTagOff: { backgroundColor: hex.muted },
+  generateBtn: {
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9999,
+    backgroundColor: hex.foreground,
+  },
+  gradeBadge: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9999,
+  },
+  tradeCol: {
+    flex: 1,
+    borderRadius: 16,
+    backgroundColor: hex.muted,
+    padding: 12,
+  },
+  sendBtn: {
+    marginTop: 12,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9999,
+    backgroundColor: hex.foreground,
+  },
+  stepDot: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9999,
+  },
+  stepDotActive: { backgroundColor: hex.foreground },
+  stepDotIdle: { backgroundColor: hex.muted },
+  actionRow: { flexDirection: 'row', gap: 8 },
+  actionBtn: {
+    height: 44,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9999,
+  },
+  actionBtnSecondary: { backgroundColor: `rgba(${ink},0.06)` },
+  actionBtnPrimary: { backgroundColor: hex.foreground },
+  actionBtnDisabled: { opacity: 0.5 },
+  evalCell: {
+    width: '48%',
+    borderRadius: 16,
+    backgroundColor: hex.background,
+    padding: 12,
+  },
+  ideaCard: {
+    borderRadius: 30,
+    backgroundColor: hex.surfaceElevated,
+    padding: 16,
+  },
+  chatBubble: { borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12 },
+  chatBubbleMe: { backgroundColor: hex.foreground },
+  chatBubbleThem: { backgroundColor: hex.muted },
+  chatInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: hex.hairline,
+    padding: 12,
+  },
+  chatInput: {
+    height: 44,
+    flex: 1,
+    borderRadius: 9999,
+    backgroundColor: hex.muted,
+    paddingHorizontal: 16,
+    fontSize: 14,
+    color: hex.foreground,
+  },
+  walletIcon: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    backgroundColor: hex.foreground,
+  },
+  faabStepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 9999,
+    backgroundColor: hex.muted,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+  },
+  faabStepBtn: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9999,
+    backgroundColor: hex.background,
+  },
+  dangerIconBtn: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9999,
+    backgroundColor: toneBg.danger,
+  },
+  waiverCard: {
+    borderRadius: 30,
+    backgroundColor: hex.surfaceElevated,
+    padding: 16,
+  },
+  sheetRoot: { flex: 1, backgroundColor: hex.background },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    paddingTop: 16,
+  },
+  sheetBody: { flex: 1, paddingHorizontal: 20 },
+  profileCard: {
+    borderRadius: 28,
+    backgroundColor: hex.surfaceElevated,
+    padding: 20,
+  },
+  profileActions: { flexDirection: 'row', gap: 8, marginTop: 16 },
+  profileBtn: {
+    height: 44,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9999,
+  },
+  dropBtn: {
+    marginTop: 8,
+    height: 44,
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 9999,
+    backgroundColor: 'rgba(238,55,52,0.1)',
+  },
+  rosteredRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 16,
+    backgroundColor: hex.surfaceElevated,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  outlookCard: {
+    borderRadius: 16,
+    backgroundColor: hex.surfaceElevated,
+    padding: 16,
+  },
+  chartCard: {
+    borderRadius: 16,
+    backgroundColor: hex.surfaceElevated,
+    padding: 16,
+  },
+  logRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  logRowBorder: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: `rgba(${ink},0.05)`,
+  },
+  sheetStat: {
+    alignItems: 'center',
+    borderRadius: 16,
+    backgroundColor: hex.background,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  sheetStatHalf: { width: '48%' },
+  sheetStatFlex: { flex: 1 },
+  swapSheet: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    backgroundColor: hex.background,
+    paddingTop: 8,
+  },
+  swapHandle: { alignItems: 'center', paddingBottom: 12 },
+  swapHandleBar: {
+    height: 6,
+    width: 40,
+    borderRadius: 9999,
+    backgroundColor: `rgba(${ink},0.15)`,
+  },
+  confirmDialog: {
+    width: '100%',
+    maxWidth: 360,
+    overflow: 'hidden',
+    borderRadius: 24,
+    backgroundColor: hex.background,
+  },
+  confirmIcon: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9999,
+    backgroundColor: toneBg.danger,
+  },
+  confirmAction: {
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: hex.hairline,
+  },
+
+  }), [hex, ink, toneBg]);
 }

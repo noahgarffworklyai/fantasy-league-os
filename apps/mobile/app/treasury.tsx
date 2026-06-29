@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import {
   Bell,
   CheckCircle2,
@@ -24,8 +24,7 @@ import { AICard, AISection } from '@/components/ui/AICard';
 import { useLeague, type League } from '@/lib/league-context';
 import { treasuryInsights } from '@/lib/ai-intelligence';
 import { useNav } from '@/lib/nav';
-import { useColors } from '@/lib/theme';
-import { cn } from '@/lib/cn';
+import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
 
 type PayState = 'paid' | 'pending' | 'overdue' | 'failed' | 'refunded' | 'unpaid';
 type PayoutStructure = 'all' | 'top2' | 'top3' | 'top4' | 'custom';
@@ -60,6 +59,7 @@ const NAME_POOL: { name: string; handle: string }[] = [
 ];
 
 function buildMembers(active: League): Member[] {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const size = active.size ?? active.members ?? 12;
   const paid = active.paidCount ?? active.paid ?? size;
   const pending = active.pendingCount ?? 0;
@@ -119,6 +119,7 @@ const ACTIVITY: ActivityItem[] = [
 type TreasuryView = { kind: 'home' } | { kind: 'pay'; memberId: string } | { kind: 'review' } | { kind: 'settings' };
 
 export default function TreasuryPage() {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const { active, updateLeague } = useLeague();
   const nav = useNav();
   const [view, setView] = useState<TreasuryView>({ kind: 'home' });
@@ -154,7 +155,7 @@ export default function TreasuryPage() {
 
   return (
     <Screen>
-      <View className="gap-5 px-4 pb-6 pt-3">
+      <View style={layout.screen}>
         <TreasuryBar title={title} onBack={goBack} backLabel={view.kind === 'home' ? 'Home' : 'Treasury'} />
 
         {view.kind === 'home' ? (
@@ -247,6 +248,7 @@ function TreasuryHome({
   onReview: () => void;
   onSettings: () => void;
 }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const [tab, setTab] = useState<PotTab>('pot');
   const paidCount = members.filter((m) => m.status === 'paid').length;
@@ -257,43 +259,43 @@ function TreasuryHome({
 
   return (
     <>
-      <View className="rounded-[28px] border border-hairline bg-surface-elevated p-6">
-        <View className="flex-row items-start justify-between gap-3">
-          <View className="min-w-0 flex-1">
-            <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{active.name} · Live pot</Text>
-            <Text className="mt-1 text-[40px] font-semibold tracking-tighter2 tabular-nums">${collected.toLocaleString()}</Text>
-            <Text className="mt-1 text-[13px] tabular-nums text-muted-foreground">of ${totalDue.toLocaleString()} · {paidCount} of {members.length} paid</Text>
+      <View style={surfaces.roundedCardLg}>
+        <View style={[layout.rowStart, { justifyContent: 'space-between' }]}>
+          <View style={[layout.flex1, { minWidth: 0 }]}>
+            <Text variant="eyebrow">{active.name} · Live pot</Text>
+            <Text variant="potAmount" style={{ marginTop: 4, fontVariant: ['tabular-nums'] }}>${collected.toLocaleString()}</Text>
+            <Text variant="subtitle" style={{ marginTop: 4, fontVariant: ['tabular-nums'] }}>of ${totalDue.toLocaleString()} · {paidCount} of {members.length} paid</Text>
           </View>
           {isCommish ? (
-            <Pressable onPress={onSettings} className="h-9 w-9 items-center justify-center rounded-full border border-hairline bg-background">
+            <Pressable onPress={onSettings} style={layout.iconButtonSm}>
               <Settings size={16} color={c.foreground} />
             </Pressable>
           ) : null}
         </View>
-        <View className="mt-5 h-1.5 overflow-hidden rounded-full bg-background">
-          <View className="h-full rounded-full bg-success" style={{ width: `${Math.min(100, pct * 100)}%` }} />
+        <View style={[surfaces.progressTrack, { marginTop: 20, height: 6, backgroundColor: hex.background }]}>
+          <View style={[surfaces.progressFill, { width: `${Math.min(100, pct * 100)}%`, backgroundColor: hex.success }]} />
         </View>
-        <View className="mt-3 flex-row flex-wrap items-center gap-2">
-          <View className={cn('flex-row items-center gap-1 rounded-full px-2.5 py-1', fullyFunded ? 'bg-success/15' : 'border border-hairline bg-background')}>
+        <View style={[layout.rowWrap, { marginTop: 12, alignItems: 'center', gap: 8 }]}>
+          <View style={[layout.row, { gap: 4, borderRadius: 9999, paddingHorizontal: 10, paddingVertical: 4 }, fullyFunded ? { backgroundColor: toneBg.success } : { borderWidth: StyleSheet.hairlineWidth, borderColor: hex.hairline, backgroundColor: hex.background }]}>
             {fullyFunded ? <CheckCircle2 size={12} color={c.success} /> : <CircleDot size={12} color={c.mutedForeground} />}
-            <Text className={cn('text-[11px] font-semibold uppercase tracking-widest', fullyFunded ? 'text-success' : 'text-muted-foreground')}>{fullyFunded ? 'Fully funded' : 'Collecting dues'}</Text>
+            <Text variant="eyebrow" style={{ color: fullyFunded ? hex.success : hex.mutedForeground }}>{fullyFunded ? 'Fully funded' : 'Collecting dues'}</Text>
           </View>
-          <View className="rounded-full border border-hairline bg-background px-2.5 py-1">
-            <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Week {active.week || '—'}</Text>
+          <View style={{ borderRadius: 9999, borderWidth: StyleSheet.hairlineWidth, borderColor: hex.hairline, backgroundColor: hex.background, paddingHorizontal: 10, paddingVertical: 4 }}>
+            <Text variant="eyebrow">Week {active.week || '—'}</Text>
           </View>
-          <Text className="text-[11px] text-muted-foreground">{seasonComplete ? 'Season complete' : 'Updates weekly'}</Text>
+          <Text variant="caption" muted>{seasonComplete ? 'Season complete' : 'Updates weekly'}</Text>
         </View>
       </View>
 
-      <View className="flex-row rounded-full border border-border bg-surface-elevated p-1">
+      <View style={surfaces.segmented}>
         {[
           { key: 'pot' as const, label: 'League Pot' },
           { key: 'payout' as const, label: 'Payout Structure' },
         ].map((t) => {
           const isActive = t.key === tab;
           return (
-            <Pressable key={t.key} onPress={() => setTab(t.key)} className={cn('flex-1 rounded-full py-2', isActive ? 'bg-primary' : '')}>
-              <Text className={cn('text-center text-[13px] font-semibold tracking-tightish', isActive ? 'text-primary-foreground' : 'text-muted-foreground')}>{t.label}</Text>
+            <Pressable key={t.key} onPress={() => setTab(t.key)} style={isActive ? surfaces.segmentedTabActive : surfaces.segmentedTab}>
+              <Text variant="tab" style={{ color: isActive ? hex.primaryForeground : hex.mutedForeground }}>{t.label}</Text>
             </Pressable>
           );
         })}
@@ -305,9 +307,9 @@ function TreasuryHome({
         <PayoutPane active={active} members={members} splits={splits} net={net} seasonComplete={seasonComplete} isCommish={isCommish} onReview={onReview} onSettings={onSettings} />
       )}
 
-      <View className="flex-row items-start gap-2 px-2 pt-1">
+      <View style={[layout.rowStart, { paddingHorizontal: 8, paddingTop: 4 }]}>
         <Lock size={12} color={c.mutedForeground} style={{ marginTop: 2 }} />
-        <Text className="flex-1 text-[11px] leading-snug text-muted-foreground">Payments processed securely. Receipts and transaction history are saved to every member's profile.</Text>
+        <Text variant="caption" muted style={[layout.flex1, { lineHeight: 16 }]}>Payments processed securely. Receipts and transaction history are saved to every member's profile.</Text>
       </View>
     </>
   );
@@ -340,6 +342,7 @@ function PotPane({
   onRefund: (id: string) => void;
   onPay: (id: string) => void;
 }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
     <>
       <AISection title="Treasury insights" caption="AI-powered">
@@ -349,7 +352,7 @@ function PotPane({
       </AISection>
 
       <Section title="Finances">
-        <View className="flex-row flex-wrap gap-2">
+        <View style={[layout.rowWrap, { gap: 8 }]}>
           <Stat label="Collected" value={`$${collected.toLocaleString()}`} />
           <Stat label="Remaining" value={`$${remaining.toLocaleString()}`} accent={remaining > 0} />
           <Stat label="Platform fee" value={`-$${fee.toLocaleString()}`} sub="2.9%" />
@@ -358,7 +361,7 @@ function PotPane({
       </Section>
 
       <Section title="Member payments">
-        <View className="overflow-hidden rounded-[24px] border border-hairline bg-surface-elevated">
+        <View style={[surfaces.roundedCard, { borderWidth: StyleSheet.hairlineWidth, borderColor: hex.hairline }]}>
           {members.map((m, i) => (
             <MemberRow key={m.id} member={m} buyIn={buyIn} isCommish={isCommish} onMarkPaid={() => onMarkPaid(m.id)} onRemind={() => onRemind(m.id)} onRefund={() => onRefund(m.id)} onPay={() => onPay(m.id)} isFirst={i === 0} />
           ))}
@@ -366,12 +369,12 @@ function PotPane({
       </Section>
 
       <Section title="Recent activity">
-        <View className="overflow-hidden rounded-[24px] border border-hairline bg-surface-elevated">
+        <View style={[surfaces.roundedCard, { borderWidth: StyleSheet.hairlineWidth, borderColor: hex.hairline }]}>
           {ACTIVITY.map((a, i) => (
-            <View key={a.id} className={cn('flex-row items-start gap-3 px-4 py-3', i > 0 ? 'border-t border-hairline' : '')}>
-              <View className="mt-1 h-2 w-2 shrink-0 rounded-full bg-success" />
-              <Text className="min-w-0 flex-1 text-[14px] tracking-tightish">{a.title}</Text>
-              <Text className="text-[11px] text-muted-foreground">{a.when}</Text>
+            <View key={a.id} style={[layout.rowStart, { paddingHorizontal: 16, paddingVertical: 12 }, i > 0 && layout.listRowBorder]}>
+              <View style={{ marginTop: 4, height: 8, width: 8, flexShrink: 0, borderRadius: 9999, backgroundColor: hex.success }} />
+              <Text variant="bodySm" style={[layout.flex1, { minWidth: 0 }]}>{a.title}</Text>
+              <Text variant="caption" muted>{a.when}</Text>
             </View>
           ))}
         </View>
@@ -399,6 +402,7 @@ function PayoutPane({
   onReview: () => void;
   onSettings: () => void;
 }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const ranked = useMemo(
     () => members.map((m, i) => ({ id: m.id, name: m.isMe ? (active.teamName ?? m.name) : m.name, isMe: !!m.isMe, seed: i })),
@@ -407,84 +411,84 @@ function PayoutPane({
 
   return (
     <>
-      <Section title={seasonComplete ? 'Final payouts' : 'Live payout projection'} action={<Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{seasonComplete ? 'Final' : 'Updates weekly'}</Text>}>
-        <View className="overflow-hidden rounded-[24px] border border-hairline bg-surface-elevated">
-          <View className="flex-row items-center justify-between border-b border-hairline px-4 py-3">
-            <Text className="text-[12px] text-muted-foreground">Net prize pool</Text>
-            <Text className="text-[15px] font-semibold tabular-nums">${net.toLocaleString()}</Text>
+      <Section title={seasonComplete ? 'Final payouts' : 'Live payout projection'} action={<Text variant="eyebrow">{seasonComplete ? 'Final' : 'Updates weekly'}</Text>}>
+        <View style={[surfaces.roundedCard, { borderWidth: StyleSheet.hairlineWidth, borderColor: hex.hairline }]}>
+          <View style={[layout.rowBetween, { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: hex.hairline, paddingHorizontal: 16, paddingVertical: 12 }]}>
+            <Text variant="bodyMuted">Net prize pool</Text>
+            <Text variant="body" style={{ fontVariant: ['tabular-nums'] }}>${net.toLocaleString()}</Text>
           </View>
           {splits.map((s, i) => {
             const m = ranked[i];
             return (
-              <View key={s.place} className={cn('flex-row items-center gap-3 px-4 py-3.5', i > 0 ? 'border-t border-hairline' : '')}>
-                <View className="h-9 w-9 items-center justify-center rounded-full border border-hairline bg-background">
-                  <Text className="text-[13px] font-semibold tabular-nums">{i + 1}</Text>
+              <View key={s.place} style={[layout.row, { gap: 12, paddingHorizontal: 16, paddingVertical: 14 }, i > 0 && layout.listRowBorder]}>
+                <View style={[layout.iconButtonSm, { width: 36, height: 36 }]}>
+                  <Text variant="bodySm" style={{ fontVariant: ['tabular-nums'] }}>{i + 1}</Text>
                 </View>
-                <View className="min-w-0 flex-1">
-                  <Text className="text-[15px] font-semibold tracking-tightish" numberOfLines={1}>
+                <View style={[layout.flex1, { minWidth: 0 }]}>
+                  <Text variant="body" numberOfLines={1}>
                     {m?.name ?? `Place ${i + 1}`}
-                    {m?.isMe ? <Text className="text-[11px] font-semibold text-muted-foreground"> You</Text> : null}
+                    {m?.isMe ? <Text variant="eyebrow" style={{ textTransform: 'none' }}> You</Text> : null}
                   </Text>
-                  <Text className="text-[12px] text-muted-foreground">{s.pct}% of pool · {s.place}</Text>
+                  <Text variant="bodyMuted">{s.pct}% of pool · {s.place}</Text>
                 </View>
-                <Text className="text-[16px] font-semibold tabular-nums">${s.amount.toLocaleString()}</Text>
+                <Text variant="titleMd" style={{ fontVariant: ['tabular-nums'] }}>${s.amount.toLocaleString()}</Text>
               </View>
             );
           })}
-          <View className="flex-row items-start gap-2 border-t border-hairline px-4 py-3">
+          <View style={[layout.rowStart, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: hex.hairline, paddingHorizontal: 16, paddingVertical: 12 }]}>
             <CircleDot size={12} color={c.mutedForeground} style={{ marginTop: 2 }} />
-            <Text className="flex-1 text-[11px] leading-snug text-muted-foreground">
+            <Text variant="caption" muted style={[layout.flex1, { lineHeight: 16 }]}>
               {seasonComplete ? 'Distributes automatically after commissioner review.' : 'Recalculates each week from live standings. Locks in and pays out when the season ends.'}
             </Text>
           </View>
         </View>
       </Section>
 
-      <Section title="Payout slots" action={isCommish ? <Pressable onPress={onSettings}><Text className="text-[12px] font-semibold tracking-tightish text-success">Edit</Text></Pressable> : undefined}>
-        <View className="flex-row flex-wrap gap-2">
+      <Section title="Payout slots" action={isCommish ? <Pressable onPress={onSettings}><Text variant="captionSuccess">Edit</Text></Pressable> : undefined}>
+        <View style={[layout.rowWrap, { gap: 8 }]}>
           {splits.map((s) => (
-            <View key={s.place} className="w-[31%] rounded-[24px] border border-hairline bg-surface-elevated p-4">
-              <View className="flex-row items-center justify-between">
+            <View key={s.place} style={[surfaces.roundedCard, { width: '31%', padding: 16, borderWidth: StyleSheet.hairlineWidth, borderColor: hex.hairline }]}>
+              <View style={layout.rowBetween}>
                 <Trophy size={16} color={c.mutedForeground} />
-                <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{s.place}</Text>
+                <Text variant="eyebrow">{s.place}</Text>
               </View>
-              <Text className="mt-3 text-[22px] font-semibold tracking-tighter2 tabular-nums">${s.amount.toLocaleString()}</Text>
-              <Text className="text-[11px] text-muted-foreground">{s.pct}% of pool</Text>
+              <Text variant="sectionTitle" style={{ marginTop: 12, fontSize: 22, fontVariant: ['tabular-nums'] }}>${s.amount.toLocaleString()}</Text>
+              <Text variant="caption" muted>{s.pct}% of pool</Text>
             </View>
           ))}
         </View>
       </Section>
 
       <Section title="Payout status">
-        <View className="rounded-[24px] border border-hairline bg-surface-elevated p-5">
+        <View style={[surfaces.roundedCard, { padding: 20, borderWidth: StyleSheet.hairlineWidth, borderColor: hex.hairline }]}>
           {seasonComplete || active.stage === 'playoffs' ? (
             <>
-              <View className="flex-row items-center gap-2">
+              <View style={[layout.row, { gap: 8 }]}>
                 <CheckCircle2 size={12} color={c.success} />
-                <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{seasonComplete ? 'Season complete' : 'Playoffs in progress'}</Text>
+                <Text variant="eyebrow">{seasonComplete ? 'Season complete' : 'Playoffs in progress'}</Text>
               </View>
-              <Text className="mt-2 text-[15px] tracking-tightish">
+              <Text variant="body" style={{ marginTop: 8 }}>
                 {seasonComplete ? 'Final standings imported. Review payouts before they distribute automatically.' : 'Standings are firming up. Projected payouts will lock once the final week ends.'}
               </Text>
               {isCommish && seasonComplete ? (
-                <Pressable onPress={onReview} className="mt-4 flex-row items-center gap-1.5 self-start rounded-full bg-foreground px-4 py-2">
-                  <Text className="text-[13px] font-semibold text-background">Review payouts</Text>
+                <Pressable onPress={onReview} style={[layout.row, { marginTop: 16, gap: 6, alignSelf: 'flex-start', borderRadius: 9999, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: hex.foreground }]}>
+                  <Text variant="button" style={{ color: hex.background }}>Review payouts</Text>
                   <ChevronRight size={14} color={c.background} />
                 </Pressable>
               ) : null}
             </>
           ) : (
             <>
-              <View className="flex-row items-center gap-2">
+              <View style={[layout.row, { gap: 8 }]}>
                 <CircleDot size={12} color={c.mutedForeground} />
-                <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Waiting for season completion</Text>
+                <Text variant="eyebrow">Waiting for season completion</Text>
               </View>
-              <Text className="mt-2 text-[15px] tracking-tightish">Payouts distribute automatically after the final week of the playoffs. No action needed.</Text>
-              <View className="mt-4 flex-row gap-2">
+              <Text variant="body" style={{ marginTop: 8 }}>Payouts distribute automatically after the final week of the playoffs. No action needed.</Text>
+              <View style={[layout.row, { marginTop: 16, gap: 8 }]}>
                 {['Season', 'Review', 'Payout'].map((step, i) => (
-                  <View key={step} className="flex-1 items-center rounded-[16px] border border-hairline bg-background py-2.5">
-                    <Text className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{step}</Text>
-                    <Text className="mt-1 text-[12px] font-semibold tracking-tightish">{i === 0 ? 'In progress' : '—'}</Text>
+                  <View key={step} style={[layout.flex1, layout.centered, { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, borderColor: hex.hairline, backgroundColor: hex.background, paddingVertical: 10 }]}>
+                    <Text variant="eyebrow" style={{ fontSize: 10 }}>{step}</Text>
+                    <Text variant="caption" style={{ marginTop: 4, fontWeight: '600' }}>{i === 0 ? 'In progress' : '—'}</Text>
                   </View>
                 ))}
               </View>
@@ -515,20 +519,25 @@ function MemberRow({
   onRefund: () => void;
   onPay: () => void;
 }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const [open, setOpen] = useState(false);
   return (
-    <View className={isFirst ? '' : 'border-t border-hairline'}>
+    <View style={!isFirst ? layout.listRowBorder : undefined}>
       <Pressable onPress={() => setOpen((o) => !o)}>
-        <View className="flex-row items-center gap-3 px-4 py-3">
+        <View style={[layout.row, { gap: 12, paddingHorizontal: 16, paddingVertical: 12 }]}>
           <Avatar name={m.name} />
-          <View className="min-w-0 flex-1">
-            <View className="flex-row items-center gap-1.5">
-              <Text className="text-[15px] font-medium tracking-tightish" numberOfLines={1}>{m.name}</Text>
-              {m.isMe ? <Text className="text-[11px] font-semibold text-muted-foreground">You</Text> : null}
-              {m.isCommish ? <View className="rounded-full bg-foreground/10 px-1.5 py-0.5"><Text className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">Commish</Text></View> : null}
+          <View style={[layout.flex1, { minWidth: 0 }]}>
+            <View style={[layout.row, { gap: 6 }]}>
+              <Text variant="body" numberOfLines={1}>{m.name}</Text>
+              {m.isMe ? <Text variant="eyebrow" style={{ textTransform: 'none' }}>You</Text> : null}
+              {m.isCommish ? (
+                <View style={[surfaces.pillMuted, { paddingHorizontal: 6, paddingVertical: 2 }]}>
+                  <Text variant="pill" muted style={{ fontSize: 9, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' }}>Commish</Text>
+                </View>
+              ) : null}
             </View>
-            <Text className="text-[12px] text-muted-foreground" numberOfLines={1}>
+            <Text variant="bodyMuted" numberOfLines={1}>
               {m.status === 'paid'
                 ? `${m.method ?? 'Paid'} · ${m.paidOn}`
                 : m.status === 'overdue'
@@ -540,7 +549,7 @@ function MemberRow({
                       : 'Payment failed'}
             </Text>
           </View>
-          <View className="flex-row items-center gap-2">
+          <View style={[layout.row, { gap: 8 }]}>
             <StatusPill status={m.status} amount={buyIn} />
             <ChevronRight size={16} color={c.mutedForeground} style={{ transform: [{ rotate: open ? '90deg' : '0deg' }] }} />
           </View>
@@ -548,7 +557,7 @@ function MemberRow({
       </Pressable>
 
       {open ? (
-        <View className="flex-row flex-wrap gap-2 border-t border-hairline px-4 py-3">
+        <View style={[layout.rowWrap, { gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: hex.hairline, paddingHorizontal: 16, paddingVertical: 12 }]}>
           {m.isMe && m.status !== 'paid' && m.status !== 'refunded' ? <ChipBtn primary onPress={onPay} icon={Wallet}>Pay ${buyIn}</ChipBtn> : null}
           {m.status === 'paid' ? <ChipBtn icon={Receipt}>View receipt</ChipBtn> : null}
           {isCommish && m.status !== 'paid' && m.status !== 'refunded' ? (
@@ -567,6 +576,7 @@ function MemberRow({
 
 /* ------------------------------ PAYMENT PAGE ------------------------------ */
 function PaymentPage({ member, buyIn, fee, onComplete }: { member: Member; buyIn: number; fee: number; onComplete: () => void }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const [method, setMethod] = useState<'apple' | 'google' | 'card' | 'ach'>('apple');
   const [processing, setProcessing] = useState(false);
@@ -577,16 +587,16 @@ function PaymentPage({ member, buyIn, fee, onComplete }: { member: Member; buyIn
   };
 
   return (
-    <View className="gap-5">
-      <View className="rounded-[28px] bg-foreground p-6">
-        <Text className="text-[11px] font-semibold uppercase tracking-widest text-background/60">Pay league dues</Text>
-        <Text className="mt-1 text-[14px] text-background/70">{member.name}</Text>
-        <Text className="mt-4 text-[40px] font-semibold tracking-tighter2 tabular-nums text-background">${buyIn + fee}</Text>
-        <Text className="mt-2 text-[12px] tabular-nums text-background/60">Buy-in ${buyIn} + processing ${fee}</Text>
+    <View style={{ gap: 20 }}>
+      <View style={[surfaces.roundedCardLg, { borderWidth: 0, backgroundColor: hex.foreground, padding: 24 }]}>
+        <Text variant="eyebrow" style={{ color: 'rgba(252,252,252,0.6)' }}>Pay league dues</Text>
+        <Text variant="bodySm" style={{ marginTop: 4, color: 'rgba(252,252,252,0.7)' }}>{member.name}</Text>
+        <Text variant="potAmount" style={{ marginTop: 16, color: hex.background, fontVariant: ['tabular-nums'] }}>${buyIn + fee}</Text>
+        <Text variant="bodyMuted" style={{ marginTop: 8, color: 'rgba(252,252,252,0.6)', fontVariant: ['tabular-nums'] }}>Buy-in ${buyIn} + processing ${fee}</Text>
       </View>
 
       <Section title="Payment method">
-        <View className="overflow-hidden rounded-[24px] bg-surface-elevated">
+        <View style={surfaces.roundedCard}>
           {[
             { id: 'apple' as const, label: 'Apple Pay', icon: CreditCard },
             { id: 'google' as const, label: 'Google Pay', icon: Wallet },
@@ -597,13 +607,13 @@ function PaymentPage({ member, buyIn, fee, onComplete }: { member: Member; buyIn
             const isActive = method === opt.id;
             return (
               <Pressable key={opt.id} onPress={() => setMethod(opt.id)}>
-                <View className={cn('flex-row items-center gap-3 px-4 py-3.5', i > 0 ? 'border-t border-hairline' : '')}>
-                  <View className="h-9 w-9 items-center justify-center rounded-full bg-background">
+                <View style={[layout.row, { gap: 12, paddingHorizontal: 16, paddingVertical: 14 }, i > 0 && layout.listRowBorder]}>
+                  <View style={[surfaces.iconBoxSm, { borderRadius: 9999, backgroundColor: hex.background }]}>
                     <Icon size={16} color={c.foreground} />
                   </View>
-                  <Text className="flex-1 text-[15px] font-medium tracking-tightish">{opt.label}</Text>
-                  <View className={cn('h-5 w-5 items-center justify-center rounded-full border-2', isActive ? 'border-foreground' : 'border-border')}>
-                    {isActive ? <View className="h-2.5 w-2.5 rounded-full bg-foreground" /> : null}
+                  <Text variant="body" style={layout.flex1}>{opt.label}</Text>
+                  <View style={{ height: 20, width: 20, alignItems: 'center', justifyContent: 'center', borderRadius: 9999, borderWidth: 2, borderColor: isActive ? hex.foreground : hex.border }}>
+                    {isActive ? <View style={{ height: 10, width: 10, borderRadius: 9999, backgroundColor: hex.foreground }} /> : null}
                   </View>
                 </View>
               </Pressable>
@@ -613,27 +623,27 @@ function PaymentPage({ member, buyIn, fee, onComplete }: { member: Member; buyIn
       </Section>
 
       <Section title="Timeline">
-        <View className="overflow-hidden rounded-[24px] bg-surface-elevated">
+        <View style={surfaces.roundedCard}>
           {[
             { t: 'Now', what: 'Submit payment' },
             { t: 'Instant', what: 'Receipt issued and recorded' },
             { t: 'End of season', what: 'Auto payout if you place' },
           ].map((row, i) => (
-            <View key={i} className={cn('flex-row items-start gap-3 px-4 py-3', i > 0 ? 'border-t border-hairline' : '')}>
-              <Text className="w-20 shrink-0 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{row.t}</Text>
-              <Text className="flex-1 text-[13px] tracking-tightish">{row.what}</Text>
+            <View key={i} style={[layout.rowStart, { paddingHorizontal: 16, paddingVertical: 12 }, i > 0 && layout.listRowBorder]}>
+              <Text variant="eyebrow" style={{ width: 80, flexShrink: 0 }}>{row.t}</Text>
+              <Text variant="bodyMuted" style={[layout.flex1, { fontSize: 13 }]}>{row.what}</Text>
             </View>
           ))}
         </View>
       </Section>
 
-      <View className="flex-row items-start gap-2 px-2">
+      <View style={[layout.rowStart, { paddingHorizontal: 8 }]}>
         <ShieldCheck size={12} color={c.mutedForeground} style={{ marginTop: 2 }} />
-        <Text className="flex-1 text-[11px] leading-snug text-muted-foreground">Secured by Commissioner Payments. Your payment method is encrypted and stored only with your consent.</Text>
+        <Text variant="caption" muted style={[layout.flex1, { lineHeight: 16 }]}>Secured by Commissioner Payments. Your payment method is encrypted and stored only with your consent.</Text>
       </View>
 
-      <Pressable onPress={submit} disabled={processing} className={cn('items-center rounded-full bg-foreground py-3.5', processing ? 'opacity-50' : '')}>
-        <Text className="text-[15px] font-semibold tracking-tightish text-background">{processing ? 'Processing…' : `Pay $${buyIn + fee}`}</Text>
+      <Pressable onPress={submit} disabled={processing} style={[surfaces.primaryButton, { height: 52, opacity: processing ? 0.5 : 1 }]}>
+        <Text variant="body" style={{ color: hex.background }}>{processing ? 'Processing…' : `Pay $${buyIn + fee}`}</Text>
       </Pressable>
     </View>
   );
@@ -641,33 +651,34 @@ function PaymentPage({ member, buyIn, fee, onComplete }: { member: Member; buyIn
 
 /* ------------------------------ PAYOUT REVIEW ------------------------------ */
 function PayoutReview({ active, collected, fee, net, structure, members }: { active: League; collected: number; fee: number; net: number; structure: PayoutStructure; members: Member[] }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const splits = computeSplits(net, structure);
   const podium = members.slice(0, splits.length);
   const [approved, setApproved] = useState(false);
 
   return (
-    <View className="gap-5">
-      <View className="rounded-[28px] bg-surface-elevated p-5">
-        <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{active.name} · Final standings</Text>
-        <Text className="mt-1 text-[22px] font-semibold tracking-tighter2">Season complete</Text>
-        <Text className="mt-1 text-[13px] tabular-nums text-muted-foreground">${collected.toLocaleString()} collected · ${fee.toLocaleString()} fee · ${net.toLocaleString()} net</Text>
+    <View style={{ gap: 20 }}>
+      <View style={[surfaces.roundedCardLg, { borderWidth: 0, padding: 20 }]}>
+        <Text variant="eyebrow">{active.name} · Final standings</Text>
+        <Text variant="sectionTitle" style={{ marginTop: 4 }}>Season complete</Text>
+        <Text variant="subtitle" style={{ marginTop: 4, fontVariant: ['tabular-nums'] }}>${collected.toLocaleString()} collected · ${fee.toLocaleString()} fee · ${net.toLocaleString()} net</Text>
       </View>
 
       <Section title="Recommended payouts">
-        <View className="overflow-hidden rounded-[24px] bg-surface-elevated">
+        <View style={surfaces.roundedCard}>
           {splits.map((s, i) => {
             const m = podium[i];
             return (
-              <View key={s.place} className={cn('flex-row items-center gap-3 px-4 py-3.5', i > 0 ? 'border-t border-hairline' : '')}>
-                <View className="h-9 w-9 items-center justify-center rounded-full bg-background">
-                  <Text className="text-[13px] font-semibold tabular-nums">{i + 1}</Text>
+              <View key={s.place} style={[layout.row, { gap: 12, paddingHorizontal: 16, paddingVertical: 14 }, i > 0 && layout.listRowBorder]}>
+                <View style={[surfaces.iconBoxSm, { borderRadius: 9999, backgroundColor: hex.background }]}>
+                  <Text variant="bodySm" style={{ fontVariant: ['tabular-nums'] }}>{i + 1}</Text>
                 </View>
-                <View className="min-w-0 flex-1">
-                  <Text className="text-[15px] font-semibold tracking-tightish" numberOfLines={1}>{m?.name ?? `Place ${i + 1}`}</Text>
-                  <Text className="text-[12px] text-muted-foreground">{s.pct}% of net pool</Text>
+                <View style={[layout.flex1, { minWidth: 0 }]}>
+                  <Text variant="body" numberOfLines={1}>{m?.name ?? `Place ${i + 1}`}</Text>
+                  <Text variant="bodyMuted">{s.pct}% of net pool</Text>
                 </View>
-                <Text className="text-[16px] font-semibold tabular-nums">${s.amount.toLocaleString()}</Text>
+                <Text variant="titleMd" style={{ fontVariant: ['tabular-nums'] }}>${s.amount.toLocaleString()}</Text>
               </View>
             );
           })}
@@ -675,26 +686,26 @@ function PayoutReview({ active, collected, fee, net, structure, members }: { act
       </Section>
 
       <Section title="Review window">
-        <View className="overflow-hidden rounded-[24px] bg-surface-elevated">
+        <View style={surfaces.roundedCard}>
           {[
             { t: 'Today', what: 'Recommendations generated', done: true },
             { t: '+3 days', what: 'Member review window', done: approved },
             { t: '+4 days', what: 'Auto distribution to bank or card', done: false },
           ].map((row, i) => (
-            <View key={i} className={cn('flex-row items-start gap-3 px-4 py-3', i > 0 ? 'border-t border-hairline' : '')}>
-              <Text className="w-20 shrink-0 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{row.t}</Text>
-              <Text className="flex-1 text-[13px] tracking-tightish">{row.what}</Text>
+            <View key={i} style={[layout.rowStart, { paddingHorizontal: 16, paddingVertical: 12 }, i > 0 && layout.listRowBorder]}>
+              <Text variant="eyebrow" style={{ width: 80, flexShrink: 0 }}>{row.t}</Text>
+              <Text variant="bodyMuted" style={[layout.flex1, { fontSize: 13 }]}>{row.what}</Text>
               {row.done ? <CheckCircle2 size={16} color={c.success} /> : null}
             </View>
           ))}
         </View>
       </Section>
 
-      <Pressable onPress={() => setApproved(true)} disabled={approved} className={cn('items-center rounded-full py-3.5', approved ? 'bg-success' : 'bg-foreground')}>
-        <Text className="text-[15px] font-semibold tracking-tightish text-background">{approved ? 'Approved · Distributing automatically' : 'Approve payouts'}</Text>
+      <Pressable onPress={() => setApproved(true)} disabled={approved} style={[surfaces.primaryButton, { height: 52, backgroundColor: approved ? hex.success : hex.foreground }]}>
+        <Text variant="body" style={{ color: hex.background }}>{approved ? 'Approved · Distributing automatically' : 'Approve payouts'}</Text>
       </Pressable>
 
-      <Text className="px-2 text-[11px] text-muted-foreground">Every payout is auditable. Members can view receipts and confirmations from their profile.</Text>
+      <Text variant="caption" muted style={{ paddingHorizontal: 8 }}>Every payout is auditable. Members can view receipts and confirmations from their profile.</Text>
     </View>
   );
 }
@@ -713,26 +724,31 @@ function TreasurySettings({
   structure: PayoutStructure;
   setStructure: (s: PayoutStructure) => void;
 }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const [reminder, setReminder] = useState<'off' | 'weekly' | 'daily'>('weekly');
   const [autoPayout, setAutoPayout] = useState(true);
   const [offline, setOffline] = useState(true);
 
   return (
-    <View className="gap-5">
+    <View style={{ gap: 20 }}>
       <Section title="Buy-in">
-        <View className="flex-row gap-2">
+        <View style={[layout.row, { gap: 8 }]}>
           {[25, 50, 100, 200, 500].map((n) => (
-            <Pressable key={n} onPress={() => setBuyIn(n)} className={cn('flex-1 items-center rounded-full px-2 py-2.5', buyIn === n ? 'bg-foreground' : 'bg-surface-elevated')}>
-              <Text className={cn('text-[13px] font-semibold tabular-nums tracking-tightish', buyIn === n ? 'text-background' : 'text-muted-foreground')}>${n}</Text>
+            <Pressable
+              key={n}
+              onPress={() => setBuyIn(n)}
+              style={[layout.flex1, layout.centered, surfaces.pill, { paddingHorizontal: 8, paddingVertical: 10, backgroundColor: buyIn === n ? hex.foreground : hex.surfaceElevated }]}
+            >
+              <Text variant="tab" style={{ color: buyIn === n ? hex.background : hex.mutedForeground, fontVariant: ['tabular-nums'] }}>${n}</Text>
             </Pressable>
           ))}
         </View>
-        <Text className="px-2 text-[11px] text-muted-foreground">Each of {active.members ?? 10} members owes ${buyIn}.</Text>
+        <Text variant="caption" muted style={{ paddingHorizontal: 8, marginTop: 8 }}>Each of {active.members ?? 10} members owes ${buyIn}.</Text>
       </Section>
 
       <Section title="Prize structure">
-        <View className="gap-2">
+        <View style={{ gap: 8 }}>
           {([
             { id: 'all', label: 'Winner takes all' },
             { id: 'top2', label: 'Top two' },
@@ -742,8 +758,12 @@ function TreasurySettings({
           ] as const).map((opt) => {
             const isActive = structure === opt.id;
             return (
-              <Pressable key={opt.id} onPress={() => setStructure(opt.id)} className={cn('flex-row items-center justify-between rounded-[20px] px-4 py-3', isActive ? 'bg-foreground' : 'bg-surface-elevated')}>
-                <Text className={cn('text-[14px] font-medium tracking-tightish', isActive ? 'text-background' : 'text-foreground')}>{opt.label}</Text>
+              <Pressable
+                key={opt.id}
+                onPress={() => setStructure(opt.id)}
+                style={[layout.rowBetween, surfaces.roundedCard, { borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: isActive ? hex.foreground : hex.surfaceElevated }]}
+              >
+                <Text variant="bodySm" style={{ color: isActive ? hex.background : hex.foreground }}>{opt.label}</Text>
                 {isActive ? <CheckCircle2 size={16} color={c.background} /> : null}
               </Pressable>
             );
@@ -752,29 +772,33 @@ function TreasurySettings({
       </Section>
 
       <Section title="Reminders">
-        <Text className="px-2 pb-2 text-[12px] text-muted-foreground">Reminder frequency</Text>
-        <View className="flex-row rounded-full border border-border bg-surface-elevated p-1">
+        <Text variant="bodyMuted" style={{ paddingHorizontal: 8, paddingBottom: 8 }}>Reminder frequency</Text>
+        <View style={surfaces.segmented}>
           {[
             { id: 'off', label: 'Off' },
             { id: 'weekly', label: 'Weekly' },
             { id: 'daily', label: 'Daily' },
           ].map((o) => (
-            <Pressable key={o.id} onPress={() => setReminder(o.id as typeof reminder)} className={cn('flex-1 rounded-full py-2', reminder === o.id ? 'bg-foreground' : '')}>
-              <Text className={cn('text-center text-[13px] font-medium tracking-tightish', reminder === o.id ? 'text-background' : 'text-muted-foreground')}>{o.label}</Text>
+            <Pressable
+              key={o.id}
+              onPress={() => setReminder(o.id as typeof reminder)}
+              style={reminder === o.id ? surfaces.segmentedTabActive : surfaces.segmentedTab}
+            >
+              <Text variant="tab" style={{ color: reminder === o.id ? hex.primaryForeground : hex.mutedForeground }}>{o.label}</Text>
             </Pressable>
           ))}
         </View>
       </Section>
 
       <Section title="Payouts">
-        <View className="overflow-hidden rounded-[24px] bg-surface-elevated">
+        <View style={surfaces.roundedCard}>
           <ToggleRow label="Auto payout" sub="Distribute winnings after review window" value={autoPayout} onChange={setAutoPayout} />
           <ToggleRow label="Allow offline payments" sub="Mark members as paid outside Commissioner" value={offline} onChange={setOffline} divider />
         </View>
       </Section>
 
       <Section title="Deadlines">
-        <View className="overflow-hidden rounded-[24px] bg-surface-elevated">
+        <View style={surfaces.roundedCard}>
           <ReadRow label="Payment deadline" value="Sep 1, 2026" />
           <ReadRow label="Payout timing" value="Within 24 hrs of approval" divider />
         </View>
@@ -785,24 +809,26 @@ function TreasurySettings({
 
 /* ------------------------------ ATOMS ------------------------------ */
 function TreasuryBar({ title, backLabel, onBack }: { title: string; backLabel: string; onBack: () => void }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   return (
-    <View className="flex-row items-center justify-between px-1 pt-2">
-      <Pressable onPress={onBack} className="flex-row items-center gap-1 rounded-full px-2 py-1.5">
+    <View style={[layout.rowBetween, { paddingHorizontal: 4, paddingTop: 8 }]}>
+      <Pressable onPress={onBack} style={[layout.row, { gap: 4, borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 6 }]}>
         <ChevronLeft size={16} color={c.mutedForeground} />
-        <Text className="text-[14px] text-muted-foreground">{backLabel}</Text>
+        <Text variant="link" muted>{backLabel}</Text>
       </Pressable>
-      <Text className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{title}</Text>
-      <View className="w-12" />
+      <Text variant="eyebrow">{title}</Text>
+      <View style={{ width: 48 }} />
     </View>
   );
 }
 
 function Section({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
-    <View className="gap-2">
-      <View className="flex-row items-center justify-between px-2">
-        <Text className="text-[13px] font-semibold uppercase tracking-widest text-muted-foreground">{title}</Text>
+    <View style={layout.sectionBlock}>
+      <View style={[layout.rowBetween, { paddingHorizontal: 8 }]}>
+        <Text variant="eyebrow" style={{ letterSpacing: 1.5, textTransform: 'uppercase' }}>{title}</Text>
         {action}
       </View>
       {children}
@@ -811,57 +837,65 @@ function Section({ title, children, action }: { title: string; children: ReactNo
 }
 
 function Stat({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: boolean }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
-    <View className="w-[48%] rounded-[20px] bg-surface-elevated p-4">
-      <Text className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{label}</Text>
-      <Text className={cn('mt-1 text-[20px] font-semibold tabular-nums tracking-tighter2', accent ? 'text-warning' : '')}>{value}</Text>
-      {sub ? <Text className="text-[11px] text-muted-foreground">{sub}</Text> : null}
+    <View style={[surfaces.roundedCard, { width: '48%', padding: 16, borderRadius: 20 }]}>
+      <Text variant="eyebrow" style={{ fontSize: 10 }}>{label}</Text>
+      <Text variant="statValue" style={{ marginTop: 4, fontVariant: ['tabular-nums'], color: accent ? hex.warning : hex.foreground }}>{value}</Text>
+      {sub ? <Text variant="caption" muted>{sub}</Text> : null}
     </View>
   );
 }
 
 function StatusPill({ status, amount }: { status: PayState; amount: number }) {
-  const map: Record<PayState, { label: string; cls: string; text: string }> = {
-    paid: { label: `Paid · $${amount}`, cls: 'bg-success/15', text: 'text-success' },
-    pending: { label: 'Pending', cls: 'bg-foreground/10', text: 'text-foreground' },
-    overdue: { label: 'Overdue', cls: 'bg-destructive/15', text: 'text-destructive' },
-    failed: { label: 'Failed', cls: 'bg-destructive/15', text: 'text-destructive' },
-    refunded: { label: 'Refunded', cls: 'bg-foreground/10', text: 'text-muted-foreground' },
-    unpaid: { label: 'Unpaid', cls: 'bg-foreground/10', text: 'text-muted-foreground' },
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+  const map: Record<PayState, { label: string; bg: string; fg: string }> = {
+    paid: { label: `Paid · $${amount}`, bg: toneBg.success, fg: hex.success },
+    pending: { label: 'Pending', bg: toneBg.neutral, fg: hex.foreground },
+    overdue: { label: 'Overdue', bg: toneBg.danger, fg: hex.danger },
+    failed: { label: 'Failed', bg: toneBg.danger, fg: hex.danger },
+    refunded: { label: 'Refunded', bg: toneBg.neutral, fg: hex.mutedForeground },
+    unpaid: { label: 'Unpaid', bg: toneBg.neutral, fg: hex.mutedForeground },
   };
   const s = map[status];
   return (
-    <View className={cn('rounded-full px-2.5 py-1', s.cls)}>
-      <Text className={cn('text-[11px] font-semibold tracking-widest', s.text)}>{s.label}</Text>
+    <View style={[surfaces.pill, { paddingHorizontal: 10, paddingVertical: 4, backgroundColor: s.bg }]}>
+      <Text variant="eyebrow" style={{ color: s.fg, textTransform: 'none', letterSpacing: 0.5 }}>{s.label}</Text>
     </View>
   );
 }
 
 function Avatar({ name }: { name: string }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const initials = name.split(' ').map((w) => w[0]).slice(0, 2).join('');
   return (
-    <View className="h-9 w-9 shrink-0 items-center justify-center rounded-full bg-background">
-      <Text className="text-[12px] font-semibold tracking-tightish">{initials}</Text>
+    <View style={[surfaces.iconBoxSm, { flexShrink: 0, borderRadius: 9999, backgroundColor: hex.background }]}>
+      <Text variant="bodySm" style={{ fontSize: 12 }}>{initials}</Text>
     </View>
   );
 }
 
 function ChipBtn({ children, onPress, icon: Icon, primary }: { children: ReactNode; onPress?: () => void; icon: LucideIcon; primary?: boolean }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   return (
-    <Pressable onPress={onPress} className={cn('flex-row items-center gap-1.5 rounded-full px-3 py-1.5', primary ? 'bg-foreground' : 'bg-background')}>
+    <Pressable
+      onPress={onPress}
+      style={[layout.row, { gap: 6, borderRadius: 9999, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: primary ? hex.foreground : hex.background }]}
+    >
       <Icon size={14} color={primary ? c.background : c.foreground} />
-      <Text className={cn('text-[12px] font-semibold tracking-tightish', primary ? 'text-background' : 'text-foreground')}>{children}</Text>
+      <Text variant="button" style={{ color: primary ? hex.background : hex.foreground }}>{children}</Text>
     </Pressable>
   );
 }
 
 function ToggleRow({ label, sub, value, onChange, divider }: { label: string; sub?: string; value: boolean; onChange: (v: boolean) => void; divider?: boolean }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
-    <View className={cn('flex-row items-center gap-3 px-4 py-3.5', divider ? 'border-t border-hairline' : '')}>
-      <View className="min-w-0 flex-1">
-        <Text className="text-[14px] font-medium tracking-tightish">{label}</Text>
-        {sub ? <Text className="text-[12px] text-muted-foreground">{sub}</Text> : null}
+    <View style={[layout.row, { gap: 12, paddingHorizontal: 16, paddingVertical: 14 }, divider && layout.listRowBorder]}>
+      <View style={[layout.flex1, { minWidth: 0 }]}>
+        <Text variant="bodySm">{label}</Text>
+        {sub ? <Text variant="bodyMuted">{sub}</Text> : null}
       </View>
       <Toggle on={value} onChange={onChange} />
     </View>
@@ -869,10 +903,11 @@ function ToggleRow({ label, sub, value, onChange, divider }: { label: string; su
 }
 
 function ReadRow({ label, value, divider }: { label: string; value: string; divider?: boolean }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
-    <View className={cn('flex-row items-center justify-between px-4 py-3.5', divider ? 'border-t border-hairline' : '')}>
-      <Text className="text-[13px] text-muted-foreground">{label}</Text>
-      <Text className="text-[14px] font-medium tracking-tightish">{value}</Text>
+    <View style={[layout.rowBetween, { paddingHorizontal: 16, paddingVertical: 14 }, divider && layout.listRowBorder]}>
+      <Text variant="bodyMuted" style={{ fontSize: 13 }}>{label}</Text>
+      <Text variant="body">{value}</Text>
     </View>
   );
 }

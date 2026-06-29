@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "expo start",
     "start": "expo start",
+    "start:clean": "lsof -ti tcp:8081 | xargs kill -9 2>/dev/null; expo start --clear",
+    "start:tunnel": "expo start --tunnel",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "build": "tsc --noEmit",
@@ -31,10 +33,11 @@
     "expo-status-bar": "~3.0.9",
     "expo-web-browser": "~15.0.11",
     "lucide-react-native": "^0.460.0",
-    "nativewind": "^4.1.23",
+    "nativewind": "4.2.1",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
+    "react-native-css-interop": "0.2.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-svg": "15.12.1",
@@ -44,6 +47,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",
+    "@expo/ngrok": "^4.1.0",
     "@types/node": "^22.10.2",
     "@types/react": "~19.1.10",
     "typescript": "^5.7.2"

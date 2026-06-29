@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Modal, ScrollView, TextInput, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   AlertCircle,
@@ -15,7 +15,6 @@ import {
   Heart,
   Link as LinkIcon,
   ListChecks,
-  type LucideIcon,
   Mail,
   MessageSquare,
   Pause,
@@ -34,10 +33,11 @@ import {
   X,
 } from 'lucide-react-native';
 import { Pressable, Text } from '@/components/ui/primitives';
+import { Card, Divider } from '@/components/ui/Card';
+import { Segmented } from '@/components/ui/Segmented';
 import { useLeague, type League } from '@/lib/league-context';
 import { useNav } from '@/lib/nav';
-import { useColors } from '@/lib/theme';
-import { cn } from '@/lib/cn';
+import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
 
 type DraftView =
   | { kind: 'home' }
@@ -86,6 +86,362 @@ const PLAYERS: Player[] = [
 type Drafted = { pick: number; team: string; player: Player };
 type ChatMsg = { id: string; who: string; text: string };
 
+const onDark = {
+  muted: 'rgba(252,252,252,0.6)',
+  sub: 'rgba(252,252,252,0.7)',
+} as const;
+
+function useDraftStyles() {
+  const { hex } = useThemeTokens();
+  const { scheme } = useTheme();
+  const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
+  return useMemo(() => StyleSheet.create({
+
+  fill: { flex: 1 },
+  shell: { flex: 1, backgroundColor: hex.surface },
+  shellHeader: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: hex.hairline,
+    backgroundColor: hex.surface,
+  },
+  shellHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    paddingBottom: 12,
+  },
+  backSpacer: { width: 72 },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    borderRadius: 9999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  headerCenter: { alignItems: 'center' },
+  headerTrailing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+    paddingRight: 4,
+  },
+  exitBtn: {
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9999,
+    backgroundColor: hex.muted,
+    paddingHorizontal: 12,
+  },
+  iconBtn: {
+    height: 32,
+    width: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9999,
+    backgroundColor: hex.muted,
+  },
+  heroBanner: {
+    marginBottom: 16,
+    borderRadius: 30,
+    backgroundColor: hex.primary,
+    padding: 20,
+  },
+  heroCta: {
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    borderRadius: 9999,
+    backgroundColor: hex.background,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  listRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  listRowSm: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  listRowCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  miniCard: {
+    flex: 1,
+    borderRadius: 24,
+    backgroundColor: hex.surfaceElevated,
+    padding: 12,
+  },
+  statCard: {
+    flex: 1,
+    borderRadius: 20,
+    backgroundColor: hex.surfaceElevated,
+    padding: 12,
+  },
+  posBadge: {
+    height: 40,
+    width: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    backgroundColor: `rgba(${ink},0.05)`,
+  },
+  posBadgeSm: {
+    height: 36,
+    width: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    backgroundColor: `rgba(${ink},0.05)`,
+  },
+  posBadgeLg: {
+    height: 56,
+    width: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    backgroundColor: `rgba(${ink},0.05)`,
+  },
+  progressTrack: {
+    marginBottom: 16,
+    height: 4,
+    overflow: 'hidden',
+    borderRadius: 9999,
+    backgroundColor: hex.muted,
+  },
+  progressFill: { height: '100%', backgroundColor: hex.primary },
+  formCard: {
+    overflow: 'hidden',
+    borderRadius: 24,
+    backgroundColor: hex.surfaceElevated,
+    padding: 8,
+  },
+  choiceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: 4 },
+  choice: { width: '48%', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12 },
+  clockBanner: {
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 28,
+    backgroundColor: hex.primary,
+    padding: 16,
+  },
+  filterPill: { flexShrink: 0, borderRadius: 9999, paddingHorizontal: 12, paddingVertical: 4 },
+  needPill: {
+    borderRadius: 9999,
+    backgroundColor: hex.muted,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  boardTabs: {
+    marginBottom: 12,
+    flexDirection: 'row',
+    gap: 4,
+    borderRadius: 9999,
+    backgroundColor: hex.muted,
+    padding: 4,
+  },
+  boardTab: { flex: 1, borderRadius: 9999, paddingVertical: 6 },
+  boardTabActive: {
+    flex: 1,
+    borderRadius: 9999,
+    paddingVertical: 6,
+    backgroundColor: hex.background,
+  },
+  scoreCell: {
+    width: '31%',
+    borderRadius: 16,
+    backgroundColor: hex.surfaceElevated,
+    padding: 10,
+  },
+  infoBlock: {
+    marginTop: 12,
+    borderRadius: 20,
+    backgroundColor: hex.surfaceElevated,
+    padding: 12,
+  },
+  sheet: {
+    marginHorizontal: 8,
+    marginBottom: 8,
+    overflow: 'hidden',
+    borderRadius: 36,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: hex.hairline,
+    backgroundColor: hex.background,
+  },
+  sheetHandle: {
+    height: 4,
+    width: 36,
+    borderRadius: 9999,
+    backgroundColor: 'rgba(99,99,99,0.3)',
+  },
+  aiRec: {
+    marginTop: 16,
+    borderRadius: 24,
+    backgroundColor: hex.primary,
+    padding: 16,
+  },
+  chatPin: {
+    borderRadius: 24,
+    backgroundColor: `rgba(${ink},0.05)`,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  chatBubble: {
+    borderRadius: 16,
+    backgroundColor: hex.surfaceElevated,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  chatInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 9999,
+    backgroundColor: hex.surfaceElevated,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  sendBtn: {
+    height: 32,
+    width: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9999,
+    backgroundColor: hex.primary,
+  },
+  sheetActions: { marginTop: 20, flexDirection: 'row', gap: 8 },
+  queueBtn: {
+    height: 48,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 9999,
+    backgroundColor: hex.surfaceElevated,
+  },
+  draftBtn: {
+    height: 48,
+    flex: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9999,
+    backgroundColor: hex.primary,
+  },
+  centeredStat: {
+    marginBottom: 16,
+    alignItems: 'center',
+    borderRadius: 28,
+    backgroundColor: hex.surfaceElevated,
+    padding: 20,
+  },
+  emptyState: { paddingHorizontal: 24, paddingVertical: 40, alignItems: 'center' },
+  btnSm: {
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9999,
+    backgroundColor: hex.primary,
+  },
+  btnDisabled: { opacity: 0.4 },
+  rowGapSm: { gap: 6, marginTop: 8 },
+  rowGap: { gap: 8 },
+  sectionGap: { gap: 12 },
+  dualRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  flexShrink: { minWidth: 0, flex: 1 },
+  alignEnd: { alignItems: 'flex-end' },
+  row: { flexDirection: 'row', alignItems: 'center' },
+  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  rowWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
+  textInput: {
+    paddingHorizontal: 12,
+    paddingVertical: 16,
+    fontSize: 18,
+    fontWeight: '500',
+    color: hex.foreground,
+  },
+  textInputMd: {
+    paddingHorizontal: 12,
+    paddingVertical: 16,
+    fontSize: 16,
+    fontWeight: '500',
+    color: hex.foreground,
+  },
+  textInputSm: { flex: 1, fontSize: 14, color: hex.foreground },
+  textInputCode: {
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+    textAlign: 'center',
+    fontSize: 24,
+    fontWeight: '600',
+    letterSpacing: 8,
+    color: hex.foreground,
+  },
+  reviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  pauseBtn: {
+    marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 9999,
+    backgroundColor: 'rgba(252,252,252,0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  baPill: {
+    borderRadius: 9999,
+    backgroundColor: 'rgba(252,252,252,0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  gradesHeader: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
+  rankTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    borderRadius: 9999,
+    paddingVertical: 6,
+  },
+  rankTabActive: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    borderRadius: 9999,
+    paddingVertical: 6,
+    backgroundColor: hex.background,
+  },
+
+  }), [hex, ink]);
+}
+
 export default function DraftPage() {
   const { active } = useLeague();
   const nav = useNav();
@@ -102,7 +458,7 @@ export default function DraftPage() {
   useEffect(() => {
     if (view.kind !== 'board' || paused) return;
     if (seconds <= 0) return;
-    const t = setTimeout(() => setSeconds((s) => s - 1), 1000);
+    const t = setTimeout(() => setSeconds((sec) => sec - 1), 1000);
     return () => clearTimeout(t);
   }, [view, paused, seconds]);
 
@@ -182,34 +538,47 @@ function Shell({
   hideBack?: boolean;
   trailing?: ReactNode;
 }) {
+  const s = useDraftStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const insets = useSafeAreaInsets();
-  const c = useColors();
   return (
-    <View className="flex-1 bg-surface">
-      <View className="border-b border-hairline bg-surface" style={{ paddingTop: Math.max(insets.top, 14) }}>
-        <View className="flex-row items-center justify-between px-2 pb-3">
+    <View style={s.shell}>
+      <View style={[s.shellHeader, { paddingTop: Math.max(insets.top, 14) }]}>
+        <View style={s.shellHeaderRow}>
           {hideBack || !onBack ? (
-            <View className="w-[72px]" />
+            <View style={s.backSpacer} />
           ) : (
-            <Pressable onPress={onBack} className="flex-row items-center gap-0.5 rounded-full px-2 py-1">
-              <ChevronLeft size={20} color={c.success} />
-              <Text className="text-[15px] text-success">Back</Text>
+            <Pressable onPress={onBack} style={s.backBtn}>
+              <ChevronLeft size={20} color={toneFg.success} />
+              <Text variant="body" style={{ color: toneFg.success }}>
+                Back
+              </Text>
             </Pressable>
           )}
-          <View className="items-center">
-            <Text className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Current Draft</Text>
-            <Text className="text-[16px] font-semibold tracking-tightish">{title}</Text>
-            {subtitle ? <Text className="text-[11px] text-muted-foreground">{subtitle}</Text> : null}
+          <View style={s.headerCenter}>
+            <Text variant="caption" muted>
+              Current Draft
+            </Text>
+            <Text variant="titleMd">{title}</Text>
+            {subtitle ? (
+              <Text variant="caption" muted>
+                {subtitle}
+              </Text>
+            ) : null}
           </View>
-          <View className="flex-row items-center justify-end gap-1 pr-1">
+          <View style={s.headerTrailing}>
             {trailing}
-            <Pressable onPress={onExit} className="h-8 items-center justify-center rounded-full bg-muted px-3">
-              <Text className="text-[12px] font-medium text-muted-foreground">Exit</Text>
+            <Pressable onPress={onExit} style={s.exitBtn}>
+              <Text variant="bodyMuted">Exit</Text>
             </Pressable>
           </View>
         </View>
       </View>
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: Math.max(insets.bottom, 32) }} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={s.fill}
+        contentContainerStyle={[layout.screen, { paddingBottom: Math.max(insets.bottom, 32) }]}
+        showsVerticalScrollIndicator={false}
+      >
         {children}
       </ScrollView>
     </View>
@@ -218,6 +587,8 @@ function Shell({
 
 /* ============= Draft Home ============= */
 function DraftHome({ league, onExit, onGo }: { league: League; onExit: () => void; onGo: (v: DraftView) => void }) {
+  const s = useDraftStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const synced = league.type === 'synced';
   const isCommish = league.role === 'commissioner';
@@ -241,72 +612,101 @@ function DraftHome({ league, onExit, onGo }: { league: League; onExit: () => voi
 
   return (
     <Shell title="Draft" subtitle={league.name} onExit={onExit} hideBack>
-      <View className="mb-4 rounded-[30px] bg-foreground p-5">
-        <Text className="text-[11px] uppercase tracking-widest text-background/60">{synced ? 'Synced Draft' : league.stage === 'draft' ? 'Live' : 'Preseason'}</Text>
-        <Text className="mt-1 text-[24px] font-semibold tracking-tight text-background">
+      <View style={s.heroBanner}>
+        <Text variant="eyebrow" style={{ color: onDark.muted }}>
+          {synced ? 'Synced Draft' : league.stage === 'draft' ? 'Live' : 'Preseason'}
+        </Text>
+        <Text variant="titleLg" style={{ color: hex.primaryForeground, marginTop: 4, fontSize: 24 }}>
           {synced ? 'Your draft, deeper.' : league.stage === 'draft' ? 'Draft in progress' : 'Get ready to draft'}
         </Text>
-        <Text className="mt-1 text-[13px] text-background/70">
+        <Text variant="subtitle" style={{ color: onDark.sub, marginTop: 4 }}>
           {synced ? `Drafted on ${league.platform}. Mirrored in Commissioner.` : 'Set up your league, prep your queue, and run a premium draft.'}
         </Text>
         {!synced ? (
-          <Pressable onPress={() => onGo({ kind: 'board' })} className="mt-4 flex-row items-center gap-1 self-start rounded-full bg-background px-4 py-2">
-            <PlayCircle size={16} color={c.foreground} />
-            <Text className="text-[13px] font-semibold text-foreground">Enter Draft Board</Text>
+          <Pressable onPress={() => onGo({ kind: 'board' })} style={s.heroCta}>
+            <PlayCircle size={16} color={hex.foreground} />
+            <Text variant="button" style={{ color: hex.foreground }}>
+              Enter Draft Board
+            </Text>
           </Pressable>
         ) : null}
       </View>
 
-      <View className="overflow-hidden rounded-[28px] bg-surface-elevated">
+      <Card>
         {cards.map((card, i) => {
           const Icon = card.icon;
           return (
-            <Pressable key={card.key} onPress={card.go}>
-              <View className={cn('flex-row items-center gap-4 px-4 py-4', i > 0 ? 'border-t border-hairline' : '')}>
-                <View className="h-10 w-10 items-center justify-center rounded-2xl bg-foreground">
-                  <Icon size={18} color={c.background} strokeWidth={2.25} />
+            <View key={card.key}>
+              {i > 0 ? <Divider /> : null}
+              <Pressable onPress={card.go}>
+                <View style={s.listRow}>
+                  <View style={surfaces.iconBoxDark}>
+                    <Icon size={18} color={hex.background} strokeWidth={2.25} />
+                  </View>
+                  <View style={s.flexShrink}>
+                    <Text variant="titleLg">{card.title}</Text>
+                    <Text variant="subtitle" numberOfLines={1}>
+                      {card.sub}
+                    </Text>
+                  </View>
+                  <ChevronRight size={16} color={c.mutedForeground} />
                 </View>
-                <View className="min-w-0 flex-1">
-                  <Text className="text-[17px] font-semibold tracking-tightish">{card.title}</Text>
-                  <Text className="text-[13px] text-muted-foreground" numberOfLines={1}>{card.sub}</Text>
-                </View>
-                <ChevronRight size={16} color={c.mutedForeground} />
-              </View>
-            </Pressable>
+              </Pressable>
+            </View>
           );
         })}
-      </View>
+      </Card>
     </Shell>
   );
 }
 
 /* ============= Create League ============= */
 function CreateLeague({ onBack, onExit, onDone }: { onBack: () => void; onExit: () => void; onDone: () => void }) {
+  const s = useDraftStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const STEPS = ['League Name', 'League Size', 'Scoring', 'Buy-in', 'Prize Structure', 'Draft Date', 'Draft Type', 'Review'];
   const [step, setStep] = useState(0);
   const [data, setData] = useState({ name: '', size: 12, scoring: 'Half PPR', buyIn: 50, prize: '60 / 30 / 10', date: '', draftType: 'Snake' });
   const next = () => (step < STEPS.length - 1 ? setStep(step + 1) : onDone());
   const back = () => (step > 0 ? setStep(step - 1) : onBack());
+  const disabled = step === 0 && !data.name;
 
   return (
     <Shell title="Create League" subtitle={`Step ${step + 1} of ${STEPS.length}`} onBack={back} onExit={onExit}>
-      <View className="mb-4 h-1 overflow-hidden rounded-full bg-muted">
-        <View className="h-full bg-foreground" style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} />
+      <View style={s.progressTrack}>
+        <View style={[s.progressFill, { width: `${((step + 1) / STEPS.length) * 100}%` }]} />
       </View>
-      <Text className="px-1 text-[22px] font-semibold tracking-tight">{STEPS[step]}</Text>
-      <Text className="mb-4 px-1 text-[13px] text-muted-foreground">Set it once. Members will see it everywhere.</Text>
+      <Text variant="sectionTitle" style={{ paddingHorizontal: 4 }}>
+        {STEPS[step]}
+      </Text>
+      <Text variant="subtitle" style={{ marginBottom: 16, paddingHorizontal: 4 }}>
+        Set it once. Members will see it everywhere.
+      </Text>
 
-      <View className="overflow-hidden rounded-[24px] bg-surface-elevated p-2">
+      <View style={s.formCard}>
         {step === 0 ? (
-          <TextInput autoFocus value={data.name} onChangeText={(t) => setData({ ...data, name: t })} placeholder="e.g. The Sunday Scaries" placeholderTextColor={c.mutedForeground} className="px-3 py-4 text-[18px] font-medium text-foreground" />
+          <TextInput
+            autoFocus
+            value={data.name}
+            onChangeText={(t) => setData({ ...data, name: t })}
+            placeholder="e.g. The Sunday Scaries"
+            placeholderTextColor={c.mutedForeground}
+            style={s.textInput}
+          />
         ) : null}
         {step === 1 ? <Choices value={String(data.size)} onChange={(v) => setData({ ...data, size: Number(v) })} opts={['8', '10', '12', '14']} /> : null}
         {step === 2 ? <Choices value={data.scoring} onChange={(v) => setData({ ...data, scoring: v })} opts={['Standard', 'Half PPR', 'PPR']} /> : null}
         {step === 3 ? <Choices value={String(data.buyIn)} onChange={(v) => setData({ ...data, buyIn: Number(v) })} opts={['0', '25', '50', '100', '250']} prefix="$" /> : null}
         {step === 4 ? <Choices value={data.prize} onChange={(v) => setData({ ...data, prize: v })} opts={['100 (winner)', '60 / 30 / 10', '50 / 30 / 15 / 5']} /> : null}
         {step === 5 ? (
-          <TextInput value={data.date} onChangeText={(t) => setData({ ...data, date: t })} placeholder="Sat Aug 23, 7:00 PM" placeholderTextColor={c.mutedForeground} className="px-3 py-4 text-[16px] font-medium text-foreground" />
+          <TextInput
+            value={data.date}
+            onChangeText={(t) => setData({ ...data, date: t })}
+            placeholder="Sat Aug 23, 7:00 PM"
+            placeholderTextColor={c.mutedForeground}
+            style={s.textInputMd}
+          />
         ) : null}
         {step === 6 ? <Choices value={data.draftType} onChange={(v) => setData({ ...data, draftType: v })} opts={['Snake', 'Auction', 'Linear']} /> : null}
         {step === 7 ? (
@@ -322,21 +722,32 @@ function CreateLeague({ onBack, onExit, onDone }: { onBack: () => void; onExit: 
         ) : null}
       </View>
 
-      <Pressable onPress={next} disabled={step === 0 && !data.name} className={cn('mt-6 h-14 items-center justify-center rounded-full bg-foreground', step === 0 && !data.name ? 'opacity-40' : '')}>
-        <Text className="text-[17px] font-semibold tracking-tightish text-background">{step === STEPS.length - 1 ? 'Create League' : 'Continue'}</Text>
+      <Pressable onPress={next} disabled={disabled} style={[surfaces.primaryButton, { marginTop: 24 }, disabled ? s.btnDisabled : null]}>
+        <Text variant="titleMd" style={{ color: hex.primaryForeground }}>
+          {step === STEPS.length - 1 ? 'Create League' : 'Continue'}
+        </Text>
       </Pressable>
     </Shell>
   );
 }
 
 function Choices({ value, onChange, opts, prefix }: { value: string; onChange: (v: string) => void; opts: string[]; prefix?: string }) {
+  const s = useDraftStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
-    <View className="flex-row flex-wrap gap-2 p-1">
+    <View style={s.choiceGrid}>
       {opts.map((o) => {
         const sel = value === o || value === o.split(' ')[0];
         return (
-          <Pressable key={o} onPress={() => onChange(o)} className={cn('w-[48%] rounded-2xl px-4 py-3', sel ? 'bg-foreground' : 'bg-background')}>
-            <Text className={cn('text-[15px] font-medium', sel ? 'text-background' : 'text-foreground')}>{prefix}{o}</Text>
+          <Pressable
+            key={o}
+            onPress={() => onChange(o)}
+            style={[s.choice, { backgroundColor: sel ? hex.primary : hex.background }]}
+          >
+            <Text variant="body" style={{ color: sel ? hex.primaryForeground : hex.foreground }}>
+              {prefix}
+              {o}
+            </Text>
           </Pressable>
         );
       })}
@@ -345,16 +756,25 @@ function Choices({ value, onChange, opts, prefix }: { value: string; onChange: (
 }
 
 function Review({ label, value, first }: { label: string; value: string; first?: boolean }) {
+  const s = useDraftStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
-    <View className={cn('flex-row items-center justify-between px-3 py-3', first ? '' : 'border-t border-border')}>
-      <Text className="text-[14px] text-muted-foreground">{label}</Text>
-      <Text className="text-[15px] font-medium">{value}</Text>
+    <View>
+      {!first ? <Divider /> : null}
+      <View style={s.reviewRow}>
+        <Text variant="bodySm" muted>
+          {label}
+        </Text>
+        <Text variant="body">{value}</Text>
+      </View>
     </View>
   );
 }
 
 /* ============= Readiness ============= */
 function ReadinessView({ league, onBack, onExit, onOpen }: { league: League; onBack: () => void; onExit: () => void; onOpen: (k: ReadinessKey) => void }) {
+  const s = useDraftStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const size = league.size ?? 12;
   const joined = league.joined ?? 10;
@@ -371,46 +791,55 @@ function ReadinessView({ league, onBack, onExit, onOpen }: { league: League; onB
   ];
   return (
     <Shell title="League Readiness" subtitle={league.name} onBack={onBack} onExit={onExit}>
-      <View className="overflow-hidden rounded-[28px] bg-surface-elevated">
+      <Card>
         {items.map((it, i) => (
-          <Pressable key={it.key} onPress={() => onOpen(it.key)}>
-            <View className={cn('flex-row items-center gap-3 px-4 py-4', i > 0 ? 'border-t border-hairline' : '')}>
-              <StatusIcon status={it.status} />
-              <View className="min-w-0 flex-1">
-                <Text className="text-[15px] font-medium tracking-tightish">{it.label}</Text>
-                <Text className="text-[13px] text-muted-foreground" numberOfLines={1}>{it.sub}</Text>
+          <View key={it.key}>
+            {i > 0 ? <Divider /> : null}
+            <Pressable onPress={() => onOpen(it.key)}>
+              <View style={[s.listRowSm, { gap: 12 }]}>
+                <StatusIcon status={it.status} />
+                <View style={s.flexShrink}>
+                  <Text variant="body">{it.label}</Text>
+                  <Text variant="subtitle" numberOfLines={1}>
+                    {it.sub}
+                  </Text>
+                </View>
+                <ChevronRight size={16} color={c.mutedForeground} />
               </View>
-              <ChevronRight size={16} color={c.mutedForeground} />
-            </View>
-          </Pressable>
+            </Pressable>
+          </View>
         ))}
-      </View>
+      </Card>
     </Shell>
   );
 }
 
 function StatusIcon({ status }: { status: 'complete' | 'progress' | 'attention' }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+  const { scheme } = useTheme();
+  const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
   const c = useColors();
   if (status === 'complete')
     return (
-      <View className="h-8 w-8 items-center justify-center rounded-full bg-success">
-        <Check size={16} color={c.background} />
+      <View style={[surfaces.iconBoxSm, { borderRadius: 9999, backgroundColor: toneFg.success }]}>
+        <Check size={16} color={hex.background} />
       </View>
     );
   if (status === 'progress')
     return (
-      <View className="h-8 w-8 items-center justify-center rounded-full bg-warning/30">
+      <View style={[surfaces.iconBoxSm, { borderRadius: 9999, backgroundColor: toneBg.warning }]}>
         <Circle size={12} color={c.foreground} fill={c.foreground} />
       </View>
     );
   return (
-    <View className="h-8 w-8 items-center justify-center rounded-full bg-foreground/5">
+    <View style={[surfaces.iconBoxSm, { borderRadius: 9999, backgroundColor: `rgba(${ink},0.05)` }]}>
       <AlertCircle size={16} color={c.mutedForeground} />
     </View>
   );
 }
 
 function ReadinessStep({ stepKey, onBack, onExit }: { stepKey: ReadinessKey; onBack: () => void; onExit: () => void }) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const titles: Record<ReadinessKey, string> = {
     created: 'League Created',
     rules: 'League Rules',
@@ -423,8 +852,8 @@ function ReadinessStep({ stepKey, onBack, onExit }: { stepKey: ReadinessKey; onB
   };
   return (
     <Shell title={titles[stepKey]} onBack={onBack} onExit={onExit}>
-      <View className="rounded-[28px] bg-surface-elevated p-6">
-        <Text className="text-center text-[15px] text-muted-foreground">
+      <View style={surfaces.roundedCardLg}>
+        <Text variant="body" muted style={{ textAlign: 'center' }}>
           {stepKey === 'order'
             ? 'Randomize the order, drag to set manually, or schedule a live reveal.'
             : stepKey === 'dues'
@@ -434,8 +863,10 @@ function ReadinessStep({ stepKey, onBack, onExit }: { stepKey: ReadinessKey; onB
                 : 'Configure this step to keep your league on track.'}
         </Text>
       </View>
-      <Pressable onPress={onBack} className="mt-6 h-14 items-center justify-center rounded-full bg-foreground">
-        <Text className="text-[17px] font-semibold tracking-tightish text-background">Save & Return</Text>
+      <Pressable onPress={onBack} style={[surfaces.primaryButton, { marginTop: 24 }]}>
+        <Text variant="titleMd" style={{ color: hex.primaryForeground }}>
+          Save & Return
+        </Text>
       </Pressable>
     </Shell>
   );
@@ -443,6 +874,8 @@ function ReadinessStep({ stepKey, onBack, onExit }: { stepKey: ReadinessKey; onB
 
 /* ============= Invite ============= */
 function InviteView({ league, onBack, onExit }: { league: League; onBack: () => void; onExit: () => void }) {
+  const s = useDraftStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const size = league.size ?? 12;
   const joined = league.joined ?? 10;
@@ -458,32 +891,43 @@ function InviteView({ league, onBack, onExit }: { league: League; onBack: () => 
 
   return (
     <Shell title="Invite Members" subtitle={league.name} onBack={onBack} onExit={onExit}>
-      <View className="mb-4 items-center rounded-[28px] bg-surface-elevated p-5">
-        <Text className="text-[11px] uppercase tracking-widest text-muted-foreground">League Capacity</Text>
-        <Text className="mt-1 text-[32px] font-semibold tracking-tight">{joined} of {size} Joined</Text>
-        <Text className="mt-1 text-[13px] text-muted-foreground">{pending} pending · {paid} paid · Draft Ready: {joined === size && paid === size ? 'Yes' : 'No'}</Text>
+      <View style={s.centeredStat}>
+        <Text variant="eyebrow">League Capacity</Text>
+        <Text variant="scoreLG" style={{ marginTop: 4 }}>
+          {joined} of {size} Joined
+        </Text>
+        <Text variant="subtitle" style={{ marginTop: 4, textAlign: 'center' }}>
+          {pending} pending · {paid} paid · Draft Ready: {joined === size && paid === size ? 'Yes' : 'No'}
+        </Text>
       </View>
-      <View className="overflow-hidden rounded-[28px] bg-surface-elevated">
+      <Card>
         {rows.map((r, i) => {
           const Icon = r.icon;
           return (
-            <Pressable key={r.label}>
-              <View className={cn('flex-row items-center gap-3 px-4 py-3.5', i > 0 ? 'border-t border-hairline' : '')}>
-                <View className="h-9 w-9 items-center justify-center rounded-2xl bg-foreground">
-                  <Icon size={16} color={c.background} />
+            <View key={r.label}>
+              {i > 0 ? <Divider /> : null}
+              <Pressable>
+                <View style={s.listRowSm}>
+                  <View style={surfaces.iconBoxDark}>
+                    <Icon size={16} color={hex.background} />
+                  </View>
+                  <View style={s.flexShrink}>
+                    <Text variant="body">{r.label}</Text>
+                    <Text variant="bodyMuted" numberOfLines={1}>
+                      {r.sub}
+                    </Text>
+                  </View>
+                  <Copy size={16} color={c.mutedForeground} />
                 </View>
-                <View className="min-w-0 flex-1">
-                  <Text className="text-[15px] font-medium tracking-tightish">{r.label}</Text>
-                  <Text className="text-[12px] text-muted-foreground" numberOfLines={1}>{r.sub}</Text>
-                </View>
-                <Copy size={16} color={c.mutedForeground} />
-              </View>
-            </Pressable>
+              </Pressable>
+            </View>
           );
         })}
-      </View>
-      <Pressable onPress={onBack} className="mt-6 h-14 items-center justify-center rounded-full bg-foreground">
-        <Text className="text-[17px] font-semibold tracking-tightish text-background">Return to Readiness</Text>
+      </Card>
+      <Pressable onPress={onBack} style={[surfaces.primaryButton, { marginTop: 24 }]}>
+        <Text variant="titleMd" style={{ color: hex.primaryForeground }}>
+          Return to Readiness
+        </Text>
       </Pressable>
     </Shell>
   );
@@ -525,6 +969,8 @@ function DraftBoard({
   chat: ChatMsg[];
   setChat: React.Dispatch<React.SetStateAction<ChatMsg[]>>;
 }) {
+  const s = useDraftStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const [tab, setTab] = useState<'players' | 'queue' | 'chat'>('players');
   const [search, setSearch] = useState('');
@@ -562,111 +1008,162 @@ function DraftBoard({
       subtitle={`Round ${round} · Pick ${slot}`}
       onBack={onBack}
       onExit={onExit}
-      trailing={isCommish ? (
-        <Pressable onPress={onSettings} className="h-8 w-8 items-center justify-center rounded-full bg-muted">
-          <SettingsIcon size={16} color={c.mutedForeground} />
-        </Pressable>
-      ) : null}
+      trailing={
+        isCommish ? (
+          <Pressable onPress={onSettings} style={s.iconBtn}>
+            <SettingsIcon size={16} color={c.mutedForeground} />
+          </Pressable>
+        ) : null
+      }
     >
-      <View className="mb-4 flex-row items-center gap-3 rounded-[28px] bg-foreground p-4">
-        <View className="flex-1">
-          <Text className="text-[10px] uppercase tracking-widest text-background/60">On the clock</Text>
-          <Text className="text-[17px] font-semibold tracking-tight text-background">{onClock}</Text>
-          <Text className="text-[11px] text-background/60">Pick {pickNumber} · Round {round}</Text>
+      <View style={s.clockBanner}>
+        <View style={s.flexShrink}>
+          <Text variant="caption" style={{ color: onDark.muted, textTransform: 'uppercase', letterSpacing: 2 }}>
+            On the clock
+          </Text>
+          <Text variant="titleLg" style={{ color: hex.primaryForeground }}>
+            {onClock}
+          </Text>
+          <Text variant="caption" style={{ color: onDark.muted }}>
+            Pick {pickNumber} · Round {round}
+          </Text>
         </View>
-        <View className="items-end">
-          <Text className="text-[34px] font-semibold tracking-tight tabular-nums text-background">{Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}</Text>
+        <View style={s.alignEnd}>
+          <Text variant="hero" style={{ color: hex.primaryForeground, fontSize: 34, lineHeight: 34 }}>
+            {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}
+          </Text>
           {isCommish ? (
-            <Pressable onPress={() => setPaused((p) => !p)} className="mt-1 flex-row items-center gap-1 rounded-full bg-background/15 px-2 py-0.5">
-              {paused ? <PlayCircle size={12} color={c.background} /> : <Pause size={12} color={c.background} />}
-              <Text className="text-[10px] font-medium text-background">{paused ? 'Resume' : 'Pause'}</Text>
+            <Pressable onPress={() => setPaused((p) => !p)} style={s.pauseBtn}>
+              {paused ? <PlayCircle size={12} color={hex.background} /> : <Pause size={12} color={hex.background} />}
+              <Text variant="pill" style={{ color: hex.primaryForeground }}>
+                {paused ? 'Resume' : 'Pause'}
+              </Text>
             </Pressable>
           ) : null}
         </View>
       </View>
 
-      <View className="mb-4 flex-row gap-2.5">
-        <View className="flex-1 rounded-[24px] bg-surface-elevated p-3">
-          <Text className="text-[10px] uppercase tracking-widest text-muted-foreground">Your Roster</Text>
-          <View className="mt-2 gap-1.5">
+      <View style={s.dualRow}>
+        <View style={s.miniCard}>
+          <Text variant="caption" muted style={{ textTransform: 'uppercase', letterSpacing: 2 }}>
+            Your Roster
+          </Text>
+          <View style={s.rowGapSm}>
             {drafted.length === 0 ? (
-              <Text className="text-[12px] text-muted-foreground">No picks yet</Text>
+              <Text variant="bodyMuted">No picks yet</Text>
             ) : (
               drafted.slice(-3).map((d) => (
-                <View key={d.pick} className="flex-row items-center justify-between">
-                  <Text className="text-[12px] font-medium">{d.player.name}</Text>
-                  <Text className="text-[12px] text-muted-foreground">{d.player.pos}</Text>
+                <View key={d.pick} style={s.rowBetween}>
+                  <Text variant="bodyMuted" style={{ fontWeight: '500' }}>
+                    {d.player.name}
+                  </Text>
+                  <Text variant="bodyMuted">{d.player.pos}</Text>
                 </View>
               ))
             )}
           </View>
-          <Text className="mt-3 text-[10px] uppercase tracking-widest text-muted-foreground">Needs</Text>
-          <View className="mt-1 flex-row flex-wrap gap-1">
+          <Text variant="caption" muted style={{ marginTop: 12, textTransform: 'uppercase', letterSpacing: 2 }}>
+            Needs
+          </Text>
+          <View style={s.rowWrap}>
             {['RB', 'WR', 'TE'].map((n) => (
-              <View key={n} className="rounded-full bg-muted px-2 py-0.5"><Text className="text-[10px] font-medium">{n}</Text></View>
+              <View key={n} style={s.needPill}>
+                <Text variant="pill">{n}</Text>
+              </View>
             ))}
           </View>
         </View>
-        <View className="flex-1 rounded-[24px] bg-surface-elevated p-3">
-          <Text className="text-[10px] uppercase tracking-widest text-muted-foreground">Recent Picks</Text>
-          <View className="mt-2 gap-1.5">
+        <View style={s.miniCard}>
+          <Text variant="caption" muted style={{ textTransform: 'uppercase', letterSpacing: 2 }}>
+            Recent Picks
+          </Text>
+          <View style={s.rowGapSm}>
             {drafted.length === 0 ? (
-              <Text className="text-[12px] text-muted-foreground">Draft just started</Text>
+              <Text variant="bodyMuted">Draft just started</Text>
             ) : (
-              drafted.slice(-3).reverse().map((d) => (
-                <Text key={d.pick} className="text-[12px]"><Text className="text-muted-foreground">#{d.pick} </Text><Text className="font-medium">{d.player.name}</Text></Text>
-              ))
+              drafted
+                .slice(-3)
+                .reverse()
+                .map((d) => (
+                  <Text key={d.pick} variant="bodyMuted">
+                    <Text muted>#{d.pick} </Text>
+                    <Text style={{ fontWeight: '500' }}>{d.player.name}</Text>
+                  </Text>
+                ))
             )}
           </View>
         </View>
       </View>
 
-      <View className="mb-3 flex-row gap-1 rounded-full bg-muted p-1">
+      <View style={s.boardTabs}>
         {[
           { k: 'players' as const, label: 'Available' },
           { k: 'queue' as const, label: `Queue · ${queue.length}` },
           { k: 'chat' as const, label: 'Chat' },
         ].map((t) => (
-          <Pressable key={t.k} onPress={() => setTab(t.k)} className={cn('flex-1 rounded-full py-1.5', tab === t.k ? 'bg-background' : '')}>
-            <Text className={cn('text-center text-[12px] font-medium', tab === t.k ? 'text-foreground' : 'text-muted-foreground')}>{t.label}</Text>
+          <Pressable key={t.k} onPress={() => setTab(t.k)} style={tab === t.k ? s.boardTabActive : s.boardTab}>
+            <Text variant="pill" style={{ textAlign: 'center', color: tab === t.k ? hex.foreground : hex.mutedForeground }}>
+              {t.label}
+            </Text>
           </Pressable>
         ))}
       </View>
 
       {tab === 'players' ? (
         <>
-          <View className="mb-2 flex-row items-center gap-2 rounded-full bg-surface-elevated px-3 py-2">
+          <View style={[layout.searchBar, { marginBottom: 8, borderRadius: 9999 }]}>
             <Search size={16} color={c.mutedForeground} />
-            <TextInput value={search} onChangeText={setSearch} placeholder="Search players" placeholderTextColor={c.mutedForeground} className="flex-1 text-[14px] text-foreground" />
+            <TextInput
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search players"
+              placeholderTextColor={c.mutedForeground}
+              style={s.textInputSm}
+            />
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingBottom: 12 }}>
             {(['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const).map((p) => (
-              <Pressable key={p} onPress={() => setPos(p)} className={cn('shrink-0 rounded-full px-3 py-1', pos === p ? 'bg-foreground' : 'bg-muted')}>
-                <Text className={cn('text-[12px] font-medium', pos === p ? 'text-background' : 'text-muted-foreground')}>{p}</Text>
+              <Pressable
+                key={p}
+                onPress={() => setPos(p)}
+                style={[s.filterPill, { backgroundColor: pos === p ? hex.primary : hex.muted }]}
+              >
+                <Text variant="pill" style={{ color: pos === p ? hex.primaryForeground : hex.mutedForeground }}>
+                  {p}
+                </Text>
               </Pressable>
             ))}
           </ScrollView>
-          <View className="overflow-hidden rounded-[24px] bg-surface-elevated">
+          <View style={surfaces.roundedCard}>
             {available.map((p, i) => (
-              <Pressable key={p.id} onPress={() => setSelected(p)}>
-                <View className={cn('flex-row items-center gap-3 px-3 py-3', i > 0 ? 'border-t border-hairline' : '')}>
-                  <View className="h-10 w-10 items-center justify-center rounded-2xl bg-foreground/5">
-                    <Text className="text-[11px] font-semibold">{p.pos}</Text>
-                  </View>
-                  <View className="min-w-0 flex-1">
-                    <View className="flex-row items-center gap-1.5">
-                      <Text className="text-[15px] font-medium tracking-tightish" numberOfLines={1}>{p.name}</Text>
-                      {p.trending ? <TrendingUp size={12} color={c.success} /> : null}
-                      {p.health !== 'healthy' ? <Heart size={12} color={c.destructive} /> : null}
+              <View key={p.id}>
+                {i > 0 ? <Divider /> : null}
+                <Pressable onPress={() => setSelected(p)}>
+                  <View style={s.listRowCompact}>
+                    <View style={s.posBadge}>
+                      <Text variant="caption">{p.pos}</Text>
                     </View>
-                    <Text className="text-[11px] text-muted-foreground">{p.team} · Proj {p.proj} · Bye {p.bye}</Text>
+                    <View style={s.flexShrink}>
+                      <View style={[s.row, { gap: 6 }]}>
+                        <Text variant="body" numberOfLines={1}>
+                          {p.name}
+                        </Text>
+                        {p.trending ? <TrendingUp size={12} color={toneFg.success} /> : null}
+                        {p.health !== 'healthy' ? <Heart size={12} color={toneFg.danger} /> : null}
+                      </View>
+                      <Text variant="caption" muted>
+                        {p.team} · Proj {p.proj} · Bye {p.bye}
+                      </Text>
+                    </View>
+                    <View style={s.alignEnd}>
+                      <Text variant="bodySm">{p.bestAvail}</Text>
+                      <Text variant="caption" muted style={{ textTransform: 'uppercase', letterSpacing: 2 }}>
+                        BA
+                      </Text>
+                    </View>
                   </View>
-                  <View className="items-end">
-                    <Text className="text-[13px] font-semibold tabular-nums">{p.bestAvail}</Text>
-                    <Text className="text-[10px] uppercase tracking-widest text-muted-foreground">BA</Text>
-                  </View>
-                </View>
-              </Pressable>
+                </Pressable>
+              </View>
             ))}
           </View>
         </>
@@ -687,40 +1184,57 @@ function DraftBoard({
 }
 
 function QueueInline({ queue, setQueue, onOpenFull }: { queue: string[]; setQueue: React.Dispatch<React.SetStateAction<string[]>>; onOpenFull: () => void }) {
+  const s = useDraftStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const players = queue.map((id) => PLAYERS.find((p) => p.id === id)).filter(Boolean) as Player[];
   return (
-    <View className="gap-3">
-      <View className="overflow-hidden rounded-[24px] bg-surface-elevated">
+    <View style={s.sectionGap}>
+      <View style={surfaces.roundedCard}>
         {players.length === 0 ? (
-          <View className="px-6 py-10">
-            <Text className="text-center text-[15px] font-medium">Queue is empty</Text>
-            <Text className="mt-1 text-center text-[12px] text-muted-foreground">Star players from the Available tab to prep your picks.</Text>
+          <View style={s.emptyState}>
+            <Text variant="body">Queue is empty</Text>
+            <Text variant="bodyMuted" style={{ marginTop: 4, textAlign: 'center' }}>
+              Star players from the Available tab to prep your picks.
+            </Text>
           </View>
         ) : (
           players.map((p, i) => (
-            <View key={p.id} className={cn('flex-row items-center gap-3 px-3 py-3', i > 0 ? 'border-t border-hairline' : '')}>
-              <GripVertical size={16} color={c.mutedForeground} />
-              <View className="h-9 w-9 items-center justify-center rounded-2xl bg-foreground/5"><Text className="text-[11px] font-semibold">{p.pos}</Text></View>
-              <View className="min-w-0 flex-1">
-                <Text className="text-[14px] font-medium" numberOfLines={1}>{p.name}</Text>
-                <Text className="text-[11px] text-muted-foreground">{p.team} · Proj {p.proj}</Text>
+            <View key={p.id}>
+              {i > 0 ? <Divider /> : null}
+              <View style={s.listRowCompact}>
+                <GripVertical size={16} color={c.mutedForeground} />
+                <View style={s.posBadgeSm}>
+                  <Text variant="caption">{p.pos}</Text>
+                </View>
+                <View style={s.flexShrink}>
+                  <Text variant="bodySm" numberOfLines={1}>
+                    {p.name}
+                  </Text>
+                  <Text variant="caption" muted>
+                    {p.team} · Proj {p.proj}
+                  </Text>
+                </View>
+                <Pressable onPress={() => setQueue((q) => q.filter((id) => id !== p.id))}>
+                  <X size={16} color={c.mutedForeground} />
+                </Pressable>
               </View>
-              <Pressable onPress={() => setQueue((q) => q.filter((id) => id !== p.id))}>
-                <X size={16} color={c.mutedForeground} />
-              </Pressable>
             </View>
           ))
         )}
       </View>
-      <Pressable onPress={onOpenFull} className="h-12 items-center justify-center rounded-full bg-foreground">
-        <Text className="text-[14px] font-semibold text-background">Manage Full Queue</Text>
+      <Pressable onPress={onOpenFull} style={s.btnSm}>
+        <Text variant="button" style={{ color: hex.primaryForeground }}>
+          Manage Full Queue
+        </Text>
       </Pressable>
     </View>
   );
 }
 
 function ChatPanel({ chat, setChat }: { chat: ChatMsg[]; setChat: React.Dispatch<React.SetStateAction<ChatMsg[]>> }) {
+  const s = useDraftStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const [text, setText] = useState('');
   const send = () => {
@@ -729,23 +1243,34 @@ function ChatPanel({ chat, setChat }: { chat: ChatMsg[]; setChat: React.Dispatch
     setText('');
   };
   return (
-    <View className="gap-3">
-      <View className="rounded-[24px] bg-foreground/5 px-3 py-2">
-        <Text className="text-[11px] text-muted-foreground">📌 Commissioner: Auto-pick is set to 90s. Be ready!</Text>
+    <View style={s.sectionGap}>
+      <View style={s.chatPin}>
+        <Text variant="caption" muted>
+          📌 Commissioner: Auto-pick is set to 90s. Be ready!
+        </Text>
       </View>
-      <View className="gap-2">
+      <View style={s.rowGap}>
         {chat.map((m) => (
-          <View key={m.id} className="rounded-2xl bg-surface-elevated px-3 py-2">
-            <Text className="text-[11px] font-medium text-muted-foreground">{m.who}</Text>
-            <Text className="text-[14px]">{m.text}</Text>
+          <View key={m.id} style={s.chatBubble}>
+            <Text variant="caption" muted style={{ fontWeight: '500' }}>
+              {m.who}
+            </Text>
+            <Text variant="bodySm">{m.text}</Text>
           </View>
         ))}
       </View>
-      <View className="flex-row items-center gap-2 rounded-full bg-surface-elevated px-3 py-2">
+      <View style={s.chatInput}>
         <Smile size={16} color={c.mutedForeground} />
-        <TextInput value={text} onChangeText={setText} onSubmitEditing={send} placeholder="Message your league" placeholderTextColor={c.mutedForeground} className="flex-1 text-[14px] text-foreground" />
-        <Pressable onPress={send} className="h-8 w-8 items-center justify-center rounded-full bg-foreground">
-          <Send size={14} color={c.background} />
+        <TextInput
+          value={text}
+          onChangeText={setText}
+          onSubmitEditing={send}
+          placeholder="Message your league"
+          placeholderTextColor={c.mutedForeground}
+          style={s.textInputSm}
+        />
+        <Pressable onPress={send} style={s.sendBtn}>
+          <Send size={14} color={hex.background} />
         </Pressable>
       </View>
     </View>
@@ -754,6 +1279,8 @@ function ChatPanel({ chat, setChat }: { chat: ChatMsg[]; setChat: React.Dispatch
 
 /* ============= Player Sheet ============= */
 function PlayerSheet({ player, inQueue, onClose, onQueue, onDraft }: { player: Player | null; inQueue: boolean; onClose: () => void; onQueue: () => void; onDraft: () => void }) {
+  const s = useDraftStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const insets = useSafeAreaInsets();
   if (!player) return null;
@@ -762,31 +1289,51 @@ function PlayerSheet({ player, inQueue, onClose, onQueue, onDraft }: { player: P
 
   return (
     <Modal visible={!!player} transparent animationType="slide" onRequestClose={onClose}>
-      <View className="flex-1 justify-end bg-black/40">
-        <Pressable className="flex-1" onPress={onClose} />
-        <View className="mx-2 mb-2 overflow-hidden rounded-[36px] border border-hairline bg-background">
-          <View className="items-center pt-2.5"><View className="h-1 w-9 rounded-full bg-muted-foreground/30" /></View>
-          <ScrollView style={{ maxHeight: 560 }} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: Math.max(insets.bottom, 20) }} showsVerticalScrollIndicator={false}>
-            <View className="flex-row items-center gap-3">
-              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-foreground/5"><Text className="text-[14px] font-semibold">{player.pos}</Text></View>
-              <View className="min-w-0 flex-1">
-                <Text className="text-[20px] font-semibold tracking-tight" numberOfLines={1}>{player.name}</Text>
-                <Text className="text-[12px] text-muted-foreground">{player.team} · Proj {player.proj} · Bye {player.bye}</Text>
+      <View style={[StyleSheet.absoluteFillObject, { justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }]}>
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
+        <View style={s.sheet}>
+          <View style={[layout.centered, { paddingTop: 10 }]}>
+            <View style={s.sheetHandle} />
+          </View>
+          <ScrollView
+            style={{ maxHeight: 560 }}
+            contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: Math.max(insets.bottom, 20) }}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={[s.row, { gap: 12 }]}>
+              <View style={s.posBadgeLg}>
+                <Text variant="bodySm">{player.pos}</Text>
               </View>
-              <Pressable onPress={onClose} className="h-8 w-8 items-center justify-center rounded-full bg-muted">
+              <View style={s.flexShrink}>
+                <Text variant="sectionTitle" numberOfLines={1}>
+                  {player.name}
+                </Text>
+                <Text variant="bodyMuted">
+                  {player.team} · Proj {player.proj} · Bye {player.bye}
+                </Text>
+              </View>
+              <Pressable onPress={onClose} style={s.iconBtn}>
                 <X size={16} color={c.mutedForeground} />
               </Pressable>
             </View>
 
-            <View className="mt-4 rounded-[24px] bg-foreground p-4">
-              <View className="flex-row items-center justify-between">
-                <Text className="text-[10px] uppercase tracking-widest text-background/60">AI Recommendation</Text>
-                <View className="rounded-full bg-background/15 px-2 py-0.5"><Text className="text-[10px] font-semibold text-background">BA {player.bestAvail}</Text></View>
+            <View style={s.aiRec}>
+              <View style={s.rowBetween}>
+                <Text variant="caption" style={{ color: onDark.muted, textTransform: 'uppercase', letterSpacing: 2 }}>
+                  AI Recommendation
+                </Text>
+                <View style={s.baPill}>
+                  <Text variant="pill" style={{ color: hex.primaryForeground, fontWeight: '600' }}>
+                    BA {player.bestAvail}
+                  </Text>
+                </View>
               </View>
-              <Text className="mt-2 text-[14px] leading-relaxed text-background">{rec}</Text>
+              <Text variant="bodySm" style={{ color: hex.primaryForeground, marginTop: 8, lineHeight: 20 }}>
+                {rec}
+              </Text>
             </View>
 
-            <View className="mt-3 flex-row flex-wrap gap-2">
+            <View style={[layout.rowWrap, { gap: 8, marginTop: 12 }]}>
               <ScoreCell label="Fit" value={player.fit} />
               <ScoreCell label="Need" value={player.need} />
               <ScoreCell label="Value" value={player.value} />
@@ -801,13 +1348,15 @@ function PlayerSheet({ player, inQueue, onClose, onQueue, onDraft }: { player: P
             <Block title="Schedule" body={`Strength of schedule: ${player.sos}. Bye week ${player.bye}.`} />
             <Block title="Community" body={'"Locked in starter all year." · "Worth the reach for upside." · See full discussion in Players.'} />
 
-            <View className="mt-5 flex-row gap-2">
-              <Pressable onPress={onQueue} className="h-12 flex-1 flex-row items-center justify-center gap-1.5 rounded-full bg-surface-elevated">
+            <View style={s.sheetActions}>
+              <Pressable onPress={onQueue} style={s.queueBtn}>
                 <Star size={16} color={c.foreground} fill={inQueue ? c.foreground : 'none'} />
-                <Text className="text-[14px] font-semibold">{inQueue ? 'Queued' : 'Queue'}</Text>
+                <Text variant="bodySm">{inQueue ? 'Queued' : 'Queue'}</Text>
               </Pressable>
-              <Pressable onPress={onDraft} className="h-12 flex-[2] items-center justify-center rounded-full bg-foreground">
-                <Text className="text-[15px] font-semibold text-background">Draft {player.name.split(' ').slice(-1)[0]}</Text>
+              <Pressable onPress={onDraft} style={s.draftBtn}>
+                <Text variant="body" style={{ color: hex.primaryForeground }}>
+                  Draft {player.name.split(' ').slice(-1)[0]}
+                </Text>
               </Pressable>
             </View>
           </ScrollView>
@@ -818,31 +1367,48 @@ function PlayerSheet({ player, inQueue, onClose, onQueue, onDraft }: { player: P
 }
 
 function ScoreCell({ label, value, invert }: { label: string; value: number; invert?: boolean }) {
+  const s = useDraftStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const pct = Math.max(0, Math.min(100, value));
   return (
-    <View className="w-[31%] rounded-2xl bg-surface-elevated p-2.5">
-      <View className="flex-row items-center justify-between">
-        <Text className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</Text>
-        <Text className="text-[10px] text-foreground">{value}</Text>
+    <View style={s.scoreCell}>
+      <View style={s.rowBetween}>
+        <Text variant="caption" muted style={{ textTransform: 'uppercase', letterSpacing: 2 }}>
+          {label}
+        </Text>
+        <Text variant="pill">{value}</Text>
       </View>
-      <View className="mt-1.5 h-1 rounded-full bg-muted">
-        <View className={cn('h-full rounded-full', invert ? 'bg-destructive' : 'bg-foreground')} style={{ width: `${pct}%` }} />
+      <View style={[surfaces.progressTrack, { marginTop: 6 }]}>
+        <View
+          style={[
+            surfaces.progressFill,
+            { width: `${pct}%`, backgroundColor: invert ? hex.danger : hex.primary },
+          ]}
+        />
       </View>
     </View>
   );
 }
 
 function Block({ title, body }: { title: string; body: string }) {
+  const s = useDraftStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
-    <View className="mt-3 rounded-[20px] bg-surface-elevated p-3">
-      <Text className="text-[10px] uppercase tracking-widest text-muted-foreground">{title}</Text>
-      <Text className="mt-1 text-[13px] leading-relaxed">{body}</Text>
+    <View style={s.infoBlock}>
+      <Text variant="caption" muted style={{ textTransform: 'uppercase', letterSpacing: 2 }}>
+        {title}
+      </Text>
+      <Text variant="subtitle" style={{ marginTop: 4, lineHeight: 20 }}>
+        {body}
+      </Text>
     </View>
   );
 }
 
 /* ============= Queue (full page) ============= */
 function QueueView({ onBack, onExit, queue, setQueue }: { onBack: () => void; onExit: () => void; queue: string[]; setQueue: React.Dispatch<React.SetStateAction<string[]>> }) {
+  const s = useDraftStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const [mode, setMode] = useState<'rank' | 'tier'>('rank');
   const players = queue.map((id) => PLAYERS.find((p) => p.id === id)).filter(Boolean) as Player[];
@@ -858,52 +1424,81 @@ function QueueView({ onBack, onExit, queue, setQueue }: { onBack: () => void; on
 
   return (
     <Shell title="Player Queue" subtitle={`${players.length} queued`} onBack={onBack} onExit={onExit}>
-      <View className="mb-3 flex-row gap-1 rounded-full bg-muted p-1">
-        <Pressable onPress={() => setMode('rank')} className={cn('flex-1 flex-row items-center justify-center gap-1 rounded-full py-1.5', mode === 'rank' ? 'bg-background' : '')}>
+      <View style={s.boardTabs}>
+        <Pressable onPress={() => setMode('rank')} style={mode === 'rank' ? s.rankTabActive : s.rankTab}>
           <ArrowDownAZ size={12} color={mode === 'rank' ? c.foreground : c.mutedForeground} />
-          <Text className={cn('text-[12px] font-medium', mode === 'rank' ? 'text-foreground' : 'text-muted-foreground')}>Rank</Text>
+          <Text variant="pill" style={{ color: mode === 'rank' ? hex.foreground : hex.mutedForeground }}>
+            Rank
+          </Text>
         </Pressable>
-        <Pressable onPress={() => setMode('tier')} className={cn('flex-1 flex-row items-center justify-center gap-1 rounded-full py-1.5', mode === 'tier' ? 'bg-background' : '')}>
+        <Pressable onPress={() => setMode('tier')} style={mode === 'tier' ? s.rankTabActive : s.rankTab}>
           <Hash size={12} color={mode === 'tier' ? c.foreground : c.mutedForeground} />
-          <Text className={cn('text-[12px] font-medium', mode === 'tier' ? 'text-foreground' : 'text-muted-foreground')}>Tiers</Text>
+          <Text variant="pill" style={{ color: mode === 'tier' ? hex.foreground : hex.mutedForeground }}>
+            Tiers
+          </Text>
         </Pressable>
       </View>
 
       {players.length === 0 ? (
-        <View className="rounded-[24px] bg-surface-elevated px-6 py-12">
-          <Text className="text-center text-[15px] font-medium">Queue is empty</Text>
-          <Text className="mt-1 text-center text-[12px] text-muted-foreground">Star players from the Draft Board to build your shortlist.</Text>
+        <View style={[surfaces.emptyState, { borderRadius: 24 }]}>
+          <Text variant="body">Queue is empty</Text>
+          <Text variant="bodyMuted" style={{ marginTop: 4, textAlign: 'center' }}>
+            Star players from the Draft Board to build your shortlist.
+          </Text>
         </View>
       ) : (
-        <View className="overflow-hidden rounded-[24px] bg-surface-elevated">
+        <View style={surfaces.roundedCard}>
           {players.map((p, i) => (
-            <View key={p.id} className={cn('flex-row items-center gap-3 px-3 py-3', i > 0 ? 'border-t border-hairline' : '')}>
-              <Text className="w-5 text-center text-[12px] font-semibold tabular-nums text-muted-foreground">{i + 1}</Text>
-              <View className="h-9 w-9 items-center justify-center rounded-2xl bg-foreground/5"><Text className="text-[11px] font-semibold">{p.pos}</Text></View>
-              <View className="min-w-0 flex-1">
-                <Text className="text-[14px] font-medium" numberOfLines={1}>{p.name}</Text>
-                <Text className="text-[11px] text-muted-foreground">{p.team} · BA {p.bestAvail} · Bye {p.bye}</Text>
+            <View key={p.id}>
+              {i > 0 ? <Divider /> : null}
+              <View style={s.listRowCompact}>
+                <Text variant="pill" muted style={{ width: 20, textAlign: 'center' }}>
+                  {i + 1}
+                </Text>
+                <View style={s.posBadgeSm}>
+                  <Text variant="caption">{p.pos}</Text>
+                </View>
+                <View style={s.flexShrink}>
+                  <Text variant="bodySm" numberOfLines={1}>
+                    {p.name}
+                  </Text>
+                  <Text variant="caption" muted>
+                    {p.team} · BA {p.bestAvail} · Bye {p.bye}
+                  </Text>
+                </View>
+                <View>
+                  <Pressable onPress={() => move(i, -1)} style={{ paddingHorizontal: 4 }}>
+                    <Text muted>▲</Text>
+                  </Pressable>
+                  <Pressable onPress={() => move(i, 1)} style={{ paddingHorizontal: 4 }}>
+                    <Text muted>▼</Text>
+                  </Pressable>
+                </View>
+                <Pressable onPress={() => setQueue((q) => q.filter((id) => id !== p.id))}>
+                  <X size={16} color={c.mutedForeground} />
+                </Pressable>
               </View>
-              <View>
-                <Pressable onPress={() => move(i, -1)} className="px-1"><Text className="text-muted-foreground">▲</Text></Pressable>
-                <Pressable onPress={() => move(i, 1)} className="px-1"><Text className="text-muted-foreground">▼</Text></Pressable>
-              </View>
-              <Pressable onPress={() => setQueue((q) => q.filter((id) => id !== p.id))}>
-                <X size={16} color={c.mutedForeground} />
-              </Pressable>
             </View>
           ))}
         </View>
       )}
 
-      <View className="mt-5 flex-row gap-2">
-        <View className="flex-1 rounded-[20px] bg-surface-elevated p-3">
-          <Text className="text-[10px] uppercase tracking-widest text-muted-foreground">Sleepers</Text>
-          <Text className="mt-1 text-[13px]">G. Wilson · S. LaPorta</Text>
+      <View style={[s.dualRow, { marginTop: 20, marginBottom: 0 }]}>
+        <View style={s.statCard}>
+          <Text variant="caption" muted style={{ textTransform: 'uppercase', letterSpacing: 2 }}>
+            Sleepers
+          </Text>
+          <Text variant="subtitle" style={{ marginTop: 4 }}>
+            G. Wilson · S. LaPorta
+          </Text>
         </View>
-        <View className="flex-1 rounded-[20px] bg-surface-elevated p-3">
-          <Text className="text-[10px] uppercase tracking-widest text-muted-foreground">Avoid</Text>
-          <Text className="mt-1 text-[13px]">Aging RBs · Bye 6 stack</Text>
+        <View style={s.statCard}>
+          <Text variant="caption" muted style={{ textTransform: 'uppercase', letterSpacing: 2 }}>
+            Avoid
+          </Text>
+          <Text variant="subtitle" style={{ marginTop: 4 }}>
+            Aging RBs · Bye 6 stack
+          </Text>
         </View>
       </View>
     </Shell>
@@ -912,6 +1507,8 @@ function QueueView({ onBack, onExit, queue, setQueue }: { onBack: () => void; on
 
 /* ============= Settings ============= */
 function DraftSettings({ league, onBack, onExit }: { league: League; onBack: () => void; onExit: () => void }) {
+  const s = useDraftStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const isCommish = league.role === 'commissioner';
   const rows = [
     { label: 'Draft Timer', value: '90 seconds' },
@@ -924,46 +1521,69 @@ function DraftSettings({ league, onBack, onExit }: { league: League; onBack: () 
   ];
   return (
     <Shell title="Draft Settings" subtitle={isCommish ? 'Editable' : 'Read only'} onBack={onBack} onExit={onExit}>
-      <View className="overflow-hidden rounded-[28px] bg-surface-elevated">
+      <Card>
         {rows.map((r, i) => (
-          <View key={r.label} className={cn('flex-row items-center justify-between px-4 py-3.5', i > 0 ? 'border-t border-hairline' : '')}>
-            <Text className="text-[15px] font-medium">{r.label}</Text>
-            <Text className="text-[14px] text-muted-foreground">{r.value}</Text>
+          <View key={r.label}>
+            {i > 0 ? <Divider /> : null}
+            <View style={[s.rowBetween, { paddingHorizontal: 16, paddingVertical: 14 }]}>
+              <Text variant="body">{r.label}</Text>
+              <Text variant="bodySm" muted>
+                {r.value}
+              </Text>
+            </View>
           </View>
         ))}
-      </View>
-      {!isCommish ? <Text className="mt-4 text-center text-[12px] text-muted-foreground">Only the commissioner can change these settings.</Text> : null}
+      </Card>
+      {!isCommish ? (
+        <Text variant="bodyMuted" style={{ marginTop: 16, textAlign: 'center' }}>
+          Only the commissioner can change these settings.
+        </Text>
+      ) : null}
     </Shell>
   );
 }
 
 /* ============= Join ============= */
 function JoinDraft({ onBack, onExit, onDone }: { onBack: () => void; onExit: () => void; onDone: () => void }) {
+  const s = useDraftStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const [tab, setTab] = useState<'link' | 'code' | 'invite'>('code');
   const [code, setCode] = useState('');
   return (
     <Shell title="Join Draft" onBack={onBack} onExit={onExit}>
-      <View className="mb-3 flex-row gap-1 rounded-full bg-muted p-1">
-        {[
-          { k: 'link' as const, label: 'Invite Link' },
-          { k: 'code' as const, label: 'League Code' },
-          { k: 'invite' as const, label: 'Invitation' },
-        ].map((t) => (
-          <Pressable key={t.k} onPress={() => setTab(t.k)} className={cn('flex-1 rounded-full py-1.5', tab === t.k ? 'bg-background' : '')}>
-            <Text className={cn('text-center text-[12px] font-medium', tab === t.k ? 'text-foreground' : 'text-muted-foreground')}>{t.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-      <View className="rounded-[28px] bg-surface-elevated p-4">
-        {tab === 'link' ? <TextInput placeholder="Paste invite link" placeholderTextColor={c.mutedForeground} className="px-2 py-3 text-[15px] text-foreground" /> : null}
-        {tab === 'code' ? (
-          <TextInput value={code} onChangeText={(t) => setCode(t.toUpperCase().slice(0, 8))} placeholder="ABCD-1234" placeholderTextColor={c.mutedForeground} className="px-2 py-3 text-center text-[24px] font-semibold tracking-[8px] text-foreground" />
+      <Segmented
+        tabs={[
+          { key: 'link', label: 'Invite Link' },
+          { key: 'code', label: 'League Code' },
+          { key: 'invite', label: 'Invitation' },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
+      <View style={[surfaces.roundedCardLg, { padding: 16, marginTop: 12 }]}>
+        {tab === 'link' ? (
+          <TextInput placeholder="Paste invite link" placeholderTextColor={c.mutedForeground} style={s.textInputMd} />
         ) : null}
-        {tab === 'invite' ? <Text className="text-center text-[13px] text-muted-foreground">No pending invitations.</Text> : null}
+        {tab === 'code' ? (
+          <TextInput
+            value={code}
+            onChangeText={(t) => setCode(t.toUpperCase().slice(0, 8))}
+            placeholder="ABCD-1234"
+            placeholderTextColor={c.mutedForeground}
+            style={s.textInputCode}
+          />
+        ) : null}
+        {tab === 'invite' ? (
+          <Text variant="subtitle" muted style={{ textAlign: 'center' }}>
+            No pending invitations.
+          </Text>
+        ) : null}
       </View>
-      <Pressable onPress={onDone} className="mt-6 h-14 items-center justify-center rounded-full bg-foreground">
-        <Text className="text-[17px] font-semibold tracking-tightish text-background">Join Draft</Text>
+      <Pressable onPress={onDone} style={[surfaces.primaryButton, { marginTop: 24 }]}>
+        <Text variant="titleMd" style={{ color: hex.primaryForeground }}>
+          Join Draft
+        </Text>
       </Pressable>
     </Shell>
   );
@@ -971,6 +1591,10 @@ function JoinDraft({ onBack, onExit, onDone }: { onBack: () => void; onExit: () 
 
 /* ============= Complete ============= */
 function DraftComplete({ league, onExit, onBegin }: { league: League; onExit: () => void; onBegin: () => void }) {
+  const s = useDraftStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+  const { scheme } = useTheme();
+  const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
   const c = useColors();
   const grades = [
     { team: 'Your Team', grade: 'A-', note: 'Balanced roster, high floor' },
@@ -981,49 +1605,81 @@ function DraftComplete({ league, onExit, onBegin }: { league: League; onExit: ()
   ];
   return (
     <Shell title="Draft Complete" subtitle={league.name} onExit={onExit} hideBack>
-      <View className="mb-5 rounded-[30px] bg-foreground p-5">
-        <Trophy size={28} color={c.background} />
-        <Text className="mt-2 text-[22px] font-semibold tracking-tight text-background">That's a wrap.</Text>
-        <Text className="mt-1 text-[13px] text-background/70">Every pick is locked in. Review your grade and head to Home to start the season.</Text>
+      <View style={[s.heroBanner, { marginBottom: 20 }]}>
+        <Trophy size={28} color={hex.background} />
+        <Text variant="sectionTitle" style={{ color: hex.primaryForeground, marginTop: 8 }}>
+          That's a wrap.
+        </Text>
+        <Text variant="subtitle" style={{ color: onDark.sub, marginTop: 4 }}>
+          Every pick is locked in. Review your grade and head to Home to start the season.
+        </Text>
       </View>
 
-      <View className="mb-4 overflow-hidden rounded-[24px] bg-surface-elevated">
-        <Text className="px-4 pb-2 pt-3 text-[10px] uppercase tracking-widest text-muted-foreground">Team Grades</Text>
+      <View style={[surfaces.roundedCard, { marginBottom: 16 }]}>
+        <Text variant="caption" muted style={[s.gradesHeader, { textTransform: 'uppercase', letterSpacing: 2 }]}>
+          Team Grades
+        </Text>
         {grades.map((g, i) => (
-          <View key={g.team} className={cn('flex-row items-center gap-3 px-4 py-3', i > 0 ? 'border-t border-hairline' : '')}>
-            <View className="h-9 w-9 items-center justify-center rounded-2xl bg-foreground"><Text className="text-[13px] font-semibold text-background">{g.grade}</Text></View>
-            <View className="min-w-0 flex-1">
-              <Text className="text-[14px] font-medium">{g.team}</Text>
-              <Text className="text-[12px] text-muted-foreground" numberOfLines={1}>{g.note}</Text>
+          <View key={g.team}>
+            {i > 0 ? <Divider /> : null}
+            <View style={s.listRowCompact}>
+              <View style={surfaces.iconBoxDark}>
+                <Text variant="bodySm" style={{ color: hex.primaryForeground }}>
+                  {g.grade}
+                </Text>
+              </View>
+              <View style={s.flexShrink}>
+                <Text variant="bodySm">{g.team}</Text>
+                <Text variant="bodyMuted" numberOfLines={1}>
+                  {g.note}
+                </Text>
+              </View>
             </View>
           </View>
         ))}
       </View>
 
-      <View className="mb-5 flex-row gap-2">
+      <View style={[s.dualRow, { marginBottom: 20 }]}>
         <Highlight label="Best Value" value="Bijan Robinson" />
         <Highlight label="Biggest Steal" value="S. LaPorta" />
         <Highlight label="Biggest Reach" value="J. Tucker" />
       </View>
 
-      <View className="rounded-[20px] bg-surface-elevated p-4">
-        <Text className="text-[10px] uppercase tracking-widest text-muted-foreground">AI Summary</Text>
-        <Text className="mt-1 text-[13px] leading-relaxed">Strong RB-anchored build with WR depth. Watch waivers for an early TE2 to hedge your starter's bye week.</Text>
+      <View style={[surfaces.aiCard, { borderColor: `rgba(${ink},0.1)` }]}>
+        <View style={[s.row, { gap: 6 }]}>
+          <Sparkles size={14} color={c.mutedForeground} />
+          <Text variant="caption" muted style={{ textTransform: 'uppercase', letterSpacing: 2 }}>
+            AI Summary
+          </Text>
+        </View>
+        <Text variant="subtitle" style={{ marginTop: 4, lineHeight: 20 }}>
+          Strong RB-anchored build with WR depth. Watch waivers for an early TE2 to hedge your starter's bye week.
+        </Text>
       </View>
 
-      <Pressable onPress={onBegin} className="mt-6 h-14 items-center justify-center rounded-full bg-foreground">
-        <Text className="text-[17px] font-semibold tracking-tightish text-background">Begin Season</Text>
+      <Pressable onPress={onBegin} style={[surfaces.primaryButton, { marginTop: 24 }]}>
+        <Text variant="titleMd" style={{ color: hex.primaryForeground }}>
+          Begin Season
+        </Text>
       </Pressable>
-      <Text className="pt-3 text-center text-[12px] text-muted-foreground">Draft results stay accessible from Commissioner → Draft.</Text>
+      <Text variant="bodyMuted" style={{ paddingTop: 12, textAlign: 'center' }}>
+        Draft results stay accessible from Commissioner → Draft.
+      </Text>
     </Shell>
   );
 }
 
 function Highlight({ label, value }: { label: string; value: string }) {
+  const s = useDraftStyles();
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
-    <View className="flex-1 rounded-[20px] bg-surface-elevated p-3">
-      <Text className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</Text>
-      <Text className="mt-1 text-[13px] font-medium" numberOfLines={1}>{value}</Text>
+    <View style={s.statCard}>
+      <Text variant="caption" muted style={{ textTransform: 'uppercase', letterSpacing: 2 }}>
+        {label}
+      </Text>
+      <Text variant="subtitle" style={{ marginTop: 4, fontWeight: '500' }} numberOfLines={1}>
+        {value}
+      </Text>
     </View>
   );
 }

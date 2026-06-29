@@ -2,7 +2,46 @@
 // cannot reach: icon `color` props, BlurView tint, StatusBar, gradients, SVG.
 // Keep in sync with global.css / tailwind.config.js.
 
+/** Hex tokens for inline `style` — applied on first paint before NativeWind hydrates. */
+export const lightHex = {
+  background: '#F2F2F2',
+  foreground: '#0D0D0D',
+  surface: '#FCFCFC',
+  surfaceElevated: '#FFFFFF',
+  hairline: '#D1D1D1',
+  muted: '#F0F0F0',
+  mutedForeground: '#636363',
+  primary: '#0D0D0D',
+  primaryForeground: '#FCFCFC',
+  success: '#28BD5F',
+  warning: '#F2B10D',
+  danger: '#EE3734',
+  border: '#DEDEDE',
+} as const;
+
+/** Dark palette — mirrors `.dark` in global.css. */
+export const darkHex = {
+  background: '#080808',
+  foreground: '#F7F7F7',
+  surface: '#141414',
+  surfaceElevated: '#1F1F1F',
+  hairline: '#292929',
+  muted: '#242424',
+  mutedForeground: '#999999',
+  primary: '#F7F7F7',
+  primaryForeground: '#141414',
+  success: '#2ECC71',
+  warning: '#F5C842',
+  danger: '#F05552',
+  border: '#292929',
+} as const;
+
+export type HexPalette = typeof lightHex | typeof darkHex;
 export type ColorScheme = 'light' | 'dark';
+
+export function hexForScheme(scheme: ColorScheme): HexPalette {
+  return scheme === 'dark' ? darkHex : lightHex;
+}
 
 type Palette = {
   background: string;

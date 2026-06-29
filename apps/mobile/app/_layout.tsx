@@ -9,7 +9,7 @@ import { BottomBar, TopChrome } from '@/components/AppChrome';
 import { CommissionerSheet } from '@/components/CommissionerSheet';
 import { CommissionerSheetProvider } from '@/lib/commissioner-sheet-context';
 import { LeagueProvider, useLeague } from '@/lib/league-context';
-import { ThemeProvider, useTheme } from '@/lib/theme';
+import { ThemeProvider, useTheme, useHex } from '@/lib/theme';
 
 const queryClient = new QueryClient();
 
@@ -18,24 +18,33 @@ function isOnboardingPath(p: string) {
   return ONBOARDING_PATHS.some((x) => p === x || p.startsWith(x + '/'));
 }
 
+/** Main bottom-bar destinations — instant switch, no stack slide. */
+const TAB_SCREEN_OPTIONS = { animation: 'none' as const };
+
 function Shell() {
   const pathname = usePathname();
   const { user, leagues } = useLeague();
   const { scheme } = useTheme();
+  const hex = useHex();
   const showChrome = !!user && leagues.length > 0 && !isOnboardingPath(pathname);
 
   return (
-    <View className="flex-1 bg-background">
+    <View style={{ flex: 1, backgroundColor: hex.background }}>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       {showChrome ? <TopChrome /> : null}
-      <View className="flex-1">
+      <View style={{ flex: 1 }}>
         <Stack
           screenOptions={{
             headerShown: false,
             contentStyle: { backgroundColor: 'transparent' },
             animation: 'slide_from_right',
           }}
-        />
+        >
+          <Stack.Screen name="index" options={TAB_SCREEN_OPTIONS} />
+          <Stack.Screen name="team" options={TAB_SCREEN_OPTIONS} />
+          <Stack.Screen name="league" options={TAB_SCREEN_OPTIONS} />
+          <Stack.Screen name="players" options={TAB_SCREEN_OPTIONS} />
+        </Stack>
       </View>
       {showChrome ? <BottomBar /> : null}
       <CommissionerSheet />

@@ -1,50 +1,58 @@
-import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Trophy } from 'lucide-react-native';
-import { Pressable, Text } from '@/components/ui/primitives';
+import { Pressable, Text, View } from '@/components/ui/primitives';
 import { useNav } from '@/lib/nav';
-import { useColors } from '@/lib/theme';
+import { useThemeTokens } from '@/lib/theme';
 
 export default function WelcomePage() {
   const insets = useSafeAreaInsets();
   const nav = useNav();
-  const c = useColors();
+  const { hex, layout, surfaces } = useThemeTokens();
+
   return (
     <View
-      className="flex-1 bg-background px-6"
-      style={{ paddingTop: Math.max(insets.top, 24), paddingBottom: Math.max(insets.bottom, 24) }}
+      style={{
+        flex: 1,
+        backgroundColor: hex.background,
+        paddingHorizontal: 24,
+        paddingTop: Math.max(insets.top, 24),
+        paddingBottom: Math.max(insets.bottom, 24),
+      }}
     >
-      <View className="flex-1 items-start justify-center">
-        <View className="h-14 w-14 items-center justify-center rounded-[22px] bg-foreground">
-          <Trophy size={28} color={c.background} strokeWidth={2.25} />
+      <View style={[layout.fill, { justifyContent: 'center', alignItems: 'flex-start' }]}>
+        <View
+          style={{
+            height: 56,
+            width: 56,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 22,
+            backgroundColor: hex.primary,
+          }}
+        >
+          <Trophy size={28} color={hex.background} strokeWidth={2.25} />
         </View>
-        <Text className="mt-10 text-[40px] font-semibold leading-[42px] tracking-tighter2">
+        <Text variant="hero" style={{ marginTop: 40, fontSize: 40, lineHeight: 42 }}>
           Run your fantasy league in one place.
         </Text>
-        <Text className="mt-5 max-w-[28ch] text-[17px] leading-snug text-muted-foreground">
+        <Text variant="subtitle" style={{ marginTop: 20, fontSize: 17, lineHeight: 24, maxWidth: 280 }}>
           Draft, manage your team, collect dues, follow players, and keep your league active all
           season.
         </Text>
       </View>
 
-      <View className="gap-3">
-        <Pressable
-          onPress={() => nav.push('/auth?mode=signup')}
-          className="h-14 w-full items-center justify-center rounded-full bg-foreground"
-        >
-          <Text className="text-[17px] font-semibold tracking-tightish text-background">
+      <View style={{ gap: 12 }}>
+        <Pressable onPress={() => nav.push('/auth?mode=signup')} style={surfaces.primaryButton}>
+          <Text variant="button" style={{ color: hex.primaryForeground, fontSize: 17 }}>
             Get Started
           </Text>
         </Pressable>
-        <Pressable
-          onPress={() => nav.push('/auth?mode=signin')}
-          className="h-14 w-full items-center justify-center rounded-full bg-surface-elevated"
-        >
-          <Text className="text-[17px] font-semibold tracking-tightish text-foreground">
+        <Pressable onPress={() => nav.push('/auth?mode=signin')} style={surfaces.secondaryButton}>
+          <Text variant="button" style={{ fontSize: 17 }}>
             Sign In
           </Text>
         </Pressable>
-        <Text className="pt-2 text-center text-[12px] text-muted-foreground">
+        <Text variant="bodyMuted" style={{ paddingTop: 8, textAlign: 'center' }}>
           By continuing you agree to our Terms & Privacy.
         </Text>
       </View>

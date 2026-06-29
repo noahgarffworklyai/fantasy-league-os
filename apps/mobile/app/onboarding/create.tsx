@@ -1,14 +1,13 @@
 import { useState, type ReactNode } from 'react';
-import { ScrollView, View } from 'react-native';
+import { ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, ChevronLeft } from 'lucide-react-native';
-import { Pressable, Text } from '@/components/ui/primitives';
+import { Pressable, Text, View } from '@/components/ui/primitives';
 import { Input } from '@/components/ui/Input';
 import { Divider } from '@/components/ui/Card';
 import { makeId, shortNameFor, useLeague, type League } from '@/lib/league-context';
 import { useNav } from '@/lib/nav';
-import { useColors } from '@/lib/theme';
-import { cn } from '@/lib/cn';
+import { useTheme, useThemeTokens } from '@/lib/theme';
 
 type Scoring = 'Standard' | 'Half PPR' | 'PPR';
 type DraftType = 'Snake' | 'Auction';
@@ -27,6 +26,8 @@ const STEPS = ['Basics', 'Scoring', 'Dues', 'Draft', 'Review'] as const;
 export default function CreateLeaguePage() {
   const nav = useNav();
   const insets = useSafeAreaInsets();
+  const { hex, layout, surfaces } = useThemeTokens();
+  const { scheme } = useTheme();
   const { addLeague } = useLeague();
   const [step, setStep] = useState(0);
   const [d, setD] = useState<Draft>({
@@ -74,26 +75,40 @@ export default function CreateLeaguePage() {
     nav.replace('/readiness');
   };
 
+  const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
+
   return (
-    <View className="flex-1 bg-background">
-      <View className="px-6" style={{ paddingTop: Math.max(insets.top, 16) }}>
-        <View className="flex-row items-center justify-between">
-          <Pressable onPress={back} className="-ml-2 flex-row items-center gap-0.5 rounded-full px-2 py-1">
-            <ChevronLeft size={20} color={useColors().foreground} />
-            <Text className="text-[15px]">Back</Text>
+    <View style={{ flex: 1, backgroundColor: hex.background }}>
+      <View style={{ paddingHorizontal: 24, paddingTop: Math.max(insets.top, 16) }}>
+        <View style={layout.rowBetween}>
+          <Pressable onPress={back} style={[layout.row, { marginLeft: -8, paddingHorizontal: 8, paddingVertical: 4 }]}>
+            <ChevronLeft size={20} color={hex.foreground} />
+            <Text variant="body">Back</Text>
           </Pressable>
-          <Text className="text-[12px] font-medium uppercase tracking-widest text-muted-foreground">
+          <Text variant="eyebrow">
             Step {step + 1} of {STEPS.length}
           </Text>
         </View>
-        <View className="mt-4 flex-row gap-1.5">
+        <View style={[layout.row, { marginTop: 16, gap: 6 }]}>
           {STEPS.map((_, i) => (
-            <View key={i} className={cn('h-1 flex-1 rounded-full', i <= step ? 'bg-foreground' : 'bg-foreground/10')} />
+            <View
+              key={i}
+              style={{
+                flex: 1,
+                height: 4,
+                borderRadius: 9999,
+                backgroundColor: i <= step ? hex.foreground : `rgba(${ink},0.1)`,
+              }}
+            />
           ))}
         </View>
       </View>
 
-      <ScrollView className="flex-1 px-6 pt-2" keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8 }}
+        keyboardShouldPersistTaps="handled"
+      >
         {step === 0 ? <BasicsStep d={d} setD={setD} /> : null}
         {step === 1 ? <ScoringStep d={d} setD={setD} /> : null}
         {step === 2 ? <DuesStep d={d} setD={setD} /> : null}
@@ -101,18 +116,18 @@ export default function CreateLeaguePage() {
         {step === 4 ? <ReviewStep d={d} /> : null}
       </ScrollView>
 
-      <View className="px-6 pt-3" style={{ paddingBottom: Math.max(insets.bottom, 20) }}>
+      <View style={{ paddingHorizontal: 24, paddingTop: 12, paddingBottom: Math.max(insets.bottom, 20) }}>
         {step < STEPS.length - 1 ? (
-          <Pressable
-            disabled={!canNext}
-            onPress={next}
-            className={cn('h-14 w-full items-center justify-center rounded-full bg-foreground', !canNext ? 'opacity-40' : '')}
-          >
-            <Text className="text-[17px] font-semibold tracking-tightish text-background">Continue</Text>
+          <Pressable disabled={!canNext} onPress={next} style={[surfaces.primaryButton, !canNext ? { opacity: 0.4 } : null]}>
+            <Text variant="button" style={{ color: hex.primaryForeground, fontSize: 17 }}>
+              Continue
+            </Text>
           </Pressable>
         ) : (
-          <Pressable onPress={create} className="h-14 w-full items-center justify-center rounded-full bg-foreground">
-            <Text className="text-[17px] font-semibold tracking-tightish text-background">Create League</Text>
+          <Pressable onPress={create} style={surfaces.primaryButton}>
+            <Text variant="button" style={{ color: hex.primaryForeground, fontSize: 17 }}>
+              Create League
+            </Text>
           </Pressable>
         )}
       </View>
@@ -122,17 +137,21 @@ export default function CreateLeaguePage() {
 
 function StepTitle({ title, sub }: { title: string; sub?: string }) {
   return (
-    <View className="pb-6 pt-6">
-      <Text className="text-[28px] font-semibold leading-tight tracking-tighter2">{title}</Text>
-      {sub ? <Text className="mt-2 text-[15px] text-muted-foreground">{sub}</Text> : null}
+    <View style={{ paddingTop: 24, paddingBottom: 24 }}>
+      <Text variant="titleXl">{title}</Text>
+      {sub ? (
+        <Text variant="subtitle" style={{ marginTop: 8 }}>
+          {sub}
+        </Text>
+      ) : null}
     </View>
   );
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <View className="pb-4">
-      <Text className="mb-2 text-[13px] font-medium uppercase tracking-widest text-muted-foreground">
+    <View style={{ paddingBottom: 16 }}>
+      <Text variant="eyebrow" style={{ marginBottom: 8 }}>
         {label}
       </Text>
       {children}
@@ -151,26 +170,28 @@ function PickerRow<T extends string | number>({
   onChange: (v: T) => void;
   big?: boolean;
 }) {
+  const { hex, layout } = useThemeTokens();
   return (
-    <View className="flex-row gap-2">
+    <View style={[layout.row, { gap: 8 }]}>
       {options.map((o) => {
         const a = o === value;
         return (
           <Pressable
             key={String(o)}
             onPress={() => onChange(o)}
-            className={cn(
-              'flex-1 items-center justify-center rounded-2xl',
-              big ? 'h-14' : 'h-12',
-              a ? 'bg-foreground' : 'bg-surface-elevated',
-            )}
+            style={[
+              layout.flex1,
+              layout.centered,
+              {
+                height: big ? 56 : 48,
+                borderRadius: 16,
+                backgroundColor: a ? hex.primary : hex.surfaceElevated,
+              },
+            ]}
           >
             <Text
-              className={cn(
-                'tracking-tightish',
-                big ? 'text-[17px] font-semibold' : 'text-[14px] font-medium',
-                a ? 'text-background' : 'text-foreground',
-              )}
+              variant={big ? 'titleMd' : 'bodySm'}
+              style={{ color: a ? hex.primaryForeground : hex.foreground }}
             >
               {o}
             </Text>
@@ -196,6 +217,7 @@ function BasicsStep({ d, setD }: { d: Draft; setD: (d: Draft) => void }) {
 }
 
 function ScoringStep({ d, setD }: { d: Draft; setD: (d: Draft) => void }) {
+  const { surfaces, layout } = useThemeTokens();
   return (
     <View>
       <StepTitle title="Scoring" sub="Pick how points are awarded." />
@@ -204,8 +226,8 @@ function ScoringStep({ d, setD }: { d: Draft; setD: (d: Draft) => void }) {
         value={d.scoring}
         onChange={(scoring) => setD({ ...d, scoring })}
       />
-      <View className="mt-6 rounded-2xl bg-surface-elevated p-4">
-        <Text className="text-[13px] text-muted-foreground">
+      <View style={[surfaces.roundedCard, { marginTop: 24, padding: 16 }]}>
+        <Text variant="bodyMuted" style={{ fontSize: 13 }}>
           {d.scoring === 'Standard'
             ? 'Receptions do not score. Yards and touchdowns only.'
             : d.scoring === 'Half PPR'
@@ -218,6 +240,7 @@ function ScoringStep({ d, setD }: { d: Draft; setD: (d: Draft) => void }) {
 }
 
 function DuesStep({ d, setD }: { d: Draft; setD: (d: Draft) => void }) {
+  const { surfaces } = useThemeTokens();
   const pot = d.buyIn * d.size;
   const fee = Math.round(pot * 0.03);
   const payout = pot - fee;
@@ -231,15 +254,13 @@ function DuesStep({ d, setD }: { d: Draft; setD: (d: Draft) => void }) {
           onChangeText={(t) => setD({ ...d, buyIn: Number(t.replace(/[^0-9]/g, '')) || 0 })}
         />
       </Field>
-      <View className="rounded-[24px] bg-surface-elevated p-4">
+      <View style={[surfaces.roundedCard, { padding: 16 }]}>
         <DuesRow label="Total pot" value={`$${pot.toLocaleString()}`} strong />
         <DuesRow label="Platform fee (3%)" value={`-$${fee.toLocaleString()}`} />
         <DuesRow label="Distributable" value={`$${payout.toLocaleString()}`} strong />
       </View>
-      <View className="mt-4 rounded-[24px] bg-surface-elevated p-4">
-        <Text className="text-[13px] font-medium uppercase tracking-widest text-muted-foreground">
-          Prize structure
-        </Text>
+      <View style={[surfaces.roundedCard, { marginTop: 16, padding: 16 }]}>
+        <Text variant="eyebrow">Prize structure</Text>
         <DuesRow label="1st place" value={`$${Math.round(payout * 0.7).toLocaleString()}`} />
         <DuesRow label="2nd place" value={`$${Math.round(payout * 0.2).toLocaleString()}`} />
         <DuesRow label="Regular season" value={`$${Math.round(payout * 0.1).toLocaleString()}`} />
@@ -249,18 +270,21 @@ function DuesStep({ d, setD }: { d: Draft; setD: (d: Draft) => void }) {
 }
 
 function DuesRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  const { layout } = useThemeTokens();
   return (
-    <View className="flex-row items-center justify-between py-1.5">
-      <Text className="text-[14px] text-muted-foreground">{label}</Text>
-      <Text className={cn('tracking-tightish', strong ? 'text-[17px] font-semibold' : 'text-[15px]')}>
-        {value}
+    <View style={[layout.rowBetween, { paddingVertical: 6 }]}>
+      <Text variant="bodyMuted" style={{ fontSize: 14 }}>
+        {label}
       </Text>
+      <Text variant={strong ? 'titleMd' : 'body'}>{value}</Text>
     </View>
   );
 }
 
 function DraftStep({ d, setD }: { d: Draft; setD: (d: Draft) => void }) {
-  const c = useColors();
+  const { hex, layout } = useThemeTokens();
+  const { scheme } = useTheme();
+  const inkOnPrimary = scheme === 'dark' ? '20,20,20' : '252,252,252';
   return (
     <View>
       <StepTitle title="Draft setup" sub="When and how you'll draft." />
@@ -268,28 +292,55 @@ function DraftStep({ d, setD }: { d: Draft; setD: (d: Draft) => void }) {
         <Input value={d.draftDate} placeholder="Sun, Sep 6 · 7:00 PM" onChangeText={(draftDate) => setD({ ...d, draftDate })} />
       </Field>
       <Field label="Draft Type">
-        <View className="gap-2">
+        <View style={{ gap: 8 }}>
           <Pressable
             onPress={() => setD({ ...d, draftType: 'Snake' })}
-            className={cn(
-              'w-full flex-row items-center justify-between rounded-2xl px-4 py-4',
-              d.draftType === 'Snake' ? 'bg-foreground' : 'bg-surface-elevated',
-            )}
+            style={[
+              layout.rowBetween,
+              {
+                borderRadius: 16,
+                paddingHorizontal: 16,
+                paddingVertical: 16,
+                backgroundColor: d.draftType === 'Snake' ? hex.primary : hex.surfaceElevated,
+              },
+            ]}
           >
             <View>
-              <Text className={cn('text-[16px] font-semibold tracking-tightish', d.draftType === 'Snake' ? 'text-background' : 'text-foreground')}>
+              <Text
+                variant="titleMd"
+                style={{ color: d.draftType === 'Snake' ? hex.primaryForeground : hex.foreground }}
+              >
                 Snake Draft
               </Text>
-              <Text className={cn('text-[13px]', d.draftType === 'Snake' ? 'text-background/70' : 'text-muted-foreground')}>
+              <Text
+                variant="bodyMuted"
+                style={{
+                  fontSize: 13,
+                  color: d.draftType === 'Snake' ? `rgba(${inkOnPrimary},0.7)` : hex.mutedForeground,
+                }}
+              >
                 Order reverses each round.
               </Text>
             </View>
-            {d.draftType === 'Snake' ? <Check size={20} color={c.background} /> : null}
+            {d.draftType === 'Snake' ? <Check size={20} color={hex.background} /> : null}
           </Pressable>
-          <View className="w-full flex-row items-center justify-between rounded-2xl bg-surface-elevated px-4 py-4 opacity-40">
+          <View
+            style={[
+              layout.rowBetween,
+              {
+                borderRadius: 16,
+                paddingHorizontal: 16,
+                paddingVertical: 16,
+                backgroundColor: hex.surfaceElevated,
+                opacity: 0.4,
+              },
+            ]}
+          >
             <View>
-              <Text className="text-[16px] font-semibold tracking-tightish text-foreground">Auction Draft</Text>
-              <Text className="text-[13px] text-muted-foreground">Coming soon.</Text>
+              <Text variant="titleMd">Auction Draft</Text>
+              <Text variant="bodyMuted" style={{ fontSize: 13 }}>
+                Coming soon.
+              </Text>
             </View>
           </View>
         </View>
@@ -300,10 +351,11 @@ function DraftStep({ d, setD }: { d: Draft; setD: (d: Draft) => void }) {
 
 function ReviewStep({ d }: { d: Draft }) {
   const nav = useNav();
+  const { surfaces, layout } = useThemeTokens();
   return (
     <View>
       <StepTitle title="Review" sub="Looks good? You can edit later." />
-      <View className="overflow-hidden rounded-[24px] bg-surface-elevated">
+      <View style={surfaces.roundedCard}>
         <ReviewRow label="League" value={d.name || '—'} />
         <ReviewRow label="Size" value={`${d.size} teams`} divided />
         <ReviewRow label="Scoring" value={d.scoring} divided />
@@ -311,23 +363,28 @@ function ReviewStep({ d }: { d: Draft }) {
         <ReviewRow label="Pot" value={`$${(d.buyIn * d.size).toLocaleString()}`} divided />
         <ReviewRow label="Draft" value={d.draftType + (d.draftDate ? ` · ${d.draftDate}` : '')} divided />
       </View>
-      <Text className="mt-3 px-1 text-[12px] text-muted-foreground">
+      <Text variant="bodyMuted" style={{ marginTop: 12, paddingHorizontal: 4 }}>
         You'll become the commissioner of this league.
       </Text>
-      <Pressable onPress={() => nav.push('/onboarding')} className="items-center pt-4">
-        <Text className="text-[13px] text-muted-foreground">Cancel</Text>
+      <Pressable onPress={() => nav.push('/onboarding')} style={[layout.centered, { paddingTop: 16 }]}>
+        <Text variant="link" muted>
+          Cancel
+        </Text>
       </Pressable>
     </View>
   );
 }
 
 function ReviewRow({ label, value, divided }: { label: string; value: string; divided?: boolean }) {
+  const { layout } = useThemeTokens();
   return (
     <View>
       {divided ? <Divider /> : null}
-      <View className="flex-row items-center justify-between px-4 py-4">
-        <Text className="text-[14px] text-muted-foreground">{label}</Text>
-        <Text className="text-[15px] font-medium tracking-tightish">{value}</Text>
+      <View style={[layout.rowBetween, { paddingHorizontal: 16, paddingVertical: 16 }]}>
+        <Text variant="bodyMuted" style={{ fontSize: 14 }}>
+          {label}
+        </Text>
+        <Text variant="body">{value}</Text>
       </View>
     </View>
   );
