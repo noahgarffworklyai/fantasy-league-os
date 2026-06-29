@@ -226,7 +226,8 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshLeagues = useCallback(async () => {
-    if (!apiUser) {
+    const currentUser = useAuthStore.getState().user;
+    if (!currentUser) {
       setLeagues([]);
       return [];
     }
@@ -244,15 +245,17 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
     } finally {
       setLeaguesLoading(false);
     }
-  }, [apiUser]);
+  }, []);
 
   useEffect(() => {
     if (!authInitialized || !hydrated) return;
     if (apiUser) {
+      setLeaguesLoading(true);
       refreshLeagues().catch(() => setLeagues([]));
     } else {
       setLeagues([]);
       setActiveIdState(null);
+      setLeaguesLoading(false);
     }
   }, [apiUser, authInitialized, hydrated, refreshLeagues]);
 

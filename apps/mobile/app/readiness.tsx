@@ -44,6 +44,7 @@ export default function ReadinessPage() {
       sub: `${active.paid ?? 0} of ${active.size ?? active.members} paid`,
       status: 'attention',
       action: 'Collect Dues',
+      to: '/treasury',
     },
     { key: 'order', label: 'Set Draft Order', sub: 'Randomize or set manually', status: 'attention', action: 'Set Draft Order' },
     {

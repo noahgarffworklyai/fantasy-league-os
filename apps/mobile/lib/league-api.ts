@@ -1,7 +1,46 @@
 import type { InvitePreview, LeagueListItem } from '@flos/shared';
+import * as Linking from 'expo-linking';
 import { api } from './api';
 
 export type { InvitePreview, LeagueListItem };
+
+export type LeagueInviteLink = {
+  token: string;
+  webLink: string;
+  deepLink: string;
+  expiresAt: string;
+};
+
+function buildInviteLinks(token: string, expiresAt: string): LeagueInviteLink {
+  const deepLink = Linking.createURL(`invite/${token}`);
+  return {
+    token,
+    expiresAt,
+    deepLink,
+    webLink: deepLink,
+  };
+}
+
+export async function ensureLeagueInvite(leagueId: string): Promise<LeagueInviteLink> {
+  const { invites } = await api.get<{
+    invites: Array<{ token: string; expiresAt: string; consumedAt: string | null }>;
+  }>(`/invites/league/${leagueId}`);
+
+  const now = Date.now();
+  const active = invites.find(
+    (invite) => !invite.consumedAt && new Date(invite.expiresAt).getTime() > now,
+  );
+
+  if (active) {
+    return buildInviteLinks(active.token, active.expiresAt);
+  }
+
+  const res = await api.post<{
+    invite: { token: string; expiresAt: string; webLink: string; deepLink: string };
+  }>('/invites', { leagueId });
+
+  return buildInviteLinks(res.invite.token, res.invite.expiresAt);
+}
 
 export async function fetchLeaguesFromApi(): Promise<LeagueListItem[]> {
   const res = await api.get<{ leagues: LeagueListItem[] }>('/leagues');
@@ -28,6 +67,7 @@ export async function createHostedLeagueOnApi(input: CreateHostedLeagueInput) {
       buyInCents: input.buyIn * 100,
       platformFeeCents: Math.max(500, Math.round(potCents * 0.03)),
       payoutTemplate: 'standard',
+      draftDate: input.draftDate,
       customRules: JSON.stringify({
         scoring: input.scoring,
         size: input.size,

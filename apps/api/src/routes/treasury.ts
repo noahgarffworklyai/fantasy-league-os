@@ -55,7 +55,7 @@ export async function treasuryRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
 
     try {
-      await requireLeagueMembership(authReq, id, { paid: true });
+      await requireLeagueMembership(authReq, id);
     } catch (e) {
       return reply.status(403).send({ error: e instanceof Error ? e.message : 'Access denied' });
     }

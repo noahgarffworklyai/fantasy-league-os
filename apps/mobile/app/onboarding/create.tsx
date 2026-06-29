@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, ChevronLeft } from 'lucide-react-native';
 import { Pressable, Text, View } from '@/components/ui/primitives';
 import { Input } from '@/components/ui/Input';
+import { DatePickerField, formatDraftDateTime } from '@/components/ui/DatePickerField';
 import { Divider } from '@/components/ui/Card';
 import { useLeague } from '@/lib/league-context';
 import { useNav } from '@/lib/nav';
@@ -17,8 +18,15 @@ interface Draft {
   size: number;
   scoring: Scoring;
   buyIn: number;
-  draftDate: string;
+  draftDate: Date;
   draftType: DraftType;
+}
+
+function defaultDraftDate() {
+  const date = new Date();
+  date.setDate(date.getDate() + 7);
+  date.setHours(19, 0, 0, 0);
+  return date;
 }
 
 const STEPS = ['Basics', 'Scoring', 'Dues', 'Draft', 'Review'] as const;
@@ -36,7 +44,7 @@ export default function CreateLeaguePage() {
     size: 12,
     scoring: 'Half PPR',
     buyIn: 100,
-    draftDate: '',
+    draftDate: defaultDraftDate(),
     draftType: 'Snake',
   });
 
@@ -47,7 +55,7 @@ export default function CreateLeaguePage() {
     (step === 0 && d.name.trim().length > 1) ||
     step === 1 ||
     step === 2 ||
-    (step === 3 && d.draftDate.length > 0) ||
+    (step === 3 && d.draftDate instanceof Date) ||
     step === 4;
 
   const create = async () => {
@@ -59,7 +67,7 @@ export default function CreateLeaguePage() {
         buyIn: d.buyIn,
         scoring: d.scoring,
         draftType: d.draftType,
-        draftDate: d.draftDate || undefined,
+        draftDate: d.draftDate.toISOString(),
       });
       nav.replace('/readiness');
     } catch (e) {
@@ -282,8 +290,8 @@ function DraftStep({ d, setD }: { d: Draft; setD: (d: Draft) => void }) {
   return (
     <View>
       <StepTitle title="Draft setup" sub="When and how you'll draft." />
-      <Field label="Draft Date">
-        <Input value={d.draftDate} placeholder="Sun, Sep 6 · 7:00 PM" onChangeText={(draftDate) => setD({ ...d, draftDate })} />
+      <Field label="Draft Date & Time">
+        <DatePickerField value={d.draftDate} onChange={(draftDate) => setD({ ...d, draftDate })} />
       </Field>
       <Field label="Draft Type">
         <View style={{ gap: 8 }}>
@@ -355,7 +363,7 @@ function ReviewStep({ d }: { d: Draft }) {
         <ReviewRow label="Scoring" value={d.scoring} divided />
         <ReviewRow label="Buy in" value={`$${d.buyIn} / team`} divided />
         <ReviewRow label="Pot" value={`$${(d.buyIn * d.size).toLocaleString()}`} divided />
-        <ReviewRow label="Draft" value={d.draftType + (d.draftDate ? ` · ${d.draftDate}` : '')} divided />
+        <ReviewRow label="Draft" value={`${d.draftType} · ${formatDraftDateTime(d.draftDate)}`} divided />
       </View>
       <Text variant="bodyMuted" style={{ marginTop: 12, paddingHorizontal: 4 }}>
         You'll become the commissioner of this league.

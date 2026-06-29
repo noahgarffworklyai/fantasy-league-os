@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePathname, useRouter } from 'expo-router';
-import { BlurView } from 'expo-blur';
 import {
   Bell,
   Check,
@@ -42,28 +41,32 @@ export function TopChrome() {
   const { user, leagues, active, setActiveId, signOut } = useLeague();
   const c = useColors();
   const hex = useHex();
+  const { scheme } = useTheme();
   const { layout, surfaces } = useThemeStyles();
   const [switcher, setSwitcher] = useState(false);
   const [menu, setMenu] = useState(false);
   if (!active) return null;
 
   return (
-    <View style={{ paddingTop: Math.max(insets.top, 12), backgroundColor: hex.background }}>
-      <View style={[layout.rowBetween, { paddingHorizontal: 16, paddingBottom: 8 }]}>
+    <View style={{ width: '100%', paddingTop: Math.max(insets.top, 12), backgroundColor: hex.background }}>
+      <View style={[layout.rowBetween, { width: '100%', paddingHorizontal: 16, paddingBottom: 8 }]}>
         <Pressable
           onPress={() => setSwitcher(true)}
           style={[
             layout.row,
+            layout.flex1,
             surfaces.pill,
             {
               height: 36,
               gap: 6,
               paddingHorizontal: 14,
-              backgroundColor: 'rgba(13,13,13,0.06)',
+              marginRight: 12,
+              minWidth: 0,
+              backgroundColor: scheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(13,13,13,0.06)',
             },
           ]}
         >
-          <Text variant="link" numberOfLines={1} style={{ maxWidth: 180, opacity: 0.9 }}>
+          <Text variant="link" numberOfLines={1} style={{ flex: 1, minWidth: 0, opacity: 0.9 }}>
             {active.name}
           </Text>
           <ChevronDown size={14} color={c.foreground} strokeWidth={2} />
@@ -240,6 +243,8 @@ function ProfileMenuSheet({
   };
   const items = [
     { icon: User, label: 'Profile', onPress: () => go('/profile') },
+    { icon: Plus, label: 'Create a League', onPress: () => go('/onboarding/create') },
+    { icon: UserPlus, label: 'Join a League', onPress: () => go('/onboarding/join') },
     { icon: Bell, label: 'Notifications', onPress: () => go('/profile') },
     { icon: Settings, label: 'Settings', onPress: () => go('/commissioner/settings') },
     { icon: CircleHelp, label: 'Help', onPress: () => go('/profile') },
@@ -309,73 +314,68 @@ export function BottomBar() {
   const { scheme } = useTheme();
   const { layout } = useThemeStyles();
 
+  const barBg = scheme === 'dark' ? 'rgba(8,8,8,0.92)' : 'rgba(242,242,242,0.92)';
+
   return (
     <View
       style={{
         position: 'absolute',
-        left: 16,
-        right: 16,
+        left: 0,
+        right: 0,
         bottom: 0,
+        paddingHorizontal: 16,
         paddingBottom: Math.max(insets.bottom, 12),
         paddingTop: 8,
       }}
       pointerEvents="box-none"
     >
-      <View style={[layout.row, { gap: 8 }]}>
-        <BlurView
-          intensity={40}
-          tint={scheme === 'dark' ? 'dark' : 'light'}
-          experimentalBlurMethod="dimezisBlurView"
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, width: '100%' }}>
+        <View
           style={{
             flex: 1,
-            overflow: 'hidden',
+            minWidth: 0,
+            flexDirection: 'row',
             borderRadius: 9999,
             borderWidth: StyleSheet.hairlineWidth,
             borderColor: hex.hairline,
+            backgroundColor: barBg,
+            paddingHorizontal: 8,
+            paddingVertical: 6,
+            overflow: 'hidden',
           }}
         >
-          <View
-            style={[
-              layout.row,
-              {
-                backgroundColor: scheme === 'dark' ? 'rgba(8,8,8,0.5)' : 'rgba(242,242,242,0.4)',
-                paddingHorizontal: 8,
-                paddingVertical: 6,
-              },
-            ]}
-          >
-            {NAV.map((n) => {
-              const active = isTabActive(pathname, n.to);
-              return (
-                <Pressable
-                  key={n.to}
-                  onPress={() => {
-                    if (active) return;
-                    router.replace(n.to as never);
-                  }}
-                  style={[
-                    layout.flex1,
-                    layout.centered,
-                    { gap: 2, borderRadius: 9999, paddingVertical: 6 },
-                    active ? { backgroundColor: 'rgba(13,13,13,0.05)' } : null,
-                  ]}
+          {NAV.map((n) => {
+            const active = isTabActive(pathname, n.to);
+            return (
+              <Pressable
+                key={n.to}
+                onPress={() => {
+                  if (active) return;
+                  router.replace(n.to as never);
+                }}
+                style={[
+                  layout.flex1,
+                  layout.centered,
+                  { gap: 2, borderRadius: 9999, paddingVertical: 6, minWidth: 0 },
+                  active ? { backgroundColor: scheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(13,13,13,0.05)' } : null,
+                ]}
+              >
+                <n.icon
+                  size={20}
+                  color={active ? c.foreground : c.mutedForeground}
+                  strokeWidth={active ? 2.4 : 1.8}
+                />
+                <Text
+                  variant="pill"
+                  numberOfLines={1}
+                  style={{ color: active ? hex.foreground : hex.mutedForeground }}
                 >
-                  <n.icon
-                    size={20}
-                    color={active ? c.foreground : c.mutedForeground}
-                    strokeWidth={active ? 2.4 : 1.8}
-                  />
-                  <Text
-                    variant="pill"
-                    style={{ color: active ? hex.foreground : hex.mutedForeground }}
-                  >
-                    {n.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </BlurView>
+                  {n.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
         <Pressable
           onPress={open}
           style={[
@@ -384,11 +384,10 @@ export function BottomBar() {
               height: 58,
               width: 58,
               flexShrink: 0,
-              overflow: 'hidden',
               borderRadius: 9999,
               borderWidth: StyleSheet.hairlineWidth,
               borderColor: hex.hairline,
-              backgroundColor: scheme === 'dark' ? 'rgba(8,8,8,0.6)' : 'rgba(242,242,242,0.6)',
+              backgroundColor: barBg,
             },
           ]}
         >

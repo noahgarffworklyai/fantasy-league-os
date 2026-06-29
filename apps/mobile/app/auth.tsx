@@ -31,8 +31,8 @@ export default function AuthPage() {
       } else {
         await login(email.trim(), password);
       }
-      const leagues = await refreshLeagues();
-      nav.replace(leagues.length === 0 ? '/onboarding' : '/');
+      await refreshLeagues();
+      // AuthGate routes to home or onboarding once leagues are loaded.
     } catch (e) {
       const message =
         e instanceof ApiError

@@ -49,5 +49,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       projectId: 'fantasy-league-os-dev',
     },
     apiUrl: process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000',
+    inviteWebUrl: process.env.EXPO_PUBLIC_INVITE_WEB_URL,
   },
 });

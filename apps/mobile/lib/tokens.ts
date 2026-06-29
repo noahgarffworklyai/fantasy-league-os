@@ -148,6 +148,7 @@ export function createTokens(hex: HexPalette, dark: boolean) {
 
   const layout = StyleSheet.create({
     screen: {
+      width: '100%',
       paddingHorizontal: 16,
       paddingTop: 8,
       paddingBottom: 40,
@@ -290,6 +291,7 @@ export function createTokens(hex: HexPalette, dark: boolean) {
     },
     segmented: {
       flexDirection: 'row',
+      width: '100%',
       backgroundColor: hex.surfaceElevated,
       borderRadius: 9999,
       borderWidth: StyleSheet.hairlineWidth,
@@ -298,11 +300,15 @@ export function createTokens(hex: HexPalette, dark: boolean) {
     },
     segmentedTab: {
       flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
       borderRadius: 9999,
       paddingVertical: 8,
     },
     segmentedTabActive: {
       flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
       borderRadius: 9999,
       paddingVertical: 8,
       backgroundColor: hex.primary,

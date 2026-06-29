@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 import {
   Bell,
   CheckCircle2,
@@ -23,6 +24,9 @@ import { Toggle } from '@/components/ui/Toggle';
 import { AICard, AISection } from '@/components/ui/AICard';
 import { useLeague, type League } from '@/lib/league-context';
 import { treasuryInsights } from '@/lib/ai-intelligence';
+import { useAuthStore } from '@/lib/auth-store';
+import { startBuyInCheckout } from '@/lib/checkout';
+import { fetchTreasury, type TreasuryData } from '@/lib/treasury-api';
 import { useNav } from '@/lib/nav';
 import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
 
@@ -41,70 +45,29 @@ interface Member {
   isCommish?: boolean;
 }
 
-const NAME_POOL: { name: string; handle: string }[] = [
-  { name: 'Jackson Reed', handle: '@jackson' },
-  { name: 'Mike Alvarez', handle: '@mike' },
-  { name: 'Sarah Patel', handle: '@sarah' },
-  { name: 'Devon Brooks', handle: '@dev' },
-  { name: 'Priya Shah', handle: '@priya' },
-  { name: 'Chris Nolan', handle: '@chris' },
-  { name: 'Lena Park', handle: '@lena' },
-  { name: 'Marcus Lee', handle: '@marcus' },
-  { name: 'Eli Carter', handle: '@eli' },
-  { name: 'Noah Singh', handle: '@noah' },
-  { name: 'Taylor Quinn', handle: '@taylor' },
-  { name: 'Riley Chen', handle: '@riley' },
-  { name: 'Avery Diaz', handle: '@avery' },
-  { name: 'Jordan Lee', handle: '@jordanl' },
-];
+function formatPaidDate(iso: string | null): string | undefined {
+  if (!iso) return undefined;
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
 
-function buildMembers(active: League): Member[] {
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
-  const size = active.size ?? active.members ?? 12;
-  const paid = active.paidCount ?? active.paid ?? size;
-  const pending = active.pendingCount ?? 0;
-  const unpaid = active.unpaidCount ?? Math.max(0, size - paid - pending);
-  const list: Member[] = [];
-  const myStatus: PayState = active.paymentStatus === 'unpaid' ? 'unpaid' : 'paid';
-  list.push({
-    id: 'me',
-    name: 'Marc Jackson',
-    handle: '@marcjackson',
-    isMe: true,
-    isCommish: active.role === 'commissioner',
-    status: myStatus,
-    paidOn: myStatus === 'paid' ? 'Aug 4' : undefined,
-    method: myStatus === 'paid' ? 'Apple Pay' : undefined,
-  });
+function templateToStructure(template: string): PayoutStructure {
+  if (template === 'winner_takes_all') return 'all';
+  if (template === 'top_four') return 'top4';
+  if (template === 'top2') return 'top2';
+  return 'top3';
+}
 
-  let paidLeft = paid - (myStatus === 'paid' ? 1 : 0);
-  let pendingLeft = pending;
-  let unpaidLeft = unpaid - (myStatus === 'unpaid' ? 1 : 0);
-  let i = 0;
-  const methods = ['Apple Pay', 'Card', 'ACH', 'Apple Pay', 'Card'];
-
-  while (list.length < size && i < NAME_POOL.length) {
-    const np = NAME_POOL[i++];
-    let status: PayState = 'paid';
-    let extras: Partial<Member> = { paidOn: `Aug ${4 + i}`, method: methods[i % methods.length] };
-    if (paidLeft > 0) {
-      status = 'paid';
-      paidLeft--;
-    } else if (pendingLeft > 0) {
-      status = 'pending';
-      extras = { reminded: 1 };
-      pendingLeft--;
-    } else if (unpaidLeft > 0) {
-      const variants: PayState[] = ['overdue', 'failed', 'refunded', 'unpaid'];
-      status = variants[unpaidLeft % variants.length];
-      extras = { reminded: status === 'overdue' ? 2 : 1 };
-      unpaidLeft--;
-    } else {
-      status = 'paid';
-    }
-    list.push({ id: np.handle, name: np.name, handle: np.handle, status, ...extras });
-  }
-  return list;
+function mapTreasuryMembers(data: TreasuryData, currentUserId: string, isCommissioner: boolean): Member[] {
+  return data.members.map((m) => ({
+    id: m.userId,
+    name: m.displayName,
+    handle: `@${m.displayName.split(/\s+/)[0]?.toLowerCase() ?? 'member'}`,
+    status: m.paid ? ('paid' as PayState) : ('unpaid' as PayState),
+    paidOn: formatPaidDate(m.paidAt),
+    method: m.paid ? 'Card' : undefined,
+    isMe: m.userId === currentUserId,
+    isCommish: m.userId === currentUserId && isCommissioner,
+  }));
 }
 
 interface ActivityItem { id: string; title: string; when: string }
@@ -120,31 +83,84 @@ type TreasuryView = { kind: 'home' } | { kind: 'pay'; memberId: string } | { kin
 
 export default function TreasuryPage() {
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
-  const { active, updateLeague } = useLeague();
+  const { active, updateLeague, refreshLeagues } = useLeague();
+  const currentUserId = useAuthStore((s) => s.user?.id);
   const nav = useNav();
   const [view, setView] = useState<TreasuryView>({ kind: 'home' });
-  const [members, setMembers] = useState<Member[]>(() => (active ? buildMembers(active) : []));
-  const [localId, setLocalId] = useState<string | null>(active?.id ?? null);
   const [structure, setStructure] = useState<PayoutStructure>('top3');
   const [buyIn, setBuyIn] = useState<number>(active?.buyIn ?? 100);
+  const [localMembers, setLocalMembers] = useState<Member[]>([]);
 
-  if (active && active.id !== localId) {
-    setLocalId(active.id);
-    setMembers(buildMembers(active));
-    setBuyIn(active.buyIn ?? 100);
-  }
+  const {
+    data: treasury,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: ['treasury', active?.id],
+    queryFn: () => fetchTreasury(active!.id),
+    enabled: !!active?.id,
+  });
+
+  const members = useMemo(() => {
+    if (!treasury || !currentUserId) return localMembers;
+    return mapTreasuryMembers(treasury, currentUserId, active?.role === 'commissioner');
+  }, [treasury, currentUserId, active?.role, localMembers]);
+
   if (!active) return null;
 
-  const totalDue = active.potTotal ?? buyIn * members.length;
-  const collected = active.potCollected ?? members.filter((m) => m.status === 'paid').length * buyIn;
-  const remaining = totalDue - collected;
-  const fee = Math.round(collected * 0.029);
+  const buyInUsd = treasury ? treasury.buyInCents / 100 : buyIn;
+  const platformFeeUsd = treasury ? treasury.platformFeeCents / 100 : Math.round(buyInUsd * 0.05);
+  const collected = treasury ? treasury.potCents / 100 : 0;
+  const totalDue = treasury ? buyInUsd * treasury.totalMemberCount : buyInUsd * (active.size ?? active.members ?? 12);
+  const remaining = Math.max(0, totalDue - collected);
+  const fee = treasury ? (treasury.platformFeeCents * treasury.paidMemberCount) / 100 : 0;
   const net = collected - fee;
   const fullyFunded = collected >= totalDue && totalDue > 0;
+  const payoutStructure = treasury ? templateToStructure(treasury.payoutTemplate) : structure;
 
-  const markPaid = (id: string) => setMembers((prev) => prev.map((m) => (m.id === id ? { ...m, status: 'paid' as PayState, paidOn: 'Today', method: 'Apple Pay' } : m)));
-  const sendReminder = (id: string) => setMembers((prev) => prev.map((m) => (m.id === id ? { ...m, reminded: (m.reminded ?? 0) + 1 } : m)));
-  const refund = (id: string) => setMembers((prev) => prev.map((m) => (m.id === id ? { ...m, status: 'refunded' as PayState } : m)));
+  const markPaid = (id: string) =>
+    setLocalMembers((prev) => {
+      const base = prev.length ? prev : members;
+      return base.map((m) =>
+        m.id === id ? { ...m, status: 'paid' as PayState, paidOn: 'Today', method: 'Offline' } : m,
+      );
+    });
+  const sendReminder = (id: string) =>
+    setLocalMembers((prev) => {
+      const base = prev.length ? prev : members;
+      return base.map((m) => (m.id === id ? { ...m, reminded: (m.reminded ?? 0) + 1 } : m));
+    });
+  const refund = (id: string) =>
+    setLocalMembers((prev) => {
+      const base = prev.length ? prev : members;
+      return base.map((m) => (m.id === id ? { ...m, status: 'refunded' as PayState } : m));
+    });
+
+  const handlePay = async () => {
+    if (view.kind !== 'pay') return;
+    const member = members.find((m) => m.id === view.memberId);
+    if (!member?.isMe) return;
+
+    try {
+      const result = await startBuyInCheckout(active.id);
+      if (!result.ok) {
+        if (result.reason !== 'cancelled') {
+          Alert.alert('Payment failed', 'Your payment could not be completed. Try again.');
+        }
+        return;
+      }
+      await refetch();
+      await refreshLeagues();
+      setLocalMembers([]);
+      setView({ kind: 'home' });
+    } catch (e) {
+      Alert.alert(
+        'Payment failed',
+        e instanceof Error ? e.message : 'Something went wrong. Check your connection and try again.',
+      );
+    }
+  };
 
   const goBack = () => {
     if (view.kind !== 'home') setView({ kind: 'home' });
@@ -152,6 +168,34 @@ export default function TreasuryPage() {
   };
 
   const title = view.kind === 'home' ? 'Treasury' : view.kind === 'pay' ? 'Payment' : view.kind === 'review' ? 'Payout Review' : 'Treasury Settings';
+
+  if (isLoading && !treasury) {
+    return (
+      <Screen>
+        <View style={[layout.screen, layout.centered]}>
+          <ActivityIndicator color={hex.primary} />
+          <Text variant="bodyMuted" style={{ marginTop: 12 }}>
+            Loading treasury…
+          </Text>
+        </View>
+      </Screen>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Screen>
+        <View style={[layout.screen, layout.centered, { paddingHorizontal: 24 }]}>
+          <Text variant="body">Could not load treasury.</Text>
+          <Pressable onPress={() => refetch()} style={[surfaces.primaryButton, { marginTop: 16 }]}>
+            <Text variant="button" style={{ color: hex.primaryForeground }}>
+              Retry
+            </Text>
+          </Pressable>
+        </View>
+      </Screen>
+    );
+  }
 
   return (
     <Screen>
@@ -162,14 +206,14 @@ export default function TreasuryPage() {
           <TreasuryHome
             active={active}
             members={members}
-            buyIn={buyIn}
+            buyIn={buyInUsd}
             collected={collected}
             remaining={remaining}
             totalDue={totalDue}
             fee={fee}
             net={net}
             fullyFunded={fullyFunded}
-            structure={structure}
+            structure={payoutStructure}
             onMarkPaid={markPaid}
             onRemind={sendReminder}
             onRefund={refund}
@@ -182,16 +226,22 @@ export default function TreasuryPage() {
         {view.kind === 'pay' ? (
           <PaymentPage
             member={members.find((m) => m.id === view.memberId)!}
-            buyIn={buyIn}
-            fee={Math.round(buyIn * 0.029)}
-            onComplete={() => {
-              markPaid(view.memberId);
-              setView({ kind: 'home' });
-            }}
+            buyIn={buyInUsd}
+            fee={platformFeeUsd}
+            onComplete={handlePay}
           />
         ) : null}
 
-        {view.kind === 'review' ? <PayoutReview active={active} collected={collected} fee={fee} net={net} structure={structure} members={members} /> : null}
+        {view.kind === 'review' ? (
+          <PayoutReview
+            active={active}
+            collected={collected}
+            fee={fee}
+            net={net}
+            structure={payoutStructure}
+            members={members}
+          />
+        ) : null}
 
         {view.kind === 'settings' && active.role === 'commissioner' ? (
           <TreasurySettings
@@ -575,15 +625,29 @@ function MemberRow({
 }
 
 /* ------------------------------ PAYMENT PAGE ------------------------------ */
-function PaymentPage({ member, buyIn, fee, onComplete }: { member: Member; buyIn: number; fee: number; onComplete: () => void }) {
+function PaymentPage({
+  member,
+  buyIn,
+  fee,
+  onComplete,
+}: {
+  member: Member;
+  buyIn: number;
+  fee: number;
+  onComplete: () => Promise<void>;
+}) {
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const [method, setMethod] = useState<'apple' | 'google' | 'card' | 'ach'>('apple');
   const [processing, setProcessing] = useState(false);
 
-  const submit = () => {
+  const submit = async () => {
     setProcessing(true);
-    setTimeout(onComplete, 800);
+    try {
+      await onComplete();
+    } finally {
+      setProcessing(false);
+    }
   };
 
   return (

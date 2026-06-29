@@ -105,37 +105,54 @@ export function CommissionerSheet() {
 function Launcher({ league, onPick }: { league: League; onPick: () => void }) {
   const router = useRouter();
   const { hex, layout, surfaces } = useThemeTokens();
+  const go = (to: string) => {
+    onPick();
+    router.push(to as never);
+  };
   return (
-    <View style={[surfaces.card, { borderWidth: 1, borderColor: hex.hairline }]}>
-      {ACTIONS.map((a, i) => {
-        const badge = a.badge?.(league) ?? null;
-        return (
-          <Pressable
-            key={a.key}
-            onPress={() => {
-              onPick();
-              router.push(a.to as never);
-            }}
-            style={[layout.row, { gap: 16, paddingHorizontal: 16, paddingVertical: 16 }, i > 0 ? layout.listRowBorder : null]}
-          >
-            <View style={[surfaces.iconBox, { borderRadius: 9999, backgroundColor: hex.muted }]}>
-              <a.icon size={19} color={hex.foreground} strokeWidth={2} />
-            </View>
-            <View style={[layout.flex1, { minWidth: 0 }]}>
-              <Text variant="titleMd">{a.label}</Text>
-              <Text variant="subtitle" numberOfLines={1}>
-                {a.sub}
-              </Text>
-            </View>
-            {badge ? (
-              <View style={[surfaces.pillMuted, { paddingHorizontal: 8, paddingVertical: 2 }]}>
-                <Text variant="caption">{badge}</Text>
+    <View style={{ gap: 12 }}>
+      <View style={[surfaces.card, { borderWidth: 1, borderColor: hex.hairline }]}>
+        {ACTIONS.map((a, i) => {
+          const badge = a.badge?.(league) ?? null;
+          return (
+            <Pressable
+              key={a.key}
+              onPress={() => go(a.to)}
+              style={[layout.row, { gap: 16, paddingHorizontal: 16, paddingVertical: 16 }, i > 0 ? layout.listRowBorder : null]}
+            >
+              <View style={[surfaces.iconBox, { borderRadius: 9999, backgroundColor: hex.muted }]}>
+                <a.icon size={19} color={hex.foreground} strokeWidth={2} />
               </View>
-            ) : null}
-            <ChevronRight size={16} color={hex.mutedForeground} />
-          </Pressable>
-        );
-      })}
+              <View style={[layout.flex1, { minWidth: 0 }]}>
+                <Text variant="titleMd">{a.label}</Text>
+                <Text variant="subtitle" numberOfLines={1}>
+                  {a.sub}
+                </Text>
+              </View>
+              {badge ? (
+                <View style={[surfaces.pillMuted, { paddingHorizontal: 8, paddingVertical: 2 }]}>
+                  <Text variant="caption">{badge}</Text>
+                </View>
+              ) : null}
+              <ChevronRight size={16} color={hex.mutedForeground} />
+            </Pressable>
+          );
+        })}
+      </View>
+      <View style={[layout.row, { gap: 8 }]}>
+        <Pressable
+          onPress={() => go('/onboarding/create')}
+          style={[layout.flex1, layout.centered, surfaces.pillMuted, { paddingVertical: 12 }]}
+        >
+          <Text variant="bodySm">Create League</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => go('/onboarding/join')}
+          style={[layout.flex1, layout.centered, surfaces.pillMuted, { paddingVertical: 12 }]}
+        >
+          <Text variant="bodySm">Join League</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }

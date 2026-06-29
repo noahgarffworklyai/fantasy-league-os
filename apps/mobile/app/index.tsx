@@ -160,7 +160,7 @@ function LeaguePane({ active }: { active: League }) {
   return (
     <View style={layout.section}>
       <Card>
-        <View style={[layout.rowWrap, layout.cardPad]}>
+        <View style={[layout.rowWrap, layout.cardPad, { width: '100%' }]}>
           <View style={layout.half}>
             <Stat label="Standing" value={active.rank > 0 ? `#${active.rank}` : '—'} />
           </View>
