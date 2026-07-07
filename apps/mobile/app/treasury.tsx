@@ -26,7 +26,17 @@ import { useLeague, type League } from '@/lib/league-context';
 import { treasuryInsights } from '@/lib/ai-intelligence';
 import { useAuthStore } from '@/lib/auth-store';
 import { startBuyInCheckout } from '@/lib/checkout';
-import { fetchTreasury, type TreasuryData } from '@/lib/treasury-api';
+import {
+  executePayouts,
+  fetchLeagueStandings,
+  fetchTreasury,
+  markMemberPaid,
+  payoutTemplateToStructure,
+  resetMemberPayment,
+  structureToPayoutTemplate,
+  updateTreasurySettings,
+  type TreasuryData,
+} from '@/lib/treasury-api';
 import { useNav } from '@/lib/nav';
 import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
 
@@ -50,46 +60,48 @@ function formatPaidDate(iso: string | null): string | undefined {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-function templateToStructure(template: string): PayoutStructure {
-  if (template === 'winner_takes_all') return 'all';
-  if (template === 'top_four') return 'top4';
-  if (template === 'top2') return 'top2';
-  return 'top3';
-}
-
-function mapTreasuryMembers(data: TreasuryData, currentUserId: string, isCommissioner: boolean): Member[] {
+function mapTreasuryMembers(
+  data: TreasuryData,
+  currentUserId: string,
+  isCommissioner: boolean,
+  devMode?: boolean,
+): Member[] {
   return data.members.map((m) => ({
     id: m.userId,
     name: m.displayName,
     handle: `@${m.displayName.split(/\s+/)[0]?.toLowerCase() ?? 'member'}`,
     status: m.paid ? ('paid' as PayState) : ('unpaid' as PayState),
     paidOn: formatPaidDate(m.paidAt),
-    method: m.paid ? 'Card' : undefined,
+    method: m.paid ? (devMode ? 'Dev mode' : 'Card') : undefined,
     isMe: m.userId === currentUserId,
     isCommish: m.userId === currentUserId && isCommissioner,
   }));
 }
 
 interface ActivityItem { id: string; title: string; when: string }
-const ACTIVITY: ActivityItem[] = [
-  { id: 'a1', title: 'Marcus paid league dues', when: '1d' },
-  { id: 'a2', title: 'Reminder sent to Eli & Noah', when: '1d' },
-  { id: 'a3', title: 'League is 8 of 10 funded', when: '2d' },
-  { id: 'a4', title: 'Lena paid league dues', when: '3d' },
-  { id: 'a5', title: 'Buy-in set to $100', when: '1w' },
-];
+
+function formatActivityWhen(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 60) return mins <= 1 ? 'Just now' : `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 48) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 14) return `${days}d`;
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
 
 type TreasuryView = { kind: 'home' } | { kind: 'pay'; memberId: string } | { kind: 'review' } | { kind: 'settings' };
 
 export default function TreasuryPage() {
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
-  const { active, updateLeague, refreshLeagues } = useLeague();
+  const { active, refreshLeagues } = useLeague();
   const currentUserId = useAuthStore((s) => s.user?.id);
   const nav = useNav();
   const [view, setView] = useState<TreasuryView>({ kind: 'home' });
   const [structure, setStructure] = useState<PayoutStructure>('top3');
   const [buyIn, setBuyIn] = useState<number>(active?.buyIn ?? 100);
-  const [localMembers, setLocalMembers] = useState<Member[]>([]);
+  const [savingSettings, setSavingSettings] = useState(false);
 
   const {
     data: treasury,
@@ -103,9 +115,18 @@ export default function TreasuryPage() {
   });
 
   const members = useMemo(() => {
-    if (!treasury || !currentUserId) return localMembers;
-    return mapTreasuryMembers(treasury, currentUserId, active?.role === 'commissioner');
-  }, [treasury, currentUserId, active?.role, localMembers]);
+    if (!treasury || !currentUserId) return [];
+    return mapTreasuryMembers(treasury, currentUserId, active?.role === 'commissioner', treasury.paymentsDevMode);
+  }, [treasury, currentUserId, active?.role]);
+
+  const activity = useMemo<ActivityItem[]>(() => {
+    if (!treasury?.ledgerActivity?.length) return [];
+    return treasury.ledgerActivity.map((a) => ({
+      id: a.id,
+      title: a.title,
+      when: formatActivityWhen(a.when),
+    }));
+  }, [treasury?.ledgerActivity]);
 
   if (!active) return null;
 
@@ -117,30 +138,47 @@ export default function TreasuryPage() {
   const fee = treasury ? (treasury.platformFeeCents * treasury.paidMemberCount) / 100 : 0;
   const net = collected - fee;
   const fullyFunded = collected >= totalDue && totalDue > 0;
-  const payoutStructure = treasury ? templateToStructure(treasury.payoutTemplate) : structure;
+  const payoutStructure = treasury ? payoutTemplateToStructure(treasury.payoutTemplate) : structure;
+  const paymentsDevMode = treasury?.paymentsDevMode ?? false;
+  const payoutsExecuted = treasury?.ledgerActivity?.some((a) => a.type === 'payout') ?? false;
 
-  const markPaid = (id: string) =>
-    setLocalMembers((prev) => {
-      const base = prev.length ? prev : members;
-      return base.map((m) =>
-        m.id === id ? { ...m, status: 'paid' as PayState, paidOn: 'Today', method: 'Offline' } : m,
-      );
-    });
-  const sendReminder = (id: string) =>
-    setLocalMembers((prev) => {
-      const base = prev.length ? prev : members;
-      return base.map((m) => (m.id === id ? { ...m, reminded: (m.reminded ?? 0) + 1 } : m));
-    });
-  const refund = (id: string) =>
-    setLocalMembers((prev) => {
-      const base = prev.length ? prev : members;
-      return base.map((m) => (m.id === id ? { ...m, status: 'refunded' as PayState } : m));
-    });
+  const markPaid = async (userId: string) => {
+    if (active.role !== 'commissioner') return;
+    try {
+      await markMemberPaid(active.id, userId);
+      await refetch();
+      await refreshLeagues();
+    } catch (e) {
+      Alert.alert('Could not mark paid', e instanceof Error ? e.message : 'Try again.');
+    }
+  };
+  const sendReminder = (_id: string) =>
+    Alert.alert('Reminder sent', 'Push notifications for reminders are coming soon.');
+  const refund = (_id: string) =>
+    Alert.alert('Refunds', 'Stripe refunds will be available when live payments are enabled.');
+
+  const resetPayment = async (userId: string) => {
+    try {
+      await resetMemberPayment(active.id, userId);
+      await refetch();
+      await refreshLeagues();
+    } catch (e) {
+      Alert.alert('Could not reset', e instanceof Error ? e.message : 'Try again.');
+    }
+  };
 
   const handlePay = async () => {
     if (view.kind !== 'pay') return;
     const member = members.find((m) => m.id === view.memberId);
     if (!member?.isMe) return;
+
+    if (buyInUsd <= 0) {
+      Alert.alert(
+        'Set a buy-in first',
+        'Commissioner → Treasury Settings → pick a buy-in amount, then try paying again.',
+      );
+      return;
+    }
 
     try {
       const result = await startBuyInCheckout(active.id);
@@ -152,8 +190,13 @@ export default function TreasuryPage() {
       }
       await refetch();
       await refreshLeagues();
-      setLocalMembers([]);
       setView({ kind: 'home' });
+      Alert.alert(
+        result.devMode ? 'Payment recorded (dev mode)' : 'Payment complete',
+        result.devMode
+          ? 'No real money was charged. Your buy-in was recorded for testing.'
+          : 'Your buy-in was recorded. A receipt is saved to your profile.',
+      );
     } catch (e) {
       Alert.alert(
         'Payment failed',
@@ -214,12 +257,16 @@ export default function TreasuryPage() {
             net={net}
             fullyFunded={fullyFunded}
             structure={payoutStructure}
+            paymentsDevMode={paymentsDevMode}
+            activity={activity}
             onMarkPaid={markPaid}
             onRemind={sendReminder}
             onRefund={refund}
+            onResetPayment={resetPayment}
             onPay={(id) => setView({ kind: 'pay', memberId: id })}
             onReview={() => setView({ kind: 'review' })}
             onSettings={() => setView({ kind: 'settings' })}
+            payoutsExecuted={payoutsExecuted}
           />
         ) : null}
 
@@ -228,31 +275,54 @@ export default function TreasuryPage() {
             member={members.find((m) => m.id === view.memberId)!}
             buyIn={buyInUsd}
             fee={platformFeeUsd}
+            devMode={paymentsDevMode}
             onComplete={handlePay}
           />
         ) : null}
 
         {view.kind === 'review' ? (
           <PayoutReview
+            leagueId={active.id}
             active={active}
             collected={collected}
             fee={fee}
             net={net}
             structure={payoutStructure}
-            members={members}
+            payoutPreview={treasury?.payoutPreview ?? []}
+            paymentsDevMode={paymentsDevMode}
+            payoutsExecuted={payoutsExecuted}
+            onComplete={async () => {
+              await refetch();
+              setView({ kind: 'home' });
+            }}
           />
         ) : null}
 
         {view.kind === 'settings' && active.role === 'commissioner' ? (
           <TreasurySettings
             active={active}
-            buyIn={buyIn}
-            setBuyIn={(n) => {
-              setBuyIn(n);
-              updateLeague(active.id, { buyIn: n });
+            buyIn={treasury ? treasury.buyInCents / 100 : buyIn}
+            structure={payoutStructure}
+            saving={savingSettings}
+            onSave={async (nextBuyIn, nextStructure) => {
+              setSavingSettings(true);
+              try {
+                await updateTreasurySettings(active.id, {
+                  buyInCents: Math.round(nextBuyIn * 100),
+                  payoutTemplate: structureToPayoutTemplate(nextStructure),
+                  platformFeeCents: Math.max(500, Math.round(nextBuyIn * 100 * 0.05)),
+                });
+                setBuyIn(nextBuyIn);
+                setStructure(nextStructure);
+                await refetch();
+                Alert.alert('Settings saved', `Buy-in set to $${nextBuyIn}. Members can pay from the pot tab.`);
+                setView({ kind: 'home' });
+              } catch (e) {
+                Alert.alert('Could not save', e instanceof Error ? e.message : 'Try again.');
+              } finally {
+                setSavingSettings(false);
+              }
             }}
-            structure={structure}
-            setStructure={setStructure}
           />
         ) : null}
       </View>
@@ -274,12 +344,16 @@ function TreasuryHome({
   net,
   fullyFunded,
   structure,
+  paymentsDevMode,
+  activity,
   onMarkPaid,
   onRemind,
   onRefund,
+  onResetPayment,
   onPay,
   onReview,
   onSettings,
+  payoutsExecuted,
 }: {
   active: League;
   members: Member[];
@@ -291,12 +365,16 @@ function TreasuryHome({
   net: number;
   fullyFunded: boolean;
   structure: PayoutStructure;
+  paymentsDevMode: boolean;
+  activity: ActivityItem[];
   onMarkPaid: (id: string) => void;
   onRemind: (id: string) => void;
   onRefund: (id: string) => void;
+  onResetPayment: (id: string) => void;
   onPay: (id: string) => void;
   onReview: () => void;
   onSettings: () => void;
+  payoutsExecuted: boolean;
 }) {
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
@@ -309,6 +387,15 @@ function TreasuryHome({
 
   return (
     <>
+      {paymentsDevMode ? (
+        <View style={[surfaces.roundedCard, { borderWidth: StyleSheet.hairlineWidth, borderColor: toneFg.warning, backgroundColor: toneBg.warning, padding: 14 }]}>
+          <Text variant="eyebrow" style={{ color: toneFg.warning }}>Dev mode · no real charges</Text>
+          <Text variant="bodyMuted" style={{ marginTop: 4, lineHeight: 18 }}>
+            Payments complete instantly for testing. Leave STRIPE_SECRET_KEY empty on the API.
+          </Text>
+        </View>
+      ) : null}
+
       <View style={surfaces.roundedCardLg}>
         <View style={[layout.rowStart, { justifyContent: 'space-between' }]}>
           <View style={[layout.flex1, { minWidth: 0 }]}>
@@ -352,9 +439,20 @@ function TreasuryHome({
       </View>
 
       {tab === 'pot' ? (
-        <PotPane active={active} members={members} buyIn={buyIn} collected={collected} remaining={remaining} fee={fee} net={net} isCommish={isCommish} onMarkPaid={onMarkPaid} onRemind={onRemind} onRefund={onRefund} onPay={onPay} />
+        <PotPane active={active} members={members} buyIn={buyIn} collected={collected} remaining={remaining} fee={fee} net={net} isCommish={isCommish} paymentsDevMode={paymentsDevMode} activity={activity} onMarkPaid={onMarkPaid} onRemind={onRemind} onRefund={onRefund} onResetPayment={onResetPayment} onPay={onPay} />
       ) : (
-        <PayoutPane active={active} members={members} splits={splits} net={net} seasonComplete={seasonComplete} isCommish={isCommish} onReview={onReview} onSettings={onSettings} />
+        <PayoutPane
+          active={active}
+          members={members}
+          splits={splits}
+          net={net}
+          seasonComplete={seasonComplete}
+          isCommish={isCommish}
+          paymentsDevMode={paymentsDevMode}
+          payoutsExecuted={payoutsExecuted}
+          onReview={onReview}
+          onSettings={onSettings}
+        />
       )}
 
       <View style={[layout.rowStart, { paddingHorizontal: 8, paddingTop: 4 }]}>
@@ -374,9 +472,12 @@ function PotPane({
   fee,
   net,
   isCommish,
+  paymentsDevMode,
+  activity,
   onMarkPaid,
   onRemind,
   onRefund,
+  onResetPayment,
   onPay,
 }: {
   active: League;
@@ -387,9 +488,12 @@ function PotPane({
   fee: number;
   net: number;
   isCommish: boolean;
+  paymentsDevMode: boolean;
+  activity: ActivityItem[];
   onMarkPaid: (id: string) => void;
   onRemind: (id: string) => void;
   onRefund: (id: string) => void;
+  onResetPayment: (id: string) => void;
   onPay: (id: string) => void;
 }) {
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
@@ -413,20 +517,26 @@ function PotPane({
       <Section title="Member payments">
         <View style={[surfaces.roundedCard, { borderWidth: StyleSheet.hairlineWidth, borderColor: hex.hairline }]}>
           {members.map((m, i) => (
-            <MemberRow key={m.id} member={m} buyIn={buyIn} isCommish={isCommish} onMarkPaid={() => onMarkPaid(m.id)} onRemind={() => onRemind(m.id)} onRefund={() => onRefund(m.id)} onPay={() => onPay(m.id)} isFirst={i === 0} />
+            <MemberRow key={m.id} member={m} buyIn={buyIn} isCommish={isCommish} paymentsDevMode={paymentsDevMode} onMarkPaid={() => onMarkPaid(m.id)} onRemind={() => onRemind(m.id)} onRefund={() => onRefund(m.id)} onResetPayment={() => onResetPayment(m.id)} onPay={() => onPay(m.id)} isFirst={i === 0} />
           ))}
         </View>
       </Section>
 
       <Section title="Recent activity">
         <View style={[surfaces.roundedCard, { borderWidth: StyleSheet.hairlineWidth, borderColor: hex.hairline }]}>
-          {ACTIVITY.map((a, i) => (
-            <View key={a.id} style={[layout.rowStart, { paddingHorizontal: 16, paddingVertical: 12 }, i > 0 && layout.listRowBorder]}>
-              <View style={{ marginTop: 4, height: 8, width: 8, flexShrink: 0, borderRadius: 9999, backgroundColor: hex.success }} />
-              <Text variant="bodySm" style={[layout.flex1, { minWidth: 0 }]}>{a.title}</Text>
-              <Text variant="caption" muted>{a.when}</Text>
+          {activity.length === 0 ? (
+            <View style={{ paddingHorizontal: 16, paddingVertical: 14 }}>
+              <Text variant="bodyMuted">No payments yet. Set a buy-in in Settings, then tap Pay.</Text>
             </View>
-          ))}
+          ) : (
+            activity.map((a, i) => (
+              <View key={a.id} style={[layout.rowStart, { paddingHorizontal: 16, paddingVertical: 12 }, i > 0 && layout.listRowBorder]}>
+                <View style={{ marginTop: 4, height: 8, width: 8, flexShrink: 0, borderRadius: 9999, backgroundColor: hex.success }} />
+                <Text variant="bodySm" style={[layout.flex1, { minWidth: 0 }]}>{a.title}</Text>
+                <Text variant="caption" muted>{a.when}</Text>
+              </View>
+            ))
+          )}
         </View>
       </Section>
     </>
@@ -440,6 +550,8 @@ function PayoutPane({
   net,
   seasonComplete,
   isCommish,
+  paymentsDevMode,
+  payoutsExecuted,
   onReview,
   onSettings,
 }: {
@@ -449,6 +561,8 @@ function PayoutPane({
   net: number;
   seasonComplete: boolean;
   isCommish: boolean;
+  paymentsDevMode: boolean;
+  payoutsExecuted: boolean;
   onReview: () => void;
   onSettings: () => void;
 }) {
@@ -511,16 +625,32 @@ function PayoutPane({
 
       <Section title="Payout status">
         <View style={[surfaces.roundedCard, { padding: 20, borderWidth: StyleSheet.hairlineWidth, borderColor: hex.hairline }]}>
-          {seasonComplete || active.stage === 'playoffs' ? (
+          {payoutsExecuted ? (
             <>
               <View style={[layout.row, { gap: 8 }]}>
                 <CheckCircle2 size={12} color={c.success} />
-                <Text variant="eyebrow">{seasonComplete ? 'Season complete' : 'Playoffs in progress'}</Text>
+                <Text variant="eyebrow">Payouts distributed</Text>
               </View>
               <Text variant="body" style={{ marginTop: 8 }}>
-                {seasonComplete ? 'Final standings imported. Review payouts before they distribute automatically.' : 'Standings are firming up. Projected payouts will lock once the final week ends.'}
+                Winnings were recorded in the treasury ledger. Members can see payout activity below.
               </Text>
-              {isCommish && seasonComplete ? (
+            </>
+          ) : seasonComplete || active.stage === 'playoffs' || paymentsDevMode ? (
+            <>
+              <View style={[layout.row, { gap: 8 }]}>
+                <CheckCircle2 size={12} color={c.success} />
+                <Text variant="eyebrow">
+                  {seasonComplete ? 'Season complete' : paymentsDevMode ? 'Dev mode testing' : 'Playoffs in progress'}
+                </Text>
+              </View>
+              <Text variant="body" style={{ marginTop: 8 }}>
+                {seasonComplete
+                  ? 'Final standings imported. Review payouts before they distribute.'
+                  : paymentsDevMode
+                    ? 'Test the full payout flow anytime in dev mode — no real money moves.'
+                    : 'Standings are firming up. Projected payouts will lock once the final week ends.'}
+              </Text>
+              {isCommish && (seasonComplete || paymentsDevMode) ? (
                 <Pressable onPress={onReview} style={[layout.row, { marginTop: 16, gap: 6, alignSelf: 'flex-start', borderRadius: 9999, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: hex.foreground }]}>
                   <Text variant="button" style={{ color: hex.background }}>Review payouts</Text>
                   <ChevronRight size={14} color={c.background} />
@@ -554,19 +684,23 @@ function MemberRow({
   member: m,
   buyIn,
   isCommish,
+  paymentsDevMode,
   isFirst,
   onMarkPaid,
   onRemind,
   onRefund,
+  onResetPayment,
   onPay,
 }: {
   member: Member;
   buyIn: number;
   isCommish: boolean;
+  paymentsDevMode: boolean;
   isFirst: boolean;
   onMarkPaid: () => void;
   onRemind: () => void;
   onRefund: () => void;
+  onResetPayment: () => void;
   onPay: () => void;
 }) {
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
@@ -610,6 +744,9 @@ function MemberRow({
         <View style={[layout.rowWrap, { gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: hex.hairline, paddingHorizontal: 16, paddingVertical: 12 }]}>
           {m.isMe && m.status !== 'paid' && m.status !== 'refunded' ? <ChipBtn primary onPress={onPay} icon={Wallet}>Pay ${buyIn}</ChipBtn> : null}
           {m.status === 'paid' ? <ChipBtn icon={Receipt}>View receipt</ChipBtn> : null}
+          {paymentsDevMode && m.status === 'paid' ? (
+            <ChipBtn icon={RefreshCw} onPress={onResetPayment}>Reset payment (dev)</ChipBtn>
+          ) : null}
           {isCommish && m.status !== 'paid' && m.status !== 'refunded' ? (
             <>
               <ChipBtn icon={Bell} onPress={onRemind}>Send reminder</ChipBtn>
@@ -629,11 +766,13 @@ function PaymentPage({
   member,
   buyIn,
   fee,
+  devMode,
   onComplete,
 }: {
   member: Member;
   buyIn: number;
   fee: number;
+  devMode?: boolean;
   onComplete: () => Promise<void>;
 }) {
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
@@ -703,58 +842,157 @@ function PaymentPage({
 
       <View style={[layout.rowStart, { paddingHorizontal: 8 }]}>
         <ShieldCheck size={12} color={c.mutedForeground} style={{ marginTop: 2 }} />
-        <Text variant="caption" muted style={[layout.flex1, { lineHeight: 16 }]}>Secured by Commissioner Payments. Your payment method is encrypted and stored only with your consent.</Text>
+        <Text variant="caption" muted style={[layout.flex1, { lineHeight: 16 }]}>
+          {devMode
+            ? 'Dev mode: no card required. Payment is recorded instantly for testing.'
+            : 'Secured by Commissioner Payments. Your payment method is encrypted and stored only with your consent.'}
+        </Text>
       </View>
 
       <Pressable onPress={submit} disabled={processing} style={[surfaces.primaryButton, { height: 52, opacity: processing ? 0.5 : 1 }]}>
-        <Text variant="body" style={{ color: hex.background }}>{processing ? 'Processing…' : `Pay $${buyIn + fee}`}</Text>
+        <Text variant="body" style={{ color: hex.background }}>
+          {processing ? 'Processing…' : devMode ? `Record $${buyIn + fee} (dev)` : `Pay $${buyIn + fee}`}
+        </Text>
       </Pressable>
     </View>
   );
 }
 
 /* ------------------------------ PAYOUT REVIEW ------------------------------ */
-function PayoutReview({ active, collected, fee, net, structure, members }: { active: League; collected: number; fee: number; net: number; structure: PayoutStructure; members: Member[] }) {
+function PayoutReview({
+  leagueId,
+  active,
+  collected,
+  fee,
+  net,
+  structure,
+  payoutPreview,
+  paymentsDevMode,
+  payoutsExecuted,
+  onComplete,
+}: {
+  leagueId: string;
+  active: League;
+  collected: number;
+  fee: number;
+  net: number;
+  structure: PayoutStructure;
+  payoutPreview: Array<{ place: number; percent: number; amountCents: number }>;
+  paymentsDevMode: boolean;
+  payoutsExecuted: boolean;
+  onComplete: () => Promise<void>;
+}) {
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const splits = computeSplits(net, structure);
-  const podium = members.slice(0, splits.length);
-  const [approved, setApproved] = useState(false);
+  const [approved, setApproved] = useState(payoutsExecuted);
+  const [executing, setExecuting] = useState(false);
+
+  const { data: standingsData, isLoading, isError } = useQuery({
+    queryKey: ['standings', leagueId, 'payout-review'],
+    queryFn: () => fetchLeagueStandings(leagueId),
+    enabled: !!leagueId,
+  });
+
+  const podium = useMemo(() => {
+    const standings = standingsData?.standings ?? [];
+    const previewByPlace = new Map(payoutPreview.map((p) => [p.place, p]));
+    return splits.map((split, i) => {
+      const standing = standings[i];
+      const preview = previewByPlace.get(i + 1);
+      return {
+        place: split.place,
+        name: standing?.teamName ?? standing?.ownerName ?? `Place ${i + 1}`,
+        pct: split.pct,
+        amount: preview ? preview.amountCents / 100 : split.amount,
+        userId: standing?.teamExternalId,
+      };
+    });
+  }, [standingsData?.standings, splits, payoutPreview]);
+
+  const handleApprove = async () => {
+    const standings = standingsData?.standings ?? [];
+    if (!standings.length) {
+      Alert.alert('No standings', 'Standings are required before payouts can be distributed.');
+      return;
+    }
+
+    const payload = standings
+      .slice(0, splits.length)
+      .map((s) => ({
+        place: s.rank,
+        userId: s.teamExternalId,
+        teamName: s.teamName ?? s.ownerName ?? undefined,
+      }));
+
+    setExecuting(true);
+    try {
+      await executePayouts(leagueId, payload);
+      setApproved(true);
+      await onComplete();
+      Alert.alert(
+        paymentsDevMode ? 'Payouts recorded (dev mode)' : 'Payouts distributed',
+        paymentsDevMode
+          ? 'Payout amounts were written to the treasury ledger for testing.'
+          : 'Winners have been paid according to your payout structure.',
+      );
+    } catch (e) {
+      Alert.alert('Could not distribute', e instanceof Error ? e.message : 'Try again.');
+    } finally {
+      setExecuting(false);
+    }
+  };
 
   return (
     <View style={{ gap: 20 }}>
       <View style={[surfaces.roundedCardLg, { borderWidth: 0, padding: 20 }]}>
-        <Text variant="eyebrow">{active.name} · Final standings</Text>
-        <Text variant="sectionTitle" style={{ marginTop: 4 }}>Season complete</Text>
+        <Text variant="eyebrow">{active.name} · {paymentsDevMode ? 'Dev payout test' : 'Final standings'}</Text>
+        <Text variant="sectionTitle" style={{ marginTop: 4 }}>{payoutsExecuted ? 'Payouts complete' : 'Review & approve'}</Text>
         <Text variant="subtitle" style={{ marginTop: 4, fontVariant: ['tabular-nums'] }}>${collected.toLocaleString()} collected · ${fee.toLocaleString()} fee · ${net.toLocaleString()} net</Text>
       </View>
 
       <Section title="Recommended payouts">
+        {isLoading ? (
+          <View style={[surfaces.roundedCard, layout.centered, { padding: 24 }]}>
+            <ActivityIndicator color={hex.primary} />
+          </View>
+        ) : isError ? (
+          <View style={[surfaces.roundedCard, { padding: 16 }]}>
+            <Text variant="bodySm">Could not load standings for payout review.</Text>
+          </View>
+        ) : (
         <View style={surfaces.roundedCard}>
-          {splits.map((s, i) => {
-            const m = podium[i];
-            return (
-              <View key={s.place} style={[layout.row, { gap: 12, paddingHorizontal: 16, paddingVertical: 14 }, i > 0 && layout.listRowBorder]}>
+          {podium.map((row, i) => (
+              <View key={row.place} style={[layout.row, { gap: 12, paddingHorizontal: 16, paddingVertical: 14 }, i > 0 && layout.listRowBorder]}>
                 <View style={[surfaces.iconBoxSm, { borderRadius: 9999, backgroundColor: hex.background }]}>
                   <Text variant="bodySm" style={{ fontVariant: ['tabular-nums'] }}>{i + 1}</Text>
                 </View>
                 <View style={[layout.flex1, { minWidth: 0 }]}>
-                  <Text variant="body" numberOfLines={1}>{m?.name ?? `Place ${i + 1}`}</Text>
-                  <Text variant="bodyMuted">{s.pct}% of net pool</Text>
+                  <Text variant="body" numberOfLines={1}>{row.name}</Text>
+                  <Text variant="bodyMuted">{row.pct}% of net pool</Text>
                 </View>
-                <Text variant="titleMd" style={{ fontVariant: ['tabular-nums'] }}>${s.amount.toLocaleString()}</Text>
+                <Text variant="titleMd" style={{ fontVariant: ['tabular-nums'] }}>${row.amount.toLocaleString()}</Text>
               </View>
-            );
-          })}
+            ))}
         </View>
+        )}
       </Section>
+
+      {paymentsDevMode ? (
+        <View style={[surfaces.roundedCard, { borderWidth: StyleSheet.hairlineWidth, borderColor: toneFg.warning, backgroundColor: toneBg.warning, padding: 14 }]}>
+          <Text variant="eyebrow" style={{ color: toneFg.warning }}>Dev mode</Text>
+          <Text variant="bodyMuted" style={{ marginTop: 4, lineHeight: 18 }}>
+            Approving writes payout ledger entries only — no Stripe transfers.
+          </Text>
+        </View>
+      ) : null}
 
       <Section title="Review window">
         <View style={surfaces.roundedCard}>
           {[
             { t: 'Today', what: 'Recommendations generated', done: true },
             { t: '+3 days', what: 'Member review window', done: approved },
-            { t: '+4 days', what: 'Auto distribution to bank or card', done: false },
+            { t: '+4 days', what: paymentsDevMode ? 'Ledger payout recorded' : 'Auto distribution to bank or card', done: approved },
           ].map((row, i) => (
             <View key={i} style={[layout.rowStart, { paddingHorizontal: 16, paddingVertical: 12 }, i > 0 && layout.listRowBorder]}>
               <Text variant="eyebrow" style={{ width: 80, flexShrink: 0 }}>{row.t}</Text>
@@ -765,8 +1003,14 @@ function PayoutReview({ active, collected, fee, net, structure, members }: { act
         </View>
       </Section>
 
-      <Pressable onPress={() => setApproved(true)} disabled={approved} style={[surfaces.primaryButton, { height: 52, backgroundColor: approved ? hex.success : hex.foreground }]}>
-        <Text variant="body" style={{ color: hex.background }}>{approved ? 'Approved · Distributing automatically' : 'Approve payouts'}</Text>
+      <Pressable
+        onPress={handleApprove}
+        disabled={approved || executing || isLoading || isError}
+        style={[surfaces.primaryButton, { height: 52, backgroundColor: approved ? hex.success : hex.foreground, opacity: approved || executing ? 0.7 : 1 }]}
+      >
+        <Text variant="body" style={{ color: hex.background }}>
+          {approved ? 'Payouts distributed' : executing ? 'Distributing…' : 'Approve payouts'}
+        </Text>
       </Pressable>
 
       <Text variant="caption" muted style={{ paddingHorizontal: 8 }}>Every payout is auditable. Members can view receipts and confirmations from their profile.</Text>
@@ -778,18 +1022,20 @@ function PayoutReview({ active, collected, fee, net, structure, members }: { act
 function TreasurySettings({
   active,
   buyIn,
-  setBuyIn,
   structure,
-  setStructure,
+  saving,
+  onSave,
 }: {
   active: League;
   buyIn: number;
-  setBuyIn: (n: number) => void;
   structure: PayoutStructure;
-  setStructure: (s: PayoutStructure) => void;
+  saving: boolean;
+  onSave: (buyIn: number, structure: PayoutStructure) => Promise<void>;
 }) {
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
+  const [localBuyIn, setLocalBuyIn] = useState(buyIn);
+  const [localStructure, setLocalStructure] = useState(structure);
   const [reminder, setReminder] = useState<'off' | 'weekly' | 'daily'>('weekly');
   const [autoPayout, setAutoPayout] = useState(true);
   const [offline, setOffline] = useState(true);
@@ -801,14 +1047,14 @@ function TreasurySettings({
           {[25, 50, 100, 200, 500].map((n) => (
             <Pressable
               key={n}
-              onPress={() => setBuyIn(n)}
-              style={[layout.flex1, layout.centered, surfaces.pill, { paddingHorizontal: 8, paddingVertical: 10, backgroundColor: buyIn === n ? hex.foreground : hex.surfaceElevated }]}
+              onPress={() => setLocalBuyIn(n)}
+              style={[layout.flex1, layout.centered, surfaces.pill, { paddingHorizontal: 8, paddingVertical: 10, backgroundColor: localBuyIn === n ? hex.foreground : hex.surfaceElevated }]}
             >
-              <Text variant="tab" style={{ color: buyIn === n ? hex.background : hex.mutedForeground, fontVariant: ['tabular-nums'] }}>${n}</Text>
+              <Text variant="tab" style={{ color: localBuyIn === n ? hex.background : hex.mutedForeground, fontVariant: ['tabular-nums'] }}>${n}</Text>
             </Pressable>
           ))}
         </View>
-        <Text variant="caption" muted style={{ paddingHorizontal: 8, marginTop: 8 }}>Each of {active.members ?? 10} members owes ${buyIn}.</Text>
+        <Text variant="caption" muted style={{ paddingHorizontal: 8, marginTop: 8 }}>Each of {active.members ?? 10} members owes ${localBuyIn}.</Text>
       </Section>
 
       <Section title="Prize structure">
@@ -820,11 +1066,11 @@ function TreasurySettings({
             { id: 'top4', label: 'Top four' },
             { id: 'custom', label: 'Custom' },
           ] as const).map((opt) => {
-            const isActive = structure === opt.id;
+            const isActive = localStructure === opt.id;
             return (
               <Pressable
                 key={opt.id}
-                onPress={() => setStructure(opt.id)}
+                onPress={() => setLocalStructure(opt.id)}
                 style={[layout.rowBetween, surfaces.roundedCard, { borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: isActive ? hex.foreground : hex.surfaceElevated }]}
               >
                 <Text variant="bodySm" style={{ color: isActive ? hex.background : hex.foreground }}>{opt.label}</Text>
@@ -867,6 +1113,14 @@ function TreasurySettings({
           <ReadRow label="Payout timing" value="Within 24 hrs of approval" divider />
         </View>
       </Section>
+
+      <Pressable
+        onPress={() => onSave(localBuyIn, localStructure)}
+        disabled={saving}
+        style={[surfaces.primaryButton, { height: 52, opacity: saving ? 0.5 : 1 }]}
+      >
+        <Text variant="body" style={{ color: hex.background }}>{saving ? 'Saving…' : 'Save treasury settings'}</Text>
+      </Pressable>
     </View>
   );
 }

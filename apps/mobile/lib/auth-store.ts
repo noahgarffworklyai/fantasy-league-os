@@ -24,7 +24,12 @@ export const useAuthStore = create<AuthState>((set) => ({
       return;
     }
     try {
-      const user = await api.get<User>('/auth/me');
+      const user = await Promise.race([
+        api.get<User>('/auth/me'),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Auth check timed out')), 8_000);
+        }),
+      ]);
       set({ user, initialized: true });
     } catch {
       await clearToken();

@@ -97,6 +97,7 @@ export const leagueMembers = pgTable('league_members', {
   providerTeamId: varchar('provider_team_id', { length: 255 }),
   paid: boolean('paid').notNull().default(false),
   paidAt: timestamp('paid_at', { withTimezone: true }),
+  hostedRoster: jsonb('hosted_roster'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 

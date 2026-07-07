@@ -1,4 +1,4 @@
-import { previewSleeperLeague, resolveSleeperUserId, sleeperAdapter } from '@flos/league-adapters';
+import { discoverEspnLeagues, previewEspnLeague, previewSleeperLeague, resolveSleeperUserId, sleeperAdapter } from '@flos/league-adapters';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import { authMiddleware, type AuthenticatedRequest } from '../lib/auth-middleware.js';
@@ -61,6 +61,32 @@ export async function importRoutes(app: FastifyInstance) {
   );
 
   app.post(
+    '/imports/espn/leagues',
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      const body = z
+        .object({
+          espnS2: z.string().min(1),
+          swid: z.string().min(1),
+          season: z.number().optional(),
+        })
+        .parse(request.body);
+
+      try {
+        const leagues = await discoverEspnLeagues(
+          { espnS2: body.espnS2, swid: body.swid },
+          body.season,
+        );
+        return { leagues };
+      } catch (err) {
+        return reply.status(400).send({
+          error: err instanceof Error ? err.message : 'Failed to fetch ESPN leagues',
+        });
+      }
+    },
+  );
+
+  app.post(
     '/imports/espn/validate',
     { preHandler: authMiddleware },
     async (request, reply) => {
@@ -84,6 +110,33 @@ export async function importRoutes(app: FastifyInstance) {
       } catch (err) {
         return reply.status(400).send({
           error: err instanceof Error ? err.message : 'Invalid ESPN credentials',
+        });
+      }
+    },
+  );
+
+  app.get(
+    '/imports/espn/league/:leagueId',
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      const { leagueId } = z.object({ leagueId: z.string().min(1) }).parse(request.params);
+      const { espnS2, swid } = z
+        .object({
+          espnS2: z.string().optional(),
+          swid: z.string().optional(),
+        })
+        .parse(request.query);
+
+      try {
+        const league = await previewEspnLeague(leagueId, {
+          leagueId,
+          espnS2: espnS2?.trim() ?? '',
+          swid: swid?.trim() ?? '',
+        });
+        return { league };
+      } catch (err) {
+        return reply.status(400).send({
+          error: err instanceof Error ? err.message : 'Failed to fetch ESPN league',
         });
       }
     },

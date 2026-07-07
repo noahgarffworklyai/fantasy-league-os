@@ -1,15 +1,18 @@
 import { executePayoutSchema } from '@flos/shared';
 import { and, eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { config } from '../config.js';
 import { db } from '../db/index.js';
 import {
   leagueMembers,
   leagues,
+  payments,
   treasuryLedger,
   users,
 } from '../db/schema.js';
 import { authMiddleware, requireLeagueMembership, type AuthenticatedRequest } from '../lib/auth-middleware.js';
+import { completeBuyInPayment } from '../lib/complete-buy-in.js';
 import { requireStripe } from '../lib/stripe.js';
 import { computePayoutPreview, computePotFromLedger, getPayoutSplits } from '../lib/treasury.js';
 
@@ -82,6 +85,30 @@ export async function treasuryRoutes(app: FastifyInstance) {
     const potCents = computePotFromLedger(ledger);
     const paidMemberCount = members.filter((m) => m.paid).length;
 
+    const ledgerActivity = ledger
+      .slice()
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, 12)
+      .map((entry) => {
+        const member = members.find((m) => m.userId === entry.userId);
+        const who = member?.displayName ?? 'Member';
+        const dollars = (entry.amountCents / 100).toLocaleString(undefined, {
+          style: 'currency',
+          currency: 'USD',
+          maximumFractionDigits: 0,
+        });
+        let title = entry.description ?? entry.type;
+        if (entry.type === 'buy_in') title = `${who} paid league dues (${dollars})`;
+        else if (entry.type === 'platform_fee') title = `Platform fee recorded (${dollars})`;
+        else if (entry.type === 'payout') title = `${who} received payout (${dollars})`;
+        return {
+          id: entry.id,
+          title,
+          when: entry.createdAt.toISOString(),
+          type: entry.type,
+        };
+      });
+
     return {
       leagueId: id,
       potCents,
@@ -92,8 +119,98 @@ export async function treasuryRoutes(app: FastifyInstance) {
       payoutTemplate: league.payoutTemplate,
       payoutPreview: computePayoutPreview(potCents, league.payoutTemplate),
       stripeConnectOnboarded: league.connectOnboarded,
+      paymentsDevMode: !config.stripeSecretKey,
       members,
+      ledgerActivity,
     };
+  });
+
+  app.post('/leagues/:id/treasury/mark-paid', { preHandler: authMiddleware }, async (request, reply) => {
+    const authReq = request as AuthenticatedRequest;
+    const { id } = request.params as { id: string };
+    const { userId: targetUserId } = z.object({ userId: z.string().uuid() }).parse(request.body);
+
+    try {
+      await requireLeagueMembership(authReq, id, { commissioner: true });
+    } catch {
+      return reply.status(403).send({ error: 'Commissioner access required' });
+    }
+
+    const [league] = await db.select().from(leagues).where(eq(leagues.id, id)).limit(1);
+    if (!league) return reply.status(404).send({ error: 'League not found' });
+
+    const [target] = await db
+      .select()
+      .from(leagueMembers)
+      .where(and(eq(leagueMembers.leagueId, id), eq(leagueMembers.userId, targetUserId)))
+      .limit(1);
+
+    if (!target) return reply.status(404).send({ error: 'Member not found' });
+    if (target.paid) return reply.status(400).send({ error: 'Member already paid' });
+
+    const amountCents = league.buyInCents + league.platformFeeCents;
+
+    await db.insert(payments).values({
+      leagueId: id,
+      userId: targetUserId,
+      amountCents,
+      buyInCents: league.buyInCents,
+      platformFeeCents: league.platformFeeCents,
+      status: 'completed',
+    });
+
+    await completeBuyInPayment({
+      leagueId: id,
+      userId: targetUserId,
+      buyInCents: league.buyInCents,
+      platformFeeCents: league.platformFeeCents,
+    });
+
+    return { ok: true, userId: targetUserId };
+  });
+
+  /** Dev/testing only — undo a recorded buy-in so payment flow can be retried. */
+  app.post('/leagues/:id/treasury/reset-payment', { preHandler: authMiddleware }, async (request, reply) => {
+    if (config.stripeSecretKey) {
+      return reply.status(403).send({ error: 'Only available in payments dev mode' });
+    }
+
+    const authReq = request as AuthenticatedRequest;
+    const { id } = request.params as { id: string };
+    const { userId: targetUserId } = z
+      .object({ userId: z.string().uuid().optional() })
+      .parse(request.body ?? {});
+
+    const resetUserId = targetUserId ?? authReq.userId;
+
+    if (resetUserId !== authReq.userId) {
+      try {
+        await requireLeagueMembership(authReq, id, { commissioner: true });
+      } catch {
+        return reply.status(403).send({ error: 'Commissioner access required' });
+      }
+    } else {
+      try {
+        await requireLeagueMembership(authReq, id);
+      } catch {
+        return reply.status(403).send({ error: 'Access denied' });
+      }
+    }
+
+    await db
+      .update(leagueMembers)
+      .set({ paid: false, paidAt: null })
+      .where(and(eq(leagueMembers.leagueId, id), eq(leagueMembers.userId, resetUserId)));
+
+    await db
+      .delete(treasuryLedger)
+      .where(and(eq(treasuryLedger.leagueId, id), eq(treasuryLedger.userId, resetUserId)));
+
+    await db
+      .delete(payments)
+      .where(and(eq(payments.leagueId, id), eq(payments.userId, resetUserId)));
+
+    return { ok: true, userId: resetUserId };
   });
 
   app.post('/leagues/:id/payments/buy-in', { preHandler: authMiddleware }, async (request, reply) => {

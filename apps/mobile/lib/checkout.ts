@@ -5,7 +5,7 @@ import { api } from './api';
 WebBrowser.maybeCompleteAuthSession();
 
 export type CheckoutResult =
-  | { ok: true; leagueId: string }
+  | { ok: true; leagueId: string; devMode?: boolean }
   | { ok: false; reason: 'cancelled' | 'failed' };
 
 type CheckoutResponse = {
@@ -24,7 +24,7 @@ export async function startBuyInCheckout(leagueId: string): Promise<CheckoutResu
   });
 
   if (checkout.devMode) {
-    return { ok: true, leagueId };
+    return { ok: true, leagueId, devMode: true };
   }
 
   const redirectUrl = Linking.createURL('payment/success');

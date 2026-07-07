@@ -22,9 +22,12 @@ export function createApiClient(options: ApiClientOptions) {
     init: RequestInit = {},
   ): Promise<T> {
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
       ...(init.headers as Record<string, string>),
     };
+
+    if (init.body != null && init.body !== '') {
+      headers['Content-Type'] = headers['Content-Type'] ?? 'application/json';
+    }
 
     const token = getToken ? await getToken() : null;
     if (token) {
@@ -46,11 +49,30 @@ export function createApiClient(options: ApiClientOptions) {
     }
 
     const text = await response.text();
-    const body = text ? JSON.parse(text) : null;
+    let body: unknown = null;
+    if (text) {
+      try {
+        body = JSON.parse(text);
+      } catch {
+        const preview = text.trimStart().slice(0, 120);
+        const looksLikeHtml =
+          preview.startsWith('<!DOCTYPE') ||
+          preview.startsWith('<html') ||
+          preview.startsWith('<');
+        throw new ApiError(
+          looksLikeHtml
+            ? `Server returned HTML instead of JSON (${response.status}). Check that the API is running at ${baseUrl}.`
+            : `Invalid JSON response (${response.status}): ${preview}`,
+          response.status,
+          text,
+        );
+      }
+    }
 
     if (!response.ok) {
+      const payload = body as { message?: string; error?: string } | null;
       throw new ApiError(
-        body?.message ?? body?.error ?? `Request failed (${response.status})`,
+        payload?.message ?? payload?.error ?? `Request failed (${response.status})`,
         response.status,
         body,
       );

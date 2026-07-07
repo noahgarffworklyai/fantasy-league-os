@@ -2,6 +2,7 @@ import cors from '@fastify/cors';
 import Fastify from 'fastify';
 import { config } from './config.js';
 import { authRoutes } from './routes/auth.js';
+import { espnConnectRoutes } from './routes/espn-connect.js';
 import { importRoutes } from './routes/imports.js';
 import { leagueRoutes } from './routes/leagues.js';
 import { inviteRoutes } from './routes/invites.js';
@@ -32,6 +33,21 @@ app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, 
 
 await app.register(cors, { origin: true });
 
+app.addContentTypeParser(
+  'application/x-www-form-urlencoded',
+  { parseAs: 'string' },
+  (_req, body, done) => {
+    try {
+      const params = new URLSearchParams(body as string);
+      const data: Record<string, string> = {};
+      for (const [key, value] of params.entries()) data[key] = value;
+      done(null, data);
+    } catch (err) {
+      done(err as Error, undefined);
+    }
+  },
+);
+
 app.get('/health', async () => ({
   status: 'ok',
   timestamp: new Date().toISOString(),
@@ -39,6 +55,7 @@ app.get('/health', async () => ({
 }));
 
 await app.register(authRoutes);
+await app.register(espnConnectRoutes);
 await app.register(importRoutes);
 await app.register(leagueRoutes);
 await app.register(inviteRoutes);

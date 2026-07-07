@@ -28,7 +28,7 @@ export default function JoinPage() {
     try {
       setPreview(await previewInvite(token));
     } catch (e) {
-      Alert.alert('Invite not found', e instanceof Error ? e.message : 'Check the code and try again.');
+      Alert.alert('Invite not found', 'This code may be expired or mistyped. Ask your commissioner for the current join code from Invite Members.');
       setPreview(null);
     } finally {
       setLoading(false);

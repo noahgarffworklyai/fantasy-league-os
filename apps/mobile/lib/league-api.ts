@@ -28,7 +28,7 @@ export async function ensureLeagueInvite(leagueId: string): Promise<LeagueInvite
 
   const now = Date.now();
   const active = invites.find(
-    (invite) => !invite.consumedAt && new Date(invite.expiresAt).getTime() > now,
+    (invite) => new Date(invite.expiresAt).getTime() > now,
   );
 
   if (active) {
@@ -134,4 +134,19 @@ export async function previewInvite(token: string): Promise<InvitePreview> {
 
 export async function redeemInvite(token: string): Promise<{ leagueId: string }> {
   return api.post<{ leagueId: string }>('/invites/redeem', { token });
+}
+
+export async function reconnectEspnLeague(
+  leagueId: string,
+  credentials: { espnS2: string; swid: string },
+): Promise<{ syncStatus: 'ok'; externalLeagueId: string }> {
+  return api.patch(`/leagues/${leagueId}/provider-credentials`, credentials);
+}
+
+export async function leaveLeague(leagueId: string): Promise<{ ok: true }> {
+  return api.delete(`/leagues/${leagueId}/members/me`);
+}
+
+export async function deleteLeague(leagueId: string): Promise<{ ok: true }> {
+  return api.delete(`/leagues/${leagueId}`);
 }

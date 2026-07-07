@@ -15,6 +15,7 @@ export type ApiPlayerSearchRow = {
   dropped?: number;
   trend: number;
   owned: boolean;
+  onMyRoster?: boolean;
   imageUrl?: string;
 };
 
@@ -30,6 +31,7 @@ export type ApiPlayerDetail = {
   yearsExp: number | null;
   fantasyPositions: string[];
   owned?: boolean;
+  onMyRoster?: boolean;
   ownership?: number;
   available?: number;
   imageUrl?: string;
@@ -128,7 +130,8 @@ export function mapSearchRowToPlayer(row: ApiPlayerSearchRow) {
     trend: row.trend,
     ownership: row.ownership,
     health: mapHealth(row.injuryStatus),
-    mine: row.owned,
+    mine: row.onMyRoster ?? false,
+    rostered: row.owned && !row.onMyRoster,
     avail: row.available,
     added: row.added,
     dropped: row.dropped,
@@ -149,7 +152,8 @@ export function mapDetailToPlayer(detail: ApiPlayerDetail) {
     trend: 0,
     ownership: detail.ownership ?? 0,
     health: mapHealth(detail.injuryStatus),
-    mine: detail.owned,
+    mine: detail.onMyRoster ?? false,
+    rostered: !!detail.owned && !detail.onMyRoster,
     avail: detail.available,
     added: undefined as number | undefined,
     dropped: undefined as number | undefined,

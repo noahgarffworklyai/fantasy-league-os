@@ -20,6 +20,7 @@ import { AICard } from '@/components/ui/AICard';
 import { Card, Divider } from '@/components/ui/Card';
 import { useLeague, type League } from '@/lib/league-context';
 import { homePriorities } from '@/lib/ai-intelligence';
+import { useAuthStore } from '@/lib/auth-store';
 import { formatScore, useHomeLeagueStats } from '@/lib/league-snapshot-api';
 import { useThemeTokens } from '@/lib/theme';
 
@@ -27,18 +28,21 @@ type TabKey = 'priorities' | 'league' | 'news';
 
 export default function HomePage() {
   const { active, user } = useLeague();
+  const currentUserId = useAuthStore((s) => s.user?.id);
   const router = useNav();
   const [tab, setTab] = useState<TabKey>('priorities');
   const { hex, layout, surfaces } = useThemeTokens();
-  const { data: stats, isLoading, isError } = useHomeLeagueStats(
+  const isSynced = active?.type === 'synced';
+  const { data: stats, isLoading, isError, isFetching } = useHomeLeagueStats(
     active?.id,
     user?.name ?? '',
     active?.teamName,
+    isSynced,
+    currentUserId,
   );
 
   if (!active) return null;
 
-  const isSynced = active.type === 'synced';
   const firstName = (user?.name ?? 'Marc').split(/\s+/)[0];
   const week = stats?.week || active.week || 1;
   const teamCount = stats?.teamCount || active.members;
@@ -61,7 +65,7 @@ export default function HomePage() {
           </Text>
           {isSynced && stats?.syncStatus === 'error' ? (
             <Text variant="caption" style={{ marginTop: 6, color: hex.warning }}>
-              Sync issue — open League settings to refresh.
+              {isFetching ? 'Sync issue — retrying now…' : 'Sync issue — will retry automatically.'}
             </Text>
           ) : null}
         </View>
@@ -121,7 +125,7 @@ function MatchupCard({
   const { hex, layout, surfaces } = useThemeTokens();
   const matchup = stats?.matchup;
 
-  if (isLoading && active.type === 'synced') {
+  if (isLoading) {
     return (
       <Card>
         <View style={[layout.cardPad, layout.centered, { minHeight: 140 }]}>
@@ -148,7 +152,7 @@ function MatchupCard({
                 ? stats?.synced && !stats.hasSnapshot
                   ? 'Waiting for first sync from your platform.'
                   : 'Open the league tab for full standings.'
-                : 'Matchup details appear once your league is underway.'}
+                : 'Open the league tab for full standings.'}
             </Text>
           </View>
           <Divider />

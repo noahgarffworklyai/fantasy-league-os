@@ -20,7 +20,7 @@ function isOnboardingPath(p: string) {
 }
 
 /** Main bottom-bar destinations — instant switch, no stack slide. */
-const TAB_SCREEN_OPTIONS = { animation: 'none' as const };
+const TAB_SCREEN_NAMES = new Set(['index', 'team', 'league', 'players']);
 
 function Shell() {
   const pathname = usePathname();
@@ -41,16 +41,15 @@ function Shell() {
       {showChrome ? <TopChrome /> : null}
       <View style={{ flex: 1 }}>
         <Stack
-          screenOptions={{
+          screenOptions={({ route }) => ({
             headerShown: false,
             contentStyle: { backgroundColor: 'transparent' },
-            animation: 'slide_from_right',
-          }}
+            animation: TAB_SCREEN_NAMES.has(route.name) ? 'none' : 'slide_from_right',
+          })}
         >
-          <Stack.Screen name="index" options={TAB_SCREEN_OPTIONS} />
-          <Stack.Screen name="team" options={TAB_SCREEN_OPTIONS} />
-          <Stack.Screen name="league" options={TAB_SCREEN_OPTIONS} />
-          <Stack.Screen name="players" options={TAB_SCREEN_OPTIONS} />
+          <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
+          <Stack.Screen name="auth" />
+          <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         </Stack>
       </View>
       {showChrome ? <BottomBar /> : null}

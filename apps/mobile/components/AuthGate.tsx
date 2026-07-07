@@ -1,7 +1,10 @@
-import { useRouter, usePathname } from 'expo-router';
-import { useEffect, type ReactNode } from 'react';
+import { Redirect, usePathname } from 'expo-router';
+import { type ReactNode } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { Text } from '@/components/ui/primitives';
 import { useAuthStore } from '@/lib/auth-store';
 import { useLeague } from '@/lib/league-context';
+import { useThemeTokens } from '@/lib/theme';
 
 const PUBLIC_PREFIXES = ['/welcome', '/auth'];
 
@@ -25,43 +28,69 @@ function isLeagueSetupPath(pathname: string) {
   );
 }
 
-/** Redirect unauthenticated users to welcome; send new users without leagues to onboarding. */
-export function AuthGate({ children }: { children: ReactNode }) {
-  const router = useRouter();
+/** Declarative redirects — Stack stays mounted so navigation always works. */
+function AuthRedirect() {
   const pathname = usePathname();
   const { initialized } = useAuthStore();
   const { user, leagues, leaguesLoading, authInitialized } = useLeague();
 
-  useEffect(() => {
-    if (!initialized || !authInitialized || leaguesLoading) return;
+  const ready = initialized && authInitialized && !leaguesLoading;
+  if (!ready) return null;
 
-    if (!user) {
-      if (!isPublicPath(pathname)) {
-        router.replace('/welcome');
-      }
-      return;
+  if (!user) {
+    if (!isPublicPath(pathname)) {
+      return <Redirect href="/welcome" />;
     }
+    return null;
+  }
 
-    if (isPublicPath(pathname)) {
-      router.replace(leagues.length === 0 ? '/onboarding' : '/');
-      return;
-    }
+  if (isPublicPath(pathname)) {
+    return <Redirect href={leagues.length === 0 ? '/onboarding' : '/'} />;
+  }
 
-    if (user && leagues.length > 0 && pathname === '/onboarding') {
-      router.replace('/');
-      return;
-    }
+  if (leagues.length > 0 && pathname === '/onboarding') {
+    return <Redirect href="/" />;
+  }
 
-    if (
-      leagues.length === 0 &&
-      !isOnboardingPath(pathname) &&
-      !isLeagueSetupPath(pathname) &&
-      pathname !== '/readiness' &&
-      pathname !== '/invite'
-    ) {
-      router.replace('/onboarding');
-    }
-  }, [initialized, authInitialized, leaguesLoading, user, leagues.length, pathname, router]);
+  if (
+    leagues.length === 0 &&
+    !isOnboardingPath(pathname) &&
+    !isLeagueSetupPath(pathname) &&
+    pathname !== '/readiness' &&
+    pathname !== '/invite'
+  ) {
+    return <Redirect href="/onboarding" />;
+  }
 
-  return children;
+  return null;
+}
+
+/** Boot overlay while auth/leagues hydrate — never unmount the navigator. */
+export function AuthGate({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const { hex, layout } = useThemeTokens();
+  const { initialized } = useAuthStore();
+  const { user, leaguesLoading, authInitialized } = useLeague();
+
+  const booting = !initialized || !authInitialized || (!!user && leaguesLoading);
+  const showBootOverlay = booting && !isPublicPath(pathname);
+
+  return (
+    <>
+      <AuthRedirect />
+      {children}
+      {showBootOverlay ? (
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            layout.centered,
+            { backgroundColor: hex.background, gap: 12, zIndex: 100 },
+          ]}
+        >
+          <ActivityIndicator color={hex.primary} />
+          <Text variant="bodyMuted">Loading…</Text>
+        </View>
+      ) : null}
+    </>
+  );
 }

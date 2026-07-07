@@ -1,6 +1,6 @@
 import { INVITE_EXPIRY_DAYS } from '@flos/shared';
 import { createInviteSchema, redeemInviteSchema } from '@flos/shared';
-import { and, count, eq, gt, isNull } from 'drizzle-orm';
+import { and, count, eq, gt } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { db } from '../db/index.js';
 import { invites, leagueMembers, leagues } from '../db/schema.js';
@@ -52,7 +52,7 @@ export async function inviteRoutes(app: FastifyInstance) {
     const [invite] = await db
       .select()
       .from(invites)
-      .where(and(eq(invites.token, token), gt(invites.expiresAt, new Date()), isNull(invites.consumedAt)))
+      .where(and(eq(invites.token, token), gt(invites.expiresAt, new Date())))
       .limit(1);
 
     if (!invite) return reply.status(404).send({ error: 'Invite not found or expired' });
@@ -80,7 +80,7 @@ export async function inviteRoutes(app: FastifyInstance) {
     const [invite] = await db
       .select()
       .from(invites)
-      .where(and(eq(invites.token, body.token), gt(invites.expiresAt, new Date()), isNull(invites.consumedAt)))
+      .where(and(eq(invites.token, body.token), gt(invites.expiresAt, new Date())))
       .limit(1);
 
     if (!invite) return reply.status(404).send({ error: 'Invite not found or expired' });
@@ -100,17 +100,13 @@ export async function inviteRoutes(app: FastifyInstance) {
       });
     }
 
-    await db
-      .update(invites)
-      .set({ consumedById: userId, consumedAt: new Date() })
-      .where(eq(invites.id, invite.id));
-
     const [league] = await db.select().from(leagues).where(eq(leagues.id, invite.leagueId)).limit(1);
 
     return {
       leagueId: invite.leagueId,
       leagueName: league?.name,
       requiresPayment: !existing[0]?.paid,
+      alreadyMember: existing.length > 0,
     };
   });
 

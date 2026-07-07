@@ -13,6 +13,7 @@ export type LeagueDetail = {
   providerLink: {
     provider: string;
     syncStatus: string;
+    syncError?: string | null;
     lastSyncedAt?: string;
     snapshot: CanonicalLeague | null;
   } | null;
@@ -47,6 +48,109 @@ export type HomeLeagueStats = {
 
 export async function fetchLeagueDetail(leagueId: string): Promise<LeagueDetail> {
   return api.get<LeagueDetail>(`/leagues/${leagueId}`);
+}
+
+type ApiStanding = {
+  rank: number;
+  teamExternalId: string;
+  teamName?: string;
+  ownerName?: string | null;
+  wins: number;
+  losses: number;
+  ties?: number;
+  pointsFor: number;
+};
+
+type ApiMatchup = {
+  matchupId: string;
+  week: number;
+  status: string;
+  home: { rosterId: string; teamName: string; points: number };
+  away: { rosterId: string; teamName: string; points: number };
+};
+
+async function buildHostedHomeLeagueStats(
+  leagueId: string,
+  userDisplayName: string,
+  memberTeamName: string | null | undefined,
+  currentUserId: string | undefined,
+): Promise<HomeLeagueStats> {
+  const empty: HomeLeagueStats = {
+    week: 1,
+    teamCount: 0,
+    rank: 0,
+    record: '—',
+    pointsFor: 0,
+    teamName: memberTeamName ?? null,
+    matchup: null,
+    topStandings: [],
+    synced: false,
+    syncStatus: null,
+    hasSnapshot: false,
+  };
+
+  const standingsRes = await api.get<{ standings: ApiStanding[]; currentWeek?: number }>(
+    `/leagues/${leagueId}/standings`,
+  );
+  if (!standingsRes.standings?.length) return empty;
+
+  const week = standingsRes.currentWeek ?? 1;
+  const normalizedUser = userDisplayName.trim().toLowerCase();
+  const myStanding = standingsRes.standings.find(
+    (s) =>
+      (currentUserId && s.teamExternalId === currentUserId) ||
+      (memberTeamName && s.teamName === memberTeamName) ||
+      (normalizedUser && s.ownerName?.trim().toLowerCase() === normalizedUser),
+  );
+
+  let matchup: HomeLeagueStats['matchup'] = null;
+  try {
+    const matchupsRes = await api.get<{ week: number; matchups: ApiMatchup[] }>(
+      `/leagues/${leagueId}/matchups?week=${week}`,
+    );
+    const mine = currentUserId
+      ? matchupsRes.matchups?.find(
+          (m) => m.home.rosterId === currentUserId || m.away.rosterId === currentUserId,
+        )
+      : undefined;
+    const m = mine ?? matchupsRes.matchups?.[0];
+    if (m) {
+      matchup = {
+        label: mine ? `Week ${week} · Your matchup` : `Week ${week} · League matchup`,
+        awayName: m.away.teamName,
+        homeName: m.home.teamName,
+        awayScore: m.away.points ?? null,
+        homeScore: m.home.points ?? null,
+        status: m.status,
+        isMine: !!mine,
+      };
+    }
+  } catch {
+    matchup = null;
+  }
+
+  const topStandings = standingsRes.standings.slice(0, 5).map((s) => ({
+    rank: s.rank,
+    name: s.teamName ?? s.ownerName ?? `Team ${s.teamExternalId}`,
+    record: formatRecord(s.wins, s.losses, s.ties ?? 0),
+    pointsFor: s.pointsFor,
+  }));
+
+  return {
+    week,
+    teamCount: standingsRes.standings.length,
+    rank: myStanding?.rank ?? 0,
+    record: myStanding
+      ? formatRecord(myStanding.wins, myStanding.losses, myStanding.ties ?? 0)
+      : '—',
+    pointsFor: myStanding?.pointsFor ?? 0,
+    teamName: myStanding?.teamName ?? memberTeamName ?? null,
+    matchup,
+    topStandings,
+    synced: false,
+    syncStatus: null,
+    hasSnapshot: true,
+  };
 }
 
 function findMyTeam(
@@ -200,19 +304,34 @@ function formatScore(score: number | null | undefined) {
   return score.toFixed(1);
 }
 
+const SYNCED_REFETCH_MS = 90_000;
+
 export function useHomeLeagueStats(
   leagueId: string | undefined,
   userDisplayName: string,
   memberTeamName?: string | null,
+  synced = false,
+  currentUserId?: string,
 ) {
   return useQuery({
-    queryKey: ['league-detail', leagueId, 'home', memberTeamName ?? ''],
+    queryKey: ['league-detail', leagueId, 'home', memberTeamName ?? '', currentUserId ?? ''],
     queryFn: async () => {
       const detail = await fetchLeagueDetail(leagueId!);
-      return buildHomeLeagueStats(detail, userDisplayName, memberTeamName);
+      if (detail.providerLink?.snapshot?.teams?.length) {
+        return buildHomeLeagueStats(detail, userDisplayName, memberTeamName);
+      }
+      return buildHostedHomeLeagueStats(
+        leagueId!,
+        userDisplayName,
+        memberTeamName,
+        currentUserId,
+      );
     },
     enabled: !!leagueId,
     staleTime: 60_000,
+    refetchInterval: synced ? SYNCED_REFETCH_MS : 90_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 }
 

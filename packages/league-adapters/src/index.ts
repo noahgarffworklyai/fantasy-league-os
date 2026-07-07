@@ -5,4 +5,8 @@ export * from './sleeper-players.js';
 export * from './sleeper-roster.js';
 export * from './yahoo.js';
 export * from './espn.js';
+export * from './espn-api.js';
+export * from './espn-matchups.js';
+export * from './espn-roster.js';
+export * from './espn-discover.js';
 export * from './registry.js';

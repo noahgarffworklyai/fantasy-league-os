@@ -93,6 +93,27 @@ export const updateLeagueSettingsSchema = z.object({
   customRules: z.string().optional().nullable(),
 });
 
+export const reconnectEspnCredentialsSchema = z.object({
+  espnS2: z.string().min(1),
+  swid: z.string().min(1),
+});
+
+export const patchHostedRosterSchema = z.discriminatedUnion('action', [
+  z.object({
+    action: z.literal('swap'),
+    starterIndex: z.number().int().min(0),
+    benchIndex: z.number().int().min(0),
+  }),
+  z.object({
+    action: z.literal('drop'),
+    playerId: z.string().min(1),
+  }),
+  z.object({
+    action: z.literal('add'),
+    playerId: z.string().min(1),
+  }),
+]);
+
 export type CanonicalTeam = z.infer<typeof canonicalTeamSchema>;
 export type CanonicalStanding = z.infer<typeof canonicalStandingSchema>;
 export type CanonicalMatchup = z.infer<typeof canonicalMatchupSchema>;
@@ -116,3 +137,5 @@ export const leagueListItemSchema = z.object({
 
 export type LeagueListItem = z.infer<typeof leagueListItemSchema>;
 export type UpdateLeagueSettingsInput = z.infer<typeof updateLeagueSettingsSchema>;
+export type ReconnectEspnCredentialsInput = z.infer<typeof reconnectEspnCredentialsSchema>;
+export type PatchHostedRosterInput = z.infer<typeof patchHostedRosterSchema>;

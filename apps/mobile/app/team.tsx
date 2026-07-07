@@ -36,7 +36,7 @@ import {
   type WaiverTarget,
 } from '@/lib/ai-intelligence';
 import { personAvatar, playerAvatar } from '@/lib/avatars';
-import { useMyTeamRoster } from '@/lib/team-roster-api';
+import { useMyTeamRoster, usePatchMyTeamRoster } from '@/lib/team-roster-api';
 import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
 
 // ====================== Player data ======================
@@ -145,24 +145,22 @@ export default function TeamPage() {
   const { active } = useLeague();
   const [tab, setTab] = useState<TabKey>('lineup');
   const [player, setPlayer] = useState<PlayerDetail | null>(null);
-  const [localStarters, setLocalStarters] = useState<PlayerDetail[]>(STARTERS);
-  const [localBench, setLocalBench] = useState<(PlayerDetail & { trend: string })[]>(BENCH);
   const [confirmDrop, setConfirmDrop] = useState<PlayerDetail | null>(null);
-  if (!active) return null;
-  const isSynced = active.type === 'synced';
+  const isSynced = active?.type === 'synced';
+  const isHosted = active?.type === 'hosted';
   const { data: rosterData, isLoading: rosterLoading, isError: rosterError } = useMyTeamRoster(
-    active.id,
+    active?.id,
     isSynced,
   );
+  const patchRoster = usePatchMyTeamRoster(active?.id);
 
-  const starterSlots = isSynced && rosterData?.starterSlots?.length
-    ? rosterData.starterSlots
-    : STARTER_SLOTS;
-  const starters = isSynced ? (rosterData?.starters ?? []) : localStarters;
-  const bench = isSynced ? (rosterData?.bench ?? []) : localBench;
-  const ir = isSynced ? (rosterData?.reserve ?? []) : IR;
-  const teamName =
-    isSynced && rosterData?.teamName ? rosterData.teamName : active.teamName ?? `${active.shortName} Squad`;
+  if (!active) return null;
+
+  const starterSlots = rosterData?.starterSlots?.length ? rosterData.starterSlots : STARTER_SLOTS;
+  const starters = rosterData?.starters ?? [];
+  const bench = rosterData?.bench ?? [];
+  const ir = rosterData?.reserve ?? [];
+  const teamName = rosterData?.teamName ?? active.teamName ?? `${active.shortName} Squad`;
 
   const onMyTeam = (p: PlayerDetail | null) =>
     !!p &&
@@ -171,20 +169,15 @@ export default function TeamPage() {
       ir.some((x) => x.id === p.id || x.name === p.name));
 
   const handleDrop = (p: PlayerDetail) => {
-    if (isSynced) return;
-    setLocalStarters((s) => s.filter((x) => x.name !== p.name));
-    setLocalBench((b) => b.filter((x) => x.name !== p.name));
+    if (!isHosted || !p.id) return;
+    patchRoster.mutate({ action: 'drop', playerId: p.id });
     setConfirmDrop(null);
     setPlayer(null);
   };
 
   const swapStarter = (slotIdx: number, benchIdx: number) => {
-    if (isSynced) return;
-    const benchPlayer = localBench[benchIdx];
-    const starter = localStarters[slotIdx];
-    const benchTrend = benchPlayer.trend;
-    setLocalStarters((s) => s.map((x, i) => (i === slotIdx ? { ...benchPlayer } : x)));
-    setLocalBench((b) => b.map((x, i) => (i === benchIdx ? { ...starter, trend: benchTrend } : x)));
+    if (!isHosted) return;
+    patchRoster.mutate({ action: 'swap', starterIndex: slotIdx, benchIndex: benchIdx });
   };
 
   return (
@@ -195,7 +188,7 @@ export default function TeamPage() {
           record={active.record}
           projectedFinish={`Proj #${Math.max(1, Math.min(active.members, active.rank || 3))}`}
           rank={`#${active.rank || '—'} of ${active.members}`}
-          editable={!isSynced}
+          editable={isHosted}
         />
 
         <Segmented
@@ -209,31 +202,37 @@ export default function TeamPage() {
           ]}
         />
 
-        {isSynced && rosterLoading && tab === 'lineup' ? (
+        {rosterLoading && tab === 'lineup' ? (
           <View style={{ paddingVertical: 48, alignItems: 'center' }}>
             <ActivityIndicator color={hex.primary} />
           </View>
         ) : null}
 
-        {isSynced && rosterError && tab === 'lineup' ? (
+        {rosterError && tab === 'lineup' ? (
           <View style={[surfaces.roundedCard, { padding: 16, marginTop: 8 }]}>
-            <Text variant="bodySm">Could not load your roster from Sleeper.</Text>
-            <Text variant="bodyMuted" style={{ marginTop: 4 }}>
-              Try refreshing sync from Commissioner → Settings.
+            <Text variant="bodySm">
+              Could not load your roster{isSynced ? ` from ${active.platform}` : ''}.
             </Text>
+            {isSynced ? (
+              <Text variant="bodyMuted" style={{ marginTop: 4 }}>
+                Try refreshing sync from Commissioner → Settings.
+              </Text>
+            ) : null}
           </View>
         ) : null}
 
-        {tab === 'lineup' && !(isSynced && rosterLoading) ? (
+        {tab === 'lineup' && !rosterLoading ? (
           <>
-            {isSynced && !rosterLoading && starters.length === 0 && !rosterError ? (
+            {!rosterLoading && starters.length === 0 && !rosterError ? (
               <View style={[surfaces.roundedCard, { padding: 16, marginTop: 8 }]}>
                 <Text variant="bodySm">No players on your roster yet.</Text>
               </View>
             ) : null}
-            {starters.length > 0 || !isSynced ? (
+            {starters.length > 0 ? (
           <LineupPane
             isSynced={isSynced}
+            editable={isHosted}
+            showPoints={isSynced || isHosted}
             platform={active.platform}
             leagueId={active.id}
             onPlayer={setPlayer}
@@ -257,7 +256,7 @@ export default function TeamPage() {
         onClose={() => setPlayer(null)}
         synced={isSynced}
         platform={active.platform}
-        canDrop={!isSynced && onMyTeam(player)}
+        canDrop={isHosted && onMyTeam(player)}
         onRequestDrop={(p) => setConfirmDrop(p)}
       />
       <ConfirmDropDialog player={confirmDrop} onCancel={() => setConfirmDrop(null)} onConfirm={() => confirmDrop && handleDrop(confirmDrop)} />
@@ -330,6 +329,8 @@ function LiveDot({ status }: { status?: LiveStatus }) {
 // ====================== Lineup pane ======================
 function LineupPane({
   isSynced,
+  editable,
+  showPoints,
   platform,
   leagueId,
   onPlayer,
@@ -339,6 +340,8 @@ function LineupPane({
   onSwap,
 }: {
   isSynced: boolean;
+  editable: boolean;
+  showPoints: boolean;
   platform?: string;
   leagueId: string;
   onPlayer: (p: PlayerDetail) => void;
@@ -392,7 +395,7 @@ function LineupPane({
               <View style={surfaces.pillSuccess}>
                 <Text variant="captionSuccess">72% win</Text>
               </View>
-              {!isSynced ? (
+              {editable ? (
                 <Pressable
                   onPress={() => setEditing((v) => !v)}
                   style={[S.editPill, editing ? S.editPillActive : S.editPillIdle]}
@@ -414,7 +417,7 @@ function LineupPane({
                 divided={i > 0}
                 editing={editing}
                 onPress={() => (editing ? setSwapSlot(i) : onPlayer(r))}
-                showPoints={isSynced}
+                showPoints={showPoints}
               />
             ))}
           </View>
@@ -425,7 +428,7 @@ function LineupPane({
       <TeamSection title="Bench">
         <Card>
           {bench.map((p, i) => (
-            <BenchRow key={p.id ?? p.name} player={p} divided={i > 0} onPress={() => onPlayer(p)} showPoints={isSynced} />
+            <BenchRow key={p.id ?? p.name} player={p} divided={i > 0} onPress={() => onPlayer(p)} showPoints={showPoints} />
           ))}
         </Card>
       </TeamSection>

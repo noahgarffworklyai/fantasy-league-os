@@ -8,8 +8,47 @@ import { sleeperPlayerImageUrl } from '@flos/shared';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { db } from '../db/index.js';
-import { leagueProviderLinks } from '../db/schema.js';
+import { leagueMembers, leagueProviderLinks } from '../db/schema.js';
 import { authMiddleware, requireLeagueMembership, type AuthenticatedRequest } from '../lib/auth-middleware.js';
+import { collectHostedOwnership, type HostedRosterData } from '../lib/hosted-roster.js';
+
+function annotateSearchPlayers(
+  players: PlayerSearchRow[],
+  ownedIds: Set<string>,
+  myIds: Set<string>,
+  memberCount: number,
+) {
+  return players.map((player) => {
+    const owned = ownedIds.has(player.id);
+    const onMyRoster = myIds.has(player.id);
+    const ownership = owned ? Math.round(100 / memberCount) : 0;
+    return {
+      ...player,
+      owned,
+      onMyRoster,
+      ownership,
+      available: owned ? 0 : 100,
+    };
+  });
+}
+
+async function hostedOwnershipForLeague(leagueId: string, userId: string) {
+  const members = await db
+    .select({
+      userId: leagueMembers.userId,
+      hostedRoster: leagueMembers.hostedRoster,
+    })
+    .from(leagueMembers)
+    .where(eq(leagueMembers.leagueId, leagueId));
+
+  return collectHostedOwnership(
+    members.map((row) => ({
+      userId: row.userId,
+      hostedRoster: row.hostedRoster as HostedRosterData | null,
+    })),
+    userId,
+  );
+}
 
 function mapPlayerDetail(player: NonNullable<Awaited<ReturnType<typeof getSleeperPlayer>>>) {
   const name =
@@ -63,6 +102,15 @@ export async function playerRoutes(app: FastifyInstance) {
         tab: tab ?? (search ? undefined : 'all'),
         limit: limit ? Number(limit) : undefined,
       });
+
+      if (!link) {
+        const { ownedIds, myIds, memberCount } = await hostedOwnershipForLeague(id, authReq.userId);
+        return {
+          players: annotateSearchPlayers(players, ownedIds, myIds, memberCount),
+          source: 'hosted' as const,
+        };
+      }
+
       return { players, source: link?.provider ?? 'sleeper' };
     } catch (err) {
       return reply.status(400).send({
@@ -114,6 +162,7 @@ export async function playerRoutes(app: FastifyInstance) {
       }
 
       let owned = false;
+      let onMyRoster = false;
       let ownership = 0;
       let available = 100;
 
@@ -130,6 +179,15 @@ export async function playerRoutes(app: FastifyInstance) {
             owned = ownedIds.has(playerId);
             ownership = owned ? 100 : 0;
             available = owned ? 0 : 100;
+          } else if (!link) {
+            const { ownedIds, myIds, memberCount } = await hostedOwnershipForLeague(
+              leagueId,
+              (request as AuthenticatedRequest).userId,
+            );
+            owned = ownedIds.has(playerId);
+            onMyRoster = myIds.has(playerId);
+            ownership = owned ? Math.round(100 / memberCount) : 0;
+            available = owned ? 0 : 100;
           }
         } catch {
           // ignore league context errors for player detail
@@ -140,6 +198,7 @@ export async function playerRoutes(app: FastifyInstance) {
         player: {
           ...mapPlayerDetail(player),
           owned,
+          onMyRoster,
           ownership,
           available,
         },

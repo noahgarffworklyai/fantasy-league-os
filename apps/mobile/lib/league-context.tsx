@@ -192,7 +192,7 @@ interface AppContextValue {
   signOut: () => Promise<void>;
   leagues: League[];
   active: League | null;
-  setActiveId: (id: string) => void;
+  setActiveId: (id: string | null) => void;
   refreshLeagues: () => Promise<League[]>;
   createHostedLeague: (input: CreateHostedLeagueInput) => Promise<League>;
   createSyncedLeague: (input: CreateSyncedLeagueInput) => Promise<League>;
@@ -236,7 +236,12 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
     }
     setLeaguesLoading(true);
     try {
-      const rows = await fetchLeaguesFromApi();
+      const rows = await Promise.race([
+        fetchLeaguesFromApi(),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Leagues request timed out')), 10_000);
+        }),
+      ]);
       const mapped = rows.map(mapApiLeague);
       setLeagues(mapped);
       setActiveIdState((current) => {
@@ -245,6 +250,9 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
         return mapped[0].id;
       });
       return mapped;
+    } catch {
+      setLeagues([]);
+      return [];
     } finally {
       setLeaguesLoading(false);
     }
@@ -292,7 +300,7 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
           name: res.league.name,
           season: new Date().getFullYear(),
           role: 'commissioner',
-          paid: true,
+          paid: input.buyIn <= 0,
           buyInCents: res.league.buyInCents,
           platformFeeCents: res.league.platformFeeCents,
           memberCount: 1,
@@ -321,7 +329,7 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
           name: res.league.name,
           season: input.season,
           role: 'commissioner',
-          paid: true,
+          paid: (input.buyIn ?? 0) <= 0,
           buyInCents: res.league.buyInCents,
           platformFeeCents: res.league.platformFeeCents,
           memberCount: 1,

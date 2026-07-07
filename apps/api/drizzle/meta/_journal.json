@@ -15,6 +15,13 @@
       "when": 1710000001000,
       "tag": "0001_checkout_session",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1710000002000,
+      "tag": "0002_hosted_roster",
+      "breakpoints": true
     }
   ]
 }

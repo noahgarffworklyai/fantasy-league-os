@@ -1,13 +1,46 @@
-import { fetchSleeperMyRoster, fetchSleeperOwnerAvatars, fetchSleeperWeekMatchups, resolveSleeperOwnerId } from '@flos/league-adapters';
-import { createLeagueSchema, updateLeagueSettingsSchema, type CanonicalLeague } from '@flos/shared';
+import {
+  fetchEspnMyRoster,
+  fetchEspnWeekMatchups,
+  fetchSleeperMyRoster,
+  fetchSleeperOwnerAvatars,
+  fetchSleeperWeekMatchups,
+  previewEspnLeague,
+  resolveEspnTeamId,
+  resolveSleeperOwnerId,
+  type EspnCredentials,
+} from '@flos/league-adapters';
+import {
+  createLeagueSchema,
+  patchHostedRosterSchema,
+  reconnectEspnCredentialsSchema,
+  updateLeagueSettingsSchema,
+  type CanonicalLeague,
+} from '@flos/shared';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { db } from '../db/index.js';
-import { leagueMembers, leagueProviderLinks, leagues, users } from '../db/schema.js';
+import { leagueMembers, leagueProviderLinks, leagues, payments, treasuryLedger, users } from '../db/schema.js';
 import { authMiddleware, requireLeagueMembership, type AuthenticatedRequest } from '../lib/auth-middleware.js';
-import { encryptCredentials } from '../lib/crypto.js';
-import { scheduleLeagueSync } from '../services/sync-worker.js';
+import { decryptCredentials, encryptCredentials } from '../lib/crypto.js';
+import { buildHostedMatchups, buildHostedStandings } from '../lib/hosted-league.js';
+import {
+  buildHostedMyRoster,
+  collectHostedOwnership,
+  addHostedPlayer,
+  dropHostedPlayer,
+  seedHostedRoster,
+  swapHostedRoster,
+  type HostedRosterData,
+} from '../lib/hosted-roster.js';
+import { scheduleLeagueSync, shouldRefreshSync } from '../services/sync-worker.js';
 import { syncLeagueByLeagueId } from '../services/sync.js';
+
+function getEspnCredentials(link: { encryptedCredentials: string | null }): EspnCredentials | null {
+  if (!link.encryptedCredentials) return null;
+  const creds = decryptCredentials<EspnCredentials>(link.encryptedCredentials);
+  if (!creds.espnS2 || !creds.swid) return null;
+  return creds;
+}
 
 export async function leagueRoutes(app: FastifyInstance) {
   app.get('/leagues', { preHandler: authMiddleware }, async (request) => {
@@ -86,12 +119,14 @@ export async function leagueRoutes(app: FastifyInstance) {
       })
       .returning();
 
+    const isFreeLeague = body.buyInCents <= 0;
+
     await db.insert(leagueMembers).values({
       leagueId: league.id,
       userId,
       role: 'commissioner',
-      paid: true,
-      paidAt: new Date(),
+      paid: isFreeLeague,
+      paidAt: isFreeLeague ? new Date() : null,
     });
 
     if (body.provider && body.externalLeagueId) {
@@ -133,11 +168,24 @@ export async function leagueRoutes(app: FastifyInstance) {
       .from(leagueMembers)
       .where(and(eq(leagueMembers.leagueId, id), eq(leagueMembers.userId, userId)))
       .limit(1);
-    const [link] = await db
+    let [link] = await db
       .select()
       .from(leagueProviderLinks)
       .where(eq(leagueProviderLinks.leagueId, id))
       .limit(1);
+
+    if (link && shouldRefreshSync(link)) {
+      try {
+        await syncLeagueByLeagueId(id);
+        [link] = await db
+          .select()
+          .from(leagueProviderLinks)
+          .where(eq(leagueProviderLinks.leagueId, id))
+          .limit(1);
+      } catch {
+        // Return last good snapshot if refresh fails.
+      }
+    }
 
     return {
       league,
@@ -150,6 +198,7 @@ export async function leagueRoutes(app: FastifyInstance) {
             externalLeagueId: link.externalLeagueId,
             lastSyncedAt: link.lastSyncedAt?.toISOString(),
             syncStatus: link.syncStatus,
+            syncError: link.syncStatus === 'error' ? link.syncError : null,
             snapshot: link.snapshot,
           }
         : null,
@@ -198,9 +247,117 @@ export async function leagueRoutes(app: FastifyInstance) {
 
     if (!link) return reply.status(404).send({ error: 'No provider link' });
 
-    await scheduleLeagueSync(link.id);
-    const snapshot = await syncLeagueByLeagueId(id);
-    return { snapshot, syncStatus: 'ok' };
+    try {
+      const snapshot = await syncLeagueByLeagueId(id);
+      void scheduleLeagueSync(link.id);
+      return { snapshot, syncStatus: 'ok' as const };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Sync failed';
+      request.log.warn({ leagueId: id, err: message }, 'Manual league sync failed');
+      return reply.status(502).send({ error: message });
+    }
+  });
+
+  app.patch('/leagues/:id/provider-credentials', { preHandler: authMiddleware }, async (request, reply) => {
+    const authReq = request as AuthenticatedRequest;
+    const { id } = request.params as { id: string };
+
+    try {
+      await requireLeagueMembership(authReq, id, { commissioner: true });
+    } catch {
+      return reply.status(403).send({ error: 'Commissioner access required' });
+    }
+
+    const [link] = await db
+      .select()
+      .from(leagueProviderLinks)
+      .where(eq(leagueProviderLinks.leagueId, id))
+      .limit(1);
+
+    if (!link) return reply.status(404).send({ error: 'No provider link' });
+    if (link.provider !== 'espn') {
+      return reply.status(400).send({ error: 'Only ESPN leagues support reconnect' });
+    }
+
+    const body = reconnectEspnCredentialsSchema.parse(request.body);
+    const credentials: EspnCredentials = {
+      espnS2: body.espnS2.trim(),
+      swid: body.swid.trim(),
+      leagueId: link.externalLeagueId,
+    };
+
+    try {
+      await previewEspnLeague(link.externalLeagueId, credentials);
+    } catch {
+      return reply.status(400).send({
+        error: 'Could not verify ESPN sign-in for this league. Check your account can access the league on ESPN.',
+      });
+    }
+
+    await db
+      .update(leagueProviderLinks)
+      .set({
+        encryptedCredentials: encryptCredentials(credentials),
+        syncStatus: 'pending',
+        syncError: null,
+      })
+      .where(eq(leagueProviderLinks.id, link.id));
+
+    try {
+      await syncLeagueByLeagueId(id);
+      return { syncStatus: 'ok' as const, externalLeagueId: link.externalLeagueId };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Sync failed after reconnect';
+      return reply.status(502).send({ error: message });
+    }
+  });
+
+  app.delete('/leagues/:id/members/me', { preHandler: authMiddleware }, async (request, reply) => {
+    const authReq = request as AuthenticatedRequest;
+    const { id } = request.params as { id: string };
+
+    let member;
+    try {
+      member = await requireLeagueMembership(authReq, id);
+    } catch {
+      return reply.status(403).send({ error: 'Access denied' });
+    }
+
+    const [league] = await db.select().from(leagues).where(eq(leagues.id, id)).limit(1);
+    if (!league) return reply.status(404).send({ error: 'League not found' });
+
+    if (member.role === 'commissioner' || league.commissionerId === authReq.userId) {
+      return reply.status(400).send({
+        error: 'Commissioners cannot leave. Delete the league instead, or transfer commissioner first.',
+      });
+    }
+
+    await db
+      .delete(leagueMembers)
+      .where(and(eq(leagueMembers.leagueId, id), eq(leagueMembers.userId, authReq.userId)));
+
+    return { ok: true };
+  });
+
+  app.delete('/leagues/:id', { preHandler: authMiddleware }, async (request, reply) => {
+    const authReq = request as AuthenticatedRequest;
+    const { id } = request.params as { id: string };
+
+    const [league] = await db.select().from(leagues).where(eq(leagues.id, id)).limit(1);
+    if (!league) return reply.status(404).send({ error: 'League not found' });
+    if (league.commissionerId !== authReq.userId) {
+      return reply.status(403).send({ error: 'Only the commissioner can delete this league' });
+    }
+
+    try {
+      await db.delete(payments).where(eq(payments.leagueId, id));
+      await db.delete(treasuryLedger).where(eq(treasuryLedger.leagueId, id));
+      await db.delete(leagues).where(eq(leagues.id, id));
+      return { ok: true };
+    } catch (err) {
+      request.log.error({ leagueId: id, err }, 'Failed to delete league');
+      return reply.status(500).send({ error: 'Could not delete league. Try again.' });
+    }
   });
 
   app.get('/leagues/:id/standings', { preHandler: authMiddleware }, async (request, reply) => {
@@ -221,6 +378,25 @@ export async function leagueRoutes(app: FastifyInstance) {
 
     const snapshot = link?.snapshot as CanonicalLeague | null;
     const teamMap = new Map((snapshot?.teams ?? []).map((t) => [t.externalTeamId, t]));
+
+    if (!link) {
+      const members = await db
+        .select({
+          userId: leagueMembers.userId,
+          displayName: users.displayName,
+          teamName: leagueMembers.teamName,
+        })
+        .from(leagueMembers)
+        .innerJoin(users, eq(leagueMembers.userId, users.id))
+        .where(eq(leagueMembers.leagueId, id));
+
+      const standings = buildHostedStandings(members);
+      return { standings, currentWeek: 1, source: 'hosted' as const };
+    }
+
+    if (!(snapshot?.standings?.length)) {
+      return { standings: [], currentWeek: snapshot?.currentWeek ?? 0, source: 'snapshot' as const };
+    }
 
     let liveOwnerAvatars = new Map<string, string>();
     if (link?.provider === 'sleeper' && link.externalLeagueId) {
@@ -245,7 +421,7 @@ export async function leagueRoutes(app: FastifyInstance) {
       };
     });
 
-    return { standings, currentWeek: snapshot?.currentWeek ?? 0 };
+    return { standings, currentWeek: snapshot?.currentWeek ?? 0, source: 'snapshot' as const };
   });
 
   app.get('/leagues/:id/matchups', { preHandler: authMiddleware }, async (request, reply) => {
@@ -268,6 +444,21 @@ export async function leagueRoutes(app: FastifyInstance) {
     const snapshot = link?.snapshot as CanonicalLeague | null;
     const targetWeek = week ? Number(week) : snapshot?.currentWeek ?? 1;
 
+    if (!link) {
+      const members = await db
+        .select({
+          userId: leagueMembers.userId,
+          displayName: users.displayName,
+          teamName: leagueMembers.teamName,
+        })
+        .from(leagueMembers)
+        .innerJoin(users, eq(leagueMembers.userId, users.id))
+        .where(eq(leagueMembers.leagueId, id));
+
+      const matchups = buildHostedMatchups(members, targetWeek);
+      return { week: targetWeek, matchups, source: 'hosted' as const };
+    }
+
     if (link?.provider === 'sleeper' && link.externalLeagueId) {
       try {
         const matchups = await fetchSleeperWeekMatchups(link.externalLeagueId, targetWeek);
@@ -275,6 +466,26 @@ export async function leagueRoutes(app: FastifyInstance) {
       } catch (err) {
         return reply.status(400).send({
           error: err instanceof Error ? err.message : 'Failed to load Sleeper matchups',
+        });
+      }
+    }
+
+    if (link?.provider === 'espn' && link.externalLeagueId) {
+      const credentials = getEspnCredentials(link);
+      if (!credentials) {
+        return reply.status(400).send({ error: 'ESPN credentials missing. Re-connect your league.' });
+      }
+      try {
+        const matchups = await fetchEspnWeekMatchups(
+          link.externalLeagueId,
+          targetWeek,
+          credentials,
+          snapshot?.season,
+        );
+        return { week: targetWeek, matchups, source: 'espn' as const };
+      } catch (err) {
+        return reply.status(400).send({
+          error: err instanceof Error ? err.message : 'Failed to load ESPN matchups',
         });
       }
     }
@@ -333,32 +544,170 @@ export async function leagueRoutes(app: FastifyInstance) {
       .where(eq(leagueProviderLinks.leagueId, id))
       .limit(1);
 
-    if (!link || link.provider !== 'sleeper' || !link.externalLeagueId) {
-      return reply.status(404).send({ error: 'No synced Sleeper league linked' });
+    if (!link?.externalLeagueId) {
+      if (!membership) {
+        return reply.status(404).send({ error: 'League membership not found' });
+      }
+
+      let hostedData = membership.hostedRoster as HostedRosterData | null;
+      if (!hostedData) {
+        hostedData = await seedHostedRoster(authReq.userId);
+        await db
+          .update(leagueMembers)
+          .set({ hostedRoster: hostedData })
+          .where(eq(leagueMembers.id, membership.id));
+      }
+
+      const roster = await buildHostedMyRoster(
+        authReq.userId,
+        user?.displayName ?? 'Manager',
+        membership.teamName,
+        hostedData,
+      );
+      return { roster, source: 'hosted' as const };
     }
 
     const snapshot = link.snapshot as CanonicalLeague | null;
     const teams = snapshot?.teams ?? [];
-    const ownerId = resolveSleeperOwnerId(teams, {
-      displayName: user?.displayName ?? undefined,
-      teamName: membership?.teamName,
-      providerTeamId: membership?.providerTeamId,
-    });
 
-    if (!ownerId) {
-      return reply.status(404).send({
-        error: 'Could not match your account to a Sleeper team. Try refreshing sync from Settings.',
+    if (link.provider === 'sleeper') {
+      const ownerId = resolveSleeperOwnerId(teams, {
+        displayName: user?.displayName ?? undefined,
+        teamName: membership?.teamName,
+        providerTeamId: membership?.providerTeamId,
       });
+
+      if (!ownerId) {
+        return reply.status(404).send({
+          error: 'Could not match your account to a team. Try refreshing sync from Settings.',
+        });
+      }
+
+      try {
+        const roster = await fetchSleeperMyRoster(link.externalLeagueId, ownerId);
+        return { roster, source: 'sleeper' as const };
+      } catch (err) {
+        return reply.status(400).send({
+          error: err instanceof Error ? err.message : 'Failed to load roster',
+        });
+      }
+    }
+
+    if (link.provider === 'espn') {
+      const credentials = getEspnCredentials(link);
+      if (!credentials) {
+        return reply.status(400).send({ error: 'ESPN credentials missing. Re-connect your league.' });
+      }
+
+      const teamId = resolveEspnTeamId(teams, credentials, {
+        displayName: user?.displayName ?? undefined,
+        teamName: membership?.teamName,
+        providerTeamId: membership?.providerTeamId,
+      });
+
+      if (!teamId) {
+        return reply.status(404).send({
+          error: 'Could not match your account to an ESPN team. Try refreshing sync from Settings.',
+        });
+      }
+
+      try {
+        const roster = await fetchEspnMyRoster(link.externalLeagueId, teamId, credentials, {
+          week: snapshot?.currentWeek,
+          season: snapshot?.season,
+        });
+        return { roster, source: 'espn' as const };
+      } catch (err) {
+        return reply.status(400).send({
+          error: err instanceof Error ? err.message : 'Failed to load roster',
+        });
+      }
+    }
+
+    return reply.status(404).send({ error: 'Roster sync not supported for this platform yet' });
+  });
+
+  app.patch('/leagues/:id/my-roster', { preHandler: authMiddleware }, async (request, reply) => {
+    const authReq = request as AuthenticatedRequest;
+    const { id } = request.params as { id: string };
+    const parsed = patchHostedRosterSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: parsed.error.flatten() });
     }
 
     try {
-      const roster = await fetchSleeperMyRoster(link.externalLeagueId, ownerId);
-      return { roster, source: 'sleeper' as const };
+      await requireLeagueMembership(authReq, id);
+    } catch (e) {
+      return reply.status(403).send({ error: e instanceof Error ? e.message : 'Access denied' });
+    }
+
+    const [link] = await db
+      .select()
+      .from(leagueProviderLinks)
+      .where(eq(leagueProviderLinks.leagueId, id))
+      .limit(1);
+
+    if (link?.externalLeagueId) {
+      return reply.status(400).send({ error: 'Lineup changes must be made on your fantasy platform' });
+    }
+
+    const [membership] = await db
+      .select()
+      .from(leagueMembers)
+      .where(and(eq(leagueMembers.leagueId, id), eq(leagueMembers.userId, authReq.userId)))
+      .limit(1);
+
+    if (!membership) {
+      return reply.status(404).send({ error: 'League membership not found' });
+    }
+
+    const [user] = await db.select().from(users).where(eq(users.id, authReq.userId)).limit(1);
+
+    let hostedData = membership.hostedRoster as HostedRosterData | null;
+    if (!hostedData) {
+      hostedData = await seedHostedRoster(authReq.userId);
+    }
+
+    try {
+      if (parsed.data.action === 'swap') {
+        hostedData = swapHostedRoster(hostedData, parsed.data.starterIndex, parsed.data.benchIndex);
+      } else if (parsed.data.action === 'drop') {
+        hostedData = dropHostedPlayer(hostedData, parsed.data.playerId);
+      } else {
+        const memberRows = await db
+          .select({
+            userId: leagueMembers.userId,
+            hostedRoster: leagueMembers.hostedRoster,
+          })
+          .from(leagueMembers)
+          .where(eq(leagueMembers.leagueId, id));
+        const { ownedIds } = collectHostedOwnership(
+          memberRows.map((row) => ({
+            userId: row.userId,
+            hostedRoster: row.hostedRoster as HostedRosterData | null,
+          })),
+          authReq.userId,
+        );
+        hostedData = addHostedPlayer(hostedData, parsed.data.playerId, ownedIds);
+      }
     } catch (err) {
       return reply.status(400).send({
-        error: err instanceof Error ? err.message : 'Failed to load roster',
+        error: err instanceof Error ? err.message : 'Invalid roster change',
       });
     }
+
+    await db
+      .update(leagueMembers)
+      .set({ hostedRoster: hostedData })
+      .where(eq(leagueMembers.id, membership.id));
+
+    const roster = await buildHostedMyRoster(
+      authReq.userId,
+      user?.displayName ?? 'Manager',
+      membership.teamName,
+      hostedData,
+    );
+    return { roster, source: 'hosted' as const };
   });
 
   app.get('/leagues/:id/members', { preHandler: authMiddleware }, async (request, reply) => {

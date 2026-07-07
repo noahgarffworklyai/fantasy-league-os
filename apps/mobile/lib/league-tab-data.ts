@@ -201,13 +201,15 @@ function buildMatchups(apiMatchups: ApiMatchup[], teams: TeamRow[]): Matchup[] {
 
 async function fetchLeagueTabData(leagueId: string): Promise<LeagueTabData> {
   const detail = await fetchLeagueDetail(leagueId);
-  const snapshot = detail.providerLink?.snapshot;
-  const week = snapshot?.currentWeek ?? 1;
   const synced = !!detail.providerLink;
 
-  if (!snapshot?.standings?.length) {
+  const standingsRes = await api.get<{ standings: ApiStanding[]; currentWeek?: number }>(
+    `/leagues/${leagueId}/standings`,
+  );
+
+  if (!standingsRes.standings?.length) {
     return {
-      week,
+      week: standingsRes.currentWeek ?? 1,
       teams: [],
       matchups: [],
       playoffTeams: 6,
@@ -216,19 +218,17 @@ async function fetchLeagueTabData(leagueId: string): Promise<LeagueTabData> {
     };
   }
 
-  const standingsRes = await api.get<{ standings: ApiStanding[]; currentWeek?: number }>(
-    `/leagues/${leagueId}/standings`,
-  );
   const teams = buildTeamsFromStandings(
     standingsRes.standings,
     standingsRes.standings.length,
   );
   const playoffTeams = playoffTeamsFor(teams.length);
+  const week = standingsRes.currentWeek ?? 1;
 
   let matchups: Matchup[] = [];
   try {
     const matchupsRes = await api.get<{ week: number; matchups: ApiMatchup[] }>(
-      `/leagues/${leagueId}/matchups?week=${standingsRes.currentWeek ?? week}`,
+      `/leagues/${leagueId}/matchups?week=${week}`,
     );
     matchups = buildMatchups(matchupsRes.matchups ?? [], teams);
   } catch {
@@ -236,7 +236,7 @@ async function fetchLeagueTabData(leagueId: string): Promise<LeagueTabData> {
   }
 
   return {
-    week: standingsRes.currentWeek ?? week,
+    week,
     teams,
     matchups,
     playoffTeams,
@@ -245,12 +245,17 @@ async function fetchLeagueTabData(leagueId: string): Promise<LeagueTabData> {
   };
 }
 
-export function useLeagueTabData(leagueId: string | undefined) {
+const SYNCED_REFETCH_MS = 90_000;
+
+export function useLeagueTabData(leagueId: string | undefined, synced = false) {
   return useQuery({
     queryKey: ['league-tab', leagueId],
     queryFn: () => fetchLeagueTabData(leagueId!),
     enabled: !!leagueId,
     staleTime: 45_000,
+    refetchInterval: synced ? SYNCED_REFETCH_MS : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: synced,
   });
 }
 

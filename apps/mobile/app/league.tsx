@@ -1,5 +1,5 @@
-import { Fragment, useRef, useState, type ReactNode, useMemo } from 'react';
-import { ActivityIndicator, Modal, ScrollView, StyleSheet, TextInput, useWindowDimensions, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
+import { Fragment, useRef, useState, useEffect, type ReactNode, useMemo } from 'react';
+import { ActivityIndicator, Keyboard, Modal, Platform, ScrollView, StyleSheet, TextInput, useWindowDimensions, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line as SvgLine, Rect, Text as SvgText } from 'react-native-svg';
 import {
@@ -36,7 +36,7 @@ type DetailView = { kind: 'league' } | { kind: 'matchup'; id: string } | { kind:
 
 export default function LeaguePage() {
   const { active } = useLeague();
-  const { data, isLoading, isError, refetch } = useLeagueTabData(active?.id);
+  const { data, isLoading, isError, refetch } = useLeagueTabData(active?.id, active?.type === 'synced');
   const [view, setView] = useState<DetailView>({ kind: 'league' });
   const teams = data?.teams ?? [];
   const matchups = data?.matchups ?? [];
@@ -147,7 +147,9 @@ function LeagueHome({
       {isLoading ? (
         <View style={[layout.centered, { paddingVertical: 48 }]}>
           <ActivityIndicator color={hex.primary} />
-          <Text variant="bodyMuted" style={{ marginTop: 12 }}>Loading league from Sleeper…</Text>
+          <Text variant="bodyMuted" style={{ marginTop: 12 }}>
+            {active.type === 'synced' ? `Loading league from ${active.platform}…` : 'Loading league…'}
+          </Text>
         </View>
       ) : isError ? (
         <View style={{ gap: 12, paddingVertical: 24 }}>
@@ -159,7 +161,9 @@ function LeagueHome({
       ) : !hasSnapshot ? (
         <View style={{ paddingVertical: 24, paddingHorizontal: 8 }}>
           <Text variant="bodyMuted">
-            No standings synced yet. If you just connected, wait a moment and pull to refresh, or re-sync from Commissioner → League Settings.
+            {active.type === 'synced'
+              ? 'No standings synced yet. If you just connected, wait a moment and pull to refresh, or re-sync from Commissioner → Settings.'
+              : 'No teams in this league yet. Invite members from Commissioner → Invite Members, then standings will appear here.'}
           </Text>
           <Pressable onPress={onRetry} style={[surfaces.secondaryButton, { marginTop: 16, height: 44 }]}>
             <Text variant="body">Refresh</Text>
@@ -683,6 +687,20 @@ function FeedSheet({
   const c = useColors();
   const insets = useSafeAreaInsets();
   const [draft, setDraft] = useState('');
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const submit = async () => {
     const content = draft.trim();
@@ -699,7 +717,15 @@ function FeedSheet({
     <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
       <View style={[StyleSheet.absoluteFillObject, { justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }]}>
         <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
-        <View style={[styles.feedSheet, { height: '82%', paddingBottom: Math.max(insets.bottom, 8) }]}>
+        <View
+          style={[
+            styles.feedSheet,
+            {
+              height: '82%',
+              paddingBottom: Math.max(insets.bottom, 8) + keyboardHeight,
+            },
+          ]}
+        >
           <View style={{ alignItems: 'center', paddingTop: 8 }}>
             <View style={{ height: 6, width: 40, borderRadius: 9999, backgroundColor: hex.muted }} />
           </View>
@@ -719,6 +745,7 @@ function FeedSheet({
             style={layout.fill}
             contentContainerStyle={{ gap: 12, paddingHorizontal: 16, paddingBottom: 12 }}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
           >
             {isLoading ? (
               <View style={[layout.centered, { paddingVertical: 32 }]}>
@@ -741,7 +768,7 @@ function FeedSheet({
               ))
             )}
           </ScrollView>
-          <View style={[layout.row, { gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: hex.hairline, padding: 12 }]}>
+          <View style={[layout.row, { gap: 8, alignItems: 'flex-end', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: hex.hairline, padding: 12 }]}>
             <TextInput
               value={draft}
               onChangeText={setDraft}
@@ -749,6 +776,8 @@ function FeedSheet({
               placeholderTextColor={c.mutedForeground}
               style={styles.feedInput}
               editable={!posting}
+              multiline
+              maxLength={500}
             />
             <Pressable onPress={submit} disabled={posting || !draft.trim()} style={[styles.feedPostBtn, posting ? { opacity: 0.6 } : null]}>
               {posting ? (
@@ -1209,11 +1238,13 @@ function useLeagueStyles() {
     backgroundColor: hex.background,
   },
   feedInput: {
-    height: 44,
+    minHeight: 44,
+    maxHeight: 96,
     flex: 1,
-    borderRadius: 9999,
+    borderRadius: 22,
     backgroundColor: hex.muted,
     paddingHorizontal: 16,
+    paddingVertical: 10,
     fontSize: 14,
     color: hex.foreground,
   },

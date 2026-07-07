@@ -1,5 +1,5 @@
 import { useMemo, useState, type ComponentType, type ReactNode } from 'react';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import Svg, { Circle, Line as SvgLine, Text as SvgText } from 'react-native-svg';
 import {
   Activity,
@@ -12,6 +12,7 @@ import {
   MessageCircle,
   MoreHorizontal,
   Newspaper,
+  Plus,
   Search,
   Share2,
   SlidersHorizontal,
@@ -38,6 +39,7 @@ import {
   usePlayerSearch,
   useWatchlistPlayers,
 } from '@/lib/players-api';
+import { useAddPlayerToRoster } from '@/lib/team-roster-api';
 import { playerAvatar } from '@/lib/avatars';
 import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
 
@@ -58,6 +60,7 @@ interface Player {
   ownership: number;
   health?: Health;
   mine?: boolean;
+  rostered?: boolean;
   watch?: boolean;
   avail?: number;
   added?: number;
@@ -95,6 +98,17 @@ const GAME_LOG = [
 
 const FILTERS = ['All', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 
+function pickupLabel(isSynced: boolean, platform: string | undefined, player: Player) {
+  if (isSynced) return `Open waivers in ${platform}`;
+  if (player.mine) return 'On your roster';
+  if (player.rostered || (player.avail ?? 100) === 0) return 'Rostered';
+  return 'Add to team';
+}
+
+function canPickup(isSynced: boolean, player: Player) {
+  return !isSynced && !player.mine && !player.rostered && (player.avail ?? 100) > 0;
+}
+
 /* ------------------------------ PAGE ------------------------------ */
 type DetailView = { kind: 'home' } | { kind: 'player'; id: string };
 
@@ -114,6 +128,17 @@ export default function PlayersPage() {
   const playerId = view.kind === 'player' ? view.id : undefined;
   const { data: playerData, isLoading: playerLoading } = usePlayerDetail(playerId, active?.id);
   const { data: relatedData } = usePlayerSearch(active?.id, { search: '', position: 'All', tab: 'all' });
+  const { addPlayer, isPending: pickupPending } = useAddPlayerToRoster(active?.id);
+
+  const handlePickup = async (player: Player) => {
+    if (!active || active.type === 'synced') return;
+    try {
+      await addPlayer(player.id);
+      Alert.alert('Added to team', `${player.name} was added to your bench.`);
+    } catch (e) {
+      Alert.alert('Could not add player', e instanceof Error ? e.message : 'Try again.');
+    }
+  };
 
   if (!active) return null;
 
@@ -153,6 +178,8 @@ export default function PlayersPage() {
           onOpenPlayer={(id) => setView({ kind: 'player', id })}
           watched={watchIds.has(player.id)}
           onToggleWatch={() => toggleWatch(player.id)}
+          onPickup={() => handlePickup(player)}
+          pickupPending={pickupPending}
         />
       </Screen>
     );
@@ -167,6 +194,8 @@ export default function PlayersPage() {
         onOpenPlayer={(id) => setView({ kind: 'player', id })}
         watchIds={watchIds}
         toggleWatch={toggleWatch}
+        onPickup={handlePickup}
+        pickupPending={pickupPending}
       />
     </Screen>
   );
@@ -182,6 +211,8 @@ function PlayersHome({
   onOpenPlayer,
   watchIds,
   toggleWatch,
+  onPickup,
+  pickupPending,
 }: {
   leagueId: string;
   isSynced: boolean;
@@ -189,6 +220,8 @@ function PlayersHome({
   onOpenPlayer: (id: string) => void;
   watchIds: Set<string>;
   toggleWatch: (id: string) => void;
+  onPickup: (player: Player) => void;
+  pickupPending: boolean;
 }) {
   const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   const c = useColors();
@@ -372,7 +405,7 @@ function PlayersHome({
 
           {tab === 'available' ? (
             <>
-              <Section title="Top waiver targets">
+              <Section title="Top free agents">
                 <View style={{ gap: 8 }}>
                   {waivers.filter(matchesPos).map((p) => (
                     <View key={p.id} style={[surfaces.roundedCard, { padding: 16 }]}>
@@ -387,11 +420,13 @@ function PlayersHome({
                           <TrendPill trend={p.trend} small />
                         </View>
                       </Pressable>
-                      <Text variant="bodyMuted" style={{ marginTop: 8, lineHeight: 18 }}>
-                        Trending add on Sleeper{p.added ? ` · ${formatAddedMetric(p.added)} adds (24h)` : ''}.
-                      </Text>
                       <View style={{ marginTop: 12 }}>
-                        <PrimaryButton>{isSynced ? `Open waivers in ${platform}` : 'Add to waivers'}</PrimaryButton>
+                        <PrimaryButton
+                          disabled={pickupPending || !canPickup(isSynced, p)}
+                          onPress={() => onPickup(p)}
+                        >
+                          {pickupPending ? 'Adding…' : pickupLabel(isSynced, platform, p)}
+                        </PrimaryButton>
                       </View>
                     </View>
                   ))}
@@ -468,7 +503,15 @@ function PlayersHome({
 
           {tab === 'all' ? (
             <Section title="All players">
-              <PlayerList players={tabPlayers} onOpen={onOpenPlayer} watchIds={watchIds} toggleWatch={toggleWatch} />
+              <PlayerList
+                players={tabPlayers}
+                onOpen={onOpenPlayer}
+                watchIds={watchIds}
+                toggleWatch={toggleWatch}
+                isSynced={isSynced}
+                onPickup={onPickup}
+                pickupPending={pickupPending}
+              />
             </Section>
           ) : null}
 
@@ -495,6 +538,8 @@ function PlayerDetail({
   onOpenPlayer,
   watched,
   onToggleWatch,
+  onPickup,
+  pickupPending,
 }: {
   player: Player;
   related: Player[];
@@ -504,6 +549,8 @@ function PlayerDetail({
   onOpenPlayer: (id: string) => void;
   watched: boolean;
   onToggleWatch: () => void;
+  onPickup: () => void;
+  pickupPending: boolean;
 }) {
   const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   const c = useColors();
@@ -553,7 +600,12 @@ function PlayerDetail({
         </View>
 
         <View style={[layout.row, { marginTop: 16, gap: 8 }]}>
-          <PrimaryButton>{isSynced ? `Open in ${platform}` : 'Add to waivers'}</PrimaryButton>
+          <PrimaryButton
+            disabled={pickupPending || !canPickup(isSynced, p)}
+            onPress={onPickup}
+          >
+            {pickupPending ? 'Adding…' : pickupLabel(isSynced, platform, p)}
+          </PrimaryButton>
           <SecondaryButton onPress={onToggleWatch}>{watched ? 'Watching' : 'Watch'}</SecondaryButton>
         </View>
       </View>
@@ -987,10 +1039,32 @@ function StatBlock({ label, value }: { label: string; value: string }) {
   );
 }
 
-function PrimaryButton({ children, onPress }: { children: ReactNode; onPress?: () => void }) {
+function PrimaryButton({
+  children,
+  onPress,
+  disabled,
+}: {
+  children: ReactNode;
+  onPress?: () => void;
+  disabled?: boolean;
+}) {
   const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   return (
-    <Pressable onPress={onPress} style={[layout.flex1, surfaces.pill, { alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: hex.foreground }]}>
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={[
+        layout.flex1,
+        surfaces.pill,
+        {
+          alignItems: 'center',
+          paddingHorizontal: 16,
+          paddingVertical: 10,
+          backgroundColor: hex.foreground,
+          opacity: disabled ? 0.45 : 1,
+        },
+      ]}
+    >
       <Text variant="button" style={{ color: hex.background }}>{children}</Text>
     </Pressable>
   );
@@ -1005,7 +1079,23 @@ function SecondaryButton({ children, onPress }: { children: ReactNode; onPress?:
   );
 }
 
-function PlayerList({ players, onOpen, watchIds, toggleWatch }: { players: Player[]; onOpen: (id: string) => void; watchIds: Set<string>; toggleWatch: (id: string) => void }) {
+function PlayerList({
+  players,
+  onOpen,
+  watchIds,
+  toggleWatch,
+  isSynced,
+  onPickup,
+  pickupPending,
+}: {
+  players: Player[];
+  onOpen: (id: string) => void;
+  watchIds: Set<string>;
+  toggleWatch: (id: string) => void;
+  isSynced?: boolean;
+  onPickup?: (player: Player) => void;
+  pickupPending?: boolean;
+}) {
   const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   const c = useColors();
   if (players.length === 0) return <EmptyState icon={Search} title="No matches" body="Try a different filter or search term." />;
@@ -1024,6 +1114,15 @@ function PlayerList({ players, onOpen, watchIds, toggleWatch }: { players: Playe
               <TrendPill trend={p.trend} small />
             </View>
           </Pressable>
+          {!isSynced && onPickup && canPickup(false, p) ? (
+            <Pressable
+              onPress={() => onPickup(p)}
+              disabled={pickupPending}
+              style={[layout.iconButtonSm, { width: 36, height: 36, borderWidth: 0, backgroundColor: hex.foreground, opacity: pickupPending ? 0.45 : 1 }]}
+            >
+              <Plus size={16} color={c.background} />
+            </Pressable>
+          ) : null}
           <Pressable onPress={() => toggleWatch(p.id)} style={[layout.iconButtonSm, { width: 36, height: 36, borderWidth: 0, backgroundColor: 'transparent' }]}>
             <Star size={16} color={watchIds.has(p.id) ? c.foreground : c.mutedForeground} fill={watchIds.has(p.id) ? c.foreground : 'none'} />
           </Pressable>

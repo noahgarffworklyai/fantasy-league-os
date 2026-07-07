@@ -6,65 +6,43 @@ import type {
   LeagueSummary,
 } from '@flos/shared';
 import type { EspnCredentials, LeagueAdapter } from './types.js';
+import {
+  enrichEspnTeams,
+  enrichTeamsWithDirectory,
+  espnFetchLeague,
+  espnFetchLeagueAcrossSeasons,
+  espnFetchTeamDirectory,
+  espnTeamName,
+  resolveEspnCurrentWeek,
+  resolveEspnSeason,
+  type EspnMatchup,
+} from './espn-api.js';
 
-const ESPN_BASE = 'https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl';
-
-type EspnSettings = {
-  name?: string;
-  seasonId?: number;
-  scoringPeriodId?: number;
-  status?: { currentMatchupPeriod?: number };
-};
-
-type EspnTeam = {
-  id: number;
-  abbrev?: string;
-  location?: string;
-  nickname?: string;
-  record?: {
-    overall?: { wins: number; losses: number; ties: number; pointsFor: number; pointsAgainst: number };
-  };
-  owners?: string[];
-};
-
-type EspnMatchup = {
-  id: number;
-  home?: { teamId: number; totalPoints: number };
-  away?: { teamId: number; totalPoints: number };
-};
-
-function buildHeaders(credentials: EspnCredentials): HeadersInit {
-  return {
-    Cookie: `espn_s2=${credentials.espnS2}; SWID=${credentials.swid}`,
-    Accept: 'application/json',
-  };
+function inferMatchupStatus(
+  week: number,
+  currentWeek: number,
+  homeScore?: number,
+  awayScore?: number,
+): CanonicalMatchup['status'] {
+  if (week < currentWeek) return 'final';
+  if (week > currentWeek) return 'scheduled';
+  if ((homeScore ?? 0) > 0 || (awayScore ?? 0) > 0) return 'in_progress';
+  return 'scheduled';
 }
 
-async function espnFetch<T>(
-  leagueId: string,
-  season: number,
-  credentials: EspnCredentials,
-  views: string[] = [],
-): Promise<T> {
-  const viewParam = views.length ? `&view=${views.join('&view=')}` : '';
-  const url = `${ESPN_BASE}/seasons/${season}/segments/0/leagues/${leagueId}?${viewParam.replace(/^&/, '')}`;
-  const res = await fetch(url, { headers: buildHeaders(credentials) });
-  if (!res.ok) {
-    throw new Error(`ESPN API error: ${res.status}`);
-  }
-  return res.json() as Promise<T>;
-}
-
-function mapTeams(teams: EspnTeam[]): CanonicalTeam[] {
-  return teams.map((t) => ({
-    externalTeamId: String(t.id),
-    name: [t.location, t.nickname].filter(Boolean).join(' ') || t.abbrev || `Team ${t.id}`,
-    ownerExternalId: t.owners?.[0],
-    wins: t.record?.overall?.wins ?? 0,
-    losses: t.record?.overall?.losses ?? 0,
-    ties: t.record?.overall?.ties ?? 0,
-    pointsFor: t.record?.overall?.pointsFor ?? 0,
-    pointsAgainst: t.record?.overall?.pointsAgainst ?? 0,
+function mapTeams(
+  teams: ReturnType<typeof enrichEspnTeams>,
+): CanonicalTeam[] {
+  return teams.map((team) => ({
+    externalTeamId: String(team.id),
+    name: espnTeamName(team),
+    ownerName: team.ownerDisplayName,
+    ownerExternalId: team.primaryOwner ?? team.owners?.[0],
+    wins: team.record?.overall?.wins ?? 0,
+    losses: team.record?.overall?.losses ?? 0,
+    ties: team.record?.overall?.ties ?? 0,
+    pointsFor: team.record?.overall?.pointsFor ?? 0,
+    pointsAgainst: team.record?.overall?.pointsAgainst ?? 0,
   }));
 }
 
@@ -74,14 +52,36 @@ function mapStandings(teams: CanonicalTeam[]): CanonicalStanding[] {
       if (b.wins !== a.wins) return b.wins - a.wins;
       return b.pointsFor - a.pointsFor;
     })
-    .map((t, i) => ({
-      rank: i + 1,
-      teamExternalId: t.externalTeamId,
-      wins: t.wins,
-      losses: t.losses,
-      ties: t.ties,
-      pointsFor: t.pointsFor,
-      pointsAgainst: t.pointsAgainst,
+    .map((team, index) => ({
+      rank: index + 1,
+      teamExternalId: team.externalTeamId,
+      wins: team.wins,
+      losses: team.losses,
+      ties: team.ties,
+      pointsFor: team.pointsFor,
+      pointsAgainst: team.pointsAgainst,
+    }));
+}
+
+function mapSchedule(
+  schedule: EspnMatchup[],
+  currentWeek: number,
+): CanonicalMatchup[] {
+  return schedule
+    .filter((matchup) => matchup.home && matchup.away && matchup.matchupPeriodId != null)
+    .map((matchup) => ({
+      week: matchup.matchupPeriodId!,
+      matchupId: String(matchup.id),
+      homeTeamExternalId: String(matchup.home!.teamId),
+      awayTeamExternalId: String(matchup.away!.teamId),
+      homeScore: matchup.home!.totalPoints,
+      awayScore: matchup.away!.totalPoints,
+      status: inferMatchupStatus(
+        matchup.matchupPeriodId!,
+        currentWeek,
+        matchup.home!.totalPoints,
+        matchup.away!.totalPoints,
+      ),
     }));
 }
 
@@ -93,61 +93,39 @@ export const espnAdapter: LeagueAdapter<EspnCredentials> = {
       throw new Error('ESPN league ID required for discovery');
     }
 
-    const data = await espnFetch<{ settings?: EspnSettings }>(
-      credentials.leagueId,
-      season,
-      credentials,
-      ['mSettings'],
-    );
+    const data = await espnFetchLeagueAcrossSeasons(credentials.leagueId, credentials, {
+      views: ['mSettings'],
+      seasons: season ? [season, season - 1, season - 2, season - 3] : undefined,
+    });
 
     return [
       {
         externalId: credentials.leagueId,
         provider: 'espn',
         name: data.settings?.name ?? `ESPN League ${credentials.leagueId}`,
-        season,
+        season: resolveEspnSeason(data.settings, season),
       },
     ];
   },
 
   async fetchLeague(externalLeagueId, credentials) {
-    const season = new Date().getFullYear();
-    const data = await espnFetch<{
-      settings?: EspnSettings;
-      teams?: EspnTeam[];
-      schedule?: EspnMatchup[];
-    }>(externalLeagueId, season, credentials, [
-      'mSettings',
-      'mTeam',
-      'mStandings',
-      'mMatchupScore',
-    ]);
+    const data = await espnFetchLeagueAcrossSeasons(externalLeagueId, credentials, {
+      views: ['mSettings', 'mStandings', 'mMatchupScore', 'mTeam'],
+    });
 
-    const teams = mapTeams(data.teams ?? []);
+    const season = resolveEspnSeason(data.settings);
+    const directory = await espnFetchTeamDirectory(externalLeagueId, credentials, season);
+    const mergedTeams = enrichTeamsWithDirectory(data.teams ?? [], directory);
+    const teams = mapTeams(enrichEspnTeams(mergedTeams, data.members ?? []));
     const standings = mapStandings(teams);
-    const currentWeek =
-      data.settings?.status?.currentMatchupPeriod ??
-      data.settings?.scoringPeriodId ??
-      1;
-
-    const schedule: CanonicalMatchup[] = (data.schedule ?? [])
-      .filter((m) => m.home && m.away)
-      .map((m) => ({
-        week: currentWeek,
-        matchupId: String(m.id),
-        homeTeamExternalId: String(m.home!.teamId),
-        awayTeamExternalId: String(m.away!.teamId),
-        homeScore: m.home!.totalPoints,
-        awayScore: m.away!.totalPoints,
-        status: 'final' as const,
-      }));
+    const schedule = mapSchedule(data.schedule ?? [], resolveEspnCurrentWeek(data.settings));
 
     return {
       externalId: externalLeagueId,
       provider: 'espn',
       name: data.settings?.name ?? `ESPN League ${externalLeagueId}`,
-      season: data.settings?.seasonId ?? season,
-      currentWeek,
+      season,
+      currentWeek: resolveEspnCurrentWeek(data.settings),
       teams,
       standings,
       schedule,
@@ -155,26 +133,31 @@ export const espnAdapter: LeagueAdapter<EspnCredentials> = {
   },
 
   async fetchMatchups(externalLeagueId, week, credentials) {
-    const season = new Date().getFullYear();
-    const data = await espnFetch<{ schedule?: EspnMatchup[] }>(
-      externalLeagueId,
-      season,
-      credentials,
-      ['mMatchupScore'],
-    );
+    const data = await espnFetchLeague(externalLeagueId, credentials, {
+      scoringPeriodId: week,
+      views: ['mMatchupScore', 'mSettings'],
+    });
 
-    return (data.schedule ?? [])
-      .filter((m) => m.home && m.away)
-      .map((m) => ({
-        week,
-        matchupId: String(m.id),
-        homeTeamExternalId: String(m.home!.teamId),
-        awayTeamExternalId: String(m.away!.teamId),
-        homeScore: m.home!.totalPoints,
-        awayScore: m.away!.totalPoints,
-        status: 'final' as const,
-      }));
+    const currentWeek = resolveEspnCurrentWeek(data.settings);
+    return mapSchedule(
+      (data.schedule ?? []).filter((matchup) => matchup.matchupPeriodId === week),
+      currentWeek,
+    );
   },
 };
+
+export async function previewEspnLeague(
+  leagueId: string,
+  credentials: EspnCredentials,
+): Promise<LeagueSummary> {
+  const league = await espnAdapter.fetchLeague(leagueId.trim(), credentials);
+  return {
+    externalId: league.externalId,
+    provider: 'espn',
+    name: league.name,
+    season: league.season,
+    teamCount: league.teams.length,
+  };
+}
 
 export type { EspnCredentials };
