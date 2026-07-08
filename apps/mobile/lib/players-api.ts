@@ -37,7 +37,7 @@ export type ApiPlayerDetail = {
   imageUrl?: string;
 };
 
-export type PlayerTab = 'all' | 'available' | 'injured' | 'watchlist';
+export type PlayerTab = 'all' | 'available' | 'injured' | 'watchlist' | 'pool';
 
 export async function fetchPlayerSearch(
   leagueId: string,
@@ -82,8 +82,8 @@ export function usePlayerSearch(
       fetchPlayerSearch(leagueId!, {
         search: debouncedSearch || undefined,
         position: input.position,
-        tab: debouncedSearch ? undefined : apiTab,
-        limit: debouncedSearch ? 50 : 40,
+        tab: apiTab === 'pool' ? 'pool' : debouncedSearch ? undefined : apiTab,
+        limit: apiTab === 'pool' ? undefined : debouncedSearch ? 100 : 40,
       }),
     enabled: (options?.enabled ?? true) && !!leagueId && input.tab !== 'watchlist',
     staleTime: 60_000,

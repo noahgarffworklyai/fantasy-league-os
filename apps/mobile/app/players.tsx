@@ -1,16 +1,11 @@
 import { useMemo, useState, type ComponentType, type ReactNode } from 'react';
-import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import Svg, { Circle, Line as SvgLine, Text as SvgText } from 'react-native-svg';
+import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, View } from 'react-native';
 import {
   Activity,
   ChevronLeft,
   Flame,
-  Heart,
   HeartPulse,
-  Laugh,
   type LucideIcon,
-  MessageCircle,
-  MoreHorizontal,
   Newspaper,
   Plus,
   Search,
@@ -18,13 +13,16 @@ import {
   SlidersHorizontal,
   Sparkles,
   Star,
-  ThumbsUp,
   TrendingDown,
   TrendingUp,
   X,
 } from 'lucide-react-native';
-import { SearchInput } from '@/components/ui/Input';
+import { PlayerHealthPanel } from '@/components/player/PlayerHealthPanel';
+import { PlayerOverviewPanel, type PlayerProfileContext } from '@/components/player/PlayerOverviewPanel';
+import { PlayerPerformancePanel } from '@/components/player/PlayerPerformancePanel';
+import { PlayerProfileTabs, type PlayerProfileTab } from '@/components/player/PlayerProfileTabs';
 import { AvatarImage } from '@/components/ui/AvatarImage';
+import { SearchInput } from '@/components/ui/Input';
 import { Pressable, Text } from '@/components/ui/primitives';
 import { Screen } from '@/components/ui/Screen';
 import { Segmented } from '@/components/ui/Segmented';
@@ -42,6 +40,8 @@ import {
 import { useAddPlayerToRoster } from '@/lib/team-roster-api';
 import { playerAvatar } from '@/lib/avatars';
 import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
+import { spacing } from '@/lib/tokens';
+import { usePlayerSleeperStats } from '@/lib/use-player-sleeper-stats';
 
 /* ------------------------------ TYPES + DATA ------------------------------ */
 type Pos = 'QB' | 'RB' | 'WR' | 'TE' | 'K' | 'DEF';
@@ -71,30 +71,6 @@ interface Player {
 interface DoctorAlert { playerId: string; status: string; detail: string; prob: number }
 
 interface NewsItem { id: string; playerId: string; headline: string; source: string; when: string; tag: 'injury' | 'role' | 'depth' | 'coach' | 'trade' }
-
-interface Post { id: string; user: string; when: string; body: string; reactions: { likes: number; cheers: number; laughs: number }; comments: number; pinned?: boolean }
-const POSTS_BY_PLAYER: Record<string, Post[]> = {
-  p1: [
-    { id: 'c0', user: 'Mod', when: 'pinned', body: 'Use this thread for all CMC week 10 questions. Be kind, no leaks.', reactions: { likes: 12, cheers: 0, laughs: 0 }, comments: 0, pinned: true },
-    { id: 'c1', user: 'fadethechalk', when: '1h', body: 'Full practice Thursday is the green light I needed. Starting with confidence.', reactions: { likes: 24, cheers: 6, laughs: 0 }, comments: 8 },
-    { id: 'c2', user: 'ballerbets', when: '3h', body: 'Mason is the cleanest handcuff in football right now. If you have CMC, you should have him.', reactions: { likes: 41, cheers: 12, laughs: 1 }, comments: 14 },
-    { id: 'c3', user: 'ppr_lord', when: '5h', body: 'Calling it now: 14 carries, 5 catches, 1 TD. Vintage CMC week.', reactions: { likes: 6, cheers: 1, laughs: 3 }, comments: 2 },
-  ],
-};
-const DEFAULT_POSTS: Post[] = [
-  { id: 'd1', user: 'ridethewave', when: '2h', body: 'Quietly the best buy-low candidate in the league right now. Schedule opens up after the bye.', reactions: { likes: 11, cheers: 2, laughs: 0 }, comments: 3 },
-  { id: 'd2', user: 'fantasydoc', when: '1d', body: 'Snap share trending up four straight weeks. Role is real.', reactions: { likes: 7, cheers: 0, laughs: 0 }, comments: 1 },
-];
-
-const GAME_LOG = [
-  { wk: 1, opp: 'vs NYJ', pts: 18.4, tch: 22, tgt: 4, yds: 112 },
-  { wk: 2, opp: '@ MIN', pts: 12.1, tch: 18, tgt: 2, yds: 78 },
-  { wk: 3, opp: 'vs LAR', pts: 24.6, tch: 24, tgt: 6, yds: 154 },
-  { wk: 4, opp: '@ ARI', pts: 16.2, tch: 20, tgt: 3, yds: 96 },
-  { wk: 5, opp: 'vs SEA', pts: 29.1, tch: 26, tgt: 7, yds: 188 },
-  { wk: 6, opp: '@ KC', pts: 14.8, tch: 16, tgt: 5, yds: 84 },
-  { wk: 7, opp: 'vs DAL', pts: 21.3, tch: 21, tgt: 4, yds: 132 },
-];
 
 const FILTERS = ['All', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 
@@ -312,8 +288,8 @@ function PlayersHome({
         <Text variant="subtitle" style={{ marginTop: 8 }}>Trending, injuries, and waiver targets across the league.</Text>
       </View>
 
-      <View>
-        <View style={[layout.row, { gap: 8 }]}>
+      <View style={layout.tight}>
+        <View style={[layout.row, layout.tight]}>
           <View style={layout.searchBar}>
             <Search size={16} color={c.mutedForeground} />
             <SearchInput value={q} onChangeText={setQ} placeholder="Search players" />
@@ -340,7 +316,7 @@ function PlayersHome({
         </View>
 
         {filterOpen ? (
-          <View style={[surfaces.roundedCard, { marginTop: 8, padding: 12 }]}>
+          <View style={[surfaces.roundedCard, { marginTop: spacing.tight, padding: 12 }]}>
             <Text variant="eyebrow" style={{ paddingHorizontal: 4, paddingBottom: 8 }}>Position</Text>
             <View style={[layout.rowWrap, { gap: 6 }]}>
               {FILTERS.map((f) => (
@@ -527,7 +503,26 @@ function PlayersHome({
 }
 
 /* ------------------------------ PLAYER DETAIL ------------------------------ */
-type Tab = 'overview' | 'performance' | 'health' | 'community';
+type Tab = PlayerProfileTab;
+
+function toProfileContext(player: Player): PlayerProfileContext {
+  return {
+    id: player.id,
+    name: player.name,
+    pos: player.pos,
+    team: player.team,
+    imageUrl: player.imageUrl,
+    opp: player.opp,
+    ownership: player.ownership > 0 ? `${player.ownership}%` : undefined,
+    proj: player.proj,
+    status:
+      player.health === 'questionable' || player.health === 'doubtful'
+        ? 'q'
+        : player.health === 'out' || player.health === 'ir'
+          ? 'o'
+          : 'ok',
+  };
+}
 
 function PlayerDetail({
   player: p,
@@ -555,9 +550,19 @@ function PlayerDetail({
   const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   const c = useColors();
   const [tab, setTab] = useState<Tab>('overview');
+  const profile = toProfileContext(p);
+  const { data: sleeperStats } = usePlayerSleeperStats(p.id, {
+    name: p.name,
+    pos: p.pos,
+    team: p.team,
+    opp: p.opp,
+    status: profile.status,
+    fallbackProj: p.proj,
+  });
+  const displayProj = sleeperStats?.weekProj ?? p.proj;
 
   return (
-    <View style={[layout.screen, { gap: 20, paddingTop: 0 }]}>
+    <View style={[layout.screen, { paddingTop: 0 }]}>
       <View style={[layout.rowBetween, { paddingHorizontal: 4, paddingTop: 8 }]}>
         <Pressable onPress={onBack} style={[layout.row, { gap: 4, borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 6 }]}>
           <ChevronLeft size={16} color={c.mutedForeground} />
@@ -585,7 +590,7 @@ function PlayerDetail({
             </View>
           </View>
           <View style={layout.alignEnd}>
-            <Text variant="scoreLG" style={{ fontSize: 26, fontVariant: ['tabular-nums'] }}>{formatProj(p.proj)}</Text>
+            <Text variant="scoreLG" style={{ fontSize: 26, fontVariant: ['tabular-nums'] }}>{formatProj(displayProj)}</Text>
             <Text variant="eyebrow">proj</Text>
             <View style={{ marginTop: 4 }}><TrendPill trend={p.trend} small /></View>
           </View>
@@ -610,21 +615,11 @@ function PlayerDetail({
         </View>
       </View>
 
-      <Segmented
-        value={tab}
-        onChange={setTab}
-        tabs={[
-          { key: 'overview', label: 'Overview' },
-          { key: 'performance', label: 'Performance' },
-          { key: 'health', label: 'Health' },
-          { key: 'community', label: 'Community' },
-        ]}
-      />
+      <PlayerProfileTabs value={tab} onChange={setTab} />
 
-      {tab === 'overview' ? <OverviewTab player={p} /> : null}
-      {tab === 'performance' ? <PerformanceTab /> : null}
-      {tab === 'health' ? <HealthTab player={p} /> : null}
-      {tab === 'community' ? <CommunityTab player={p} /> : null}
+      {tab === 'overview' ? <PlayerOverviewPanel player={profile} /> : null}
+      {tab === 'performance' ? <PlayerPerformancePanel player={profile} /> : null}
+      {tab === 'health' ? <PlayerHealthPanel player={profile} /> : null}
 
       <Section title="Related players">
         {related.length === 0 ? (
@@ -645,327 +640,6 @@ function PlayerDetail({
         </ScrollView>
         )}
       </Section>
-    </View>
-  );
-}
-
-/* ------------------------------ TABS ------------------------------ */
-function OverviewTab({ player: p }: { player: Player }) {
-  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
-  const startSit = p.proj >= 14 ? 'Start' : p.proj >= 10 ? 'Flex' : 'Sit';
-  const toneKey = startSit === 'Start' ? 'success' : startSit === 'Sit' ? 'danger' : 'neutral';
-  return (
-    <>
-      <Section title="Matchup">
-        <View style={[surfaces.roundedCard, { padding: 16 }]}>
-          <View style={layout.rowBetween}>
-            <View>
-              <Text variant="eyebrow">Week 10</Text>
-              <Text variant="titleMd">{p.team} {p.opp}</Text>
-              <Text variant="bodyMuted" style={{ marginTop: 2 }}>Strength of schedule · Favorable</Text>
-            </View>
-            <View style={layout.alignEnd}>
-              <Text variant="scoreLG" style={{ fontSize: 22, fontVariant: ['tabular-nums'] }}>{formatProj(p.proj)}</Text>
-              <Text variant="eyebrow">proj pts</Text>
-            </View>
-          </View>
-          <View style={[layout.row, { marginTop: 12, gap: 8 }]}>
-            <View style={[surfaces.pill, { paddingHorizontal: 12, paddingVertical: 4, backgroundColor: toneBg[toneKey] }]}>
-              <Text variant="caption" style={{ color: toneFg[toneKey] }}>{startSit}</Text>
-            </View>
-            <Text variant="bodyMuted">Recommendation</Text>
-          </View>
-        </View>
-      </Section>
-
-      <Section title="Usage">
-        <View style={[layout.rowWrap, { gap: 8 }]}>
-          <StatBlock label="Snap %" value="78%" />
-          <StatBlock label="Target share" value="24%" />
-          <StatBlock label="Red zone" value="6 touches" />
-          <StatBlock label="Role" value="Workhorse" />
-        </View>
-      </Section>
-
-      <Section title="Fantasy outlook">
-        <View style={[surfaces.roundedCard, { padding: 16 }]}>
-          <Text variant="bodySm" style={{ lineHeight: 20 }}>
-            High-floor producer with consistent volume regardless of game script. Schedule turns favorable through the playoff stretch — hold and start with confidence in most weeks.
-          </Text>
-        </View>
-      </Section>
-    </>
-  );
-}
-
-function PerformanceTab() {
-  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
-  const c = useColors();
-  const avg = GAME_LOG.reduce((s, g) => s + g.pts, 0) / GAME_LOG.length;
-  const n = GAME_LOG.length;
-  const sumX = GAME_LOG.reduce((s, g) => s + g.wk, 0);
-  const sumY = GAME_LOG.reduce((s, g) => s + g.pts, 0);
-  const sumXY = GAME_LOG.reduce((s, g) => s + g.wk * g.pts, 0);
-  const sumXX = GAME_LOG.reduce((s, g) => s + g.wk * g.wk, 0);
-  const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
-  const W = 320, H = 160, padL = 28, padR = 12, padT = 12, padB = 22;
-  const innerW = W - padL - padR;
-  const innerH = H - padT - padB;
-  const xs = GAME_LOG.map((g) => g.wk);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const yMax = Math.ceil(Math.max(...GAME_LOG.map((g) => g.pts), avg) / 5) * 5;
-  const xFor = (wk: number) => padL + ((wk - minX) / Math.max(1, maxX - minX)) * innerW;
-  const yFor = (pts: number) => padT + innerH - (pts / yMax) * innerH;
-  const trendDir = slope >= 0 ? 'up' : 'down';
-  const yTicks = [0, yMax / 2, yMax];
-
-  return (
-    <>
-      <Section title="Weekly trend">
-        <View style={[surfaces.roundedCard, { padding: 16 }]}>
-          <View style={[layout.rowBetween, { marginBottom: 12 }]}>
-            <View>
-              <Text variant="eyebrow">Points per week</Text>
-              <Text variant="bodySm" style={{ marginTop: 2 }}>
-                Trend <Text variant="bodySm" style={{ color: trendDir === 'up' ? hex.success : hex.danger }}>{trendDir === 'up' ? '▲' : '▼'} {Math.abs(slope).toFixed(2)} pts/wk</Text>
-              </Text>
-            </View>
-            <View style={layout.alignEnd}>
-              <Text variant="titleLg" style={{ fontVariant: ['tabular-nums'] }}>{avg.toFixed(1)}</Text>
-              <Text variant="eyebrow" style={{ fontSize: 10 }}>season avg</Text>
-            </View>
-          </View>
-          <Svg viewBox={`0 0 ${W} ${H}`} width="100%" height={176}>
-            {yTicks.map((t) => (
-              <SvgLine key={t} x1={padL} x2={W - padR} y1={yFor(t)} y2={yFor(t)} stroke={c.foreground} strokeOpacity={0.08} />
-            ))}
-            <SvgLine x1={padL} x2={W - padR} y1={yFor(avg)} y2={yFor(avg)} stroke={c.foreground} strokeOpacity={0.25} strokeDasharray="3 3" />
-            {GAME_LOG.slice(1).map((g, i) => {
-              const prev = GAME_LOG[i];
-              const up = g.pts >= prev.pts;
-              return <SvgLine key={`seg-${g.wk}`} x1={xFor(prev.wk)} y1={yFor(prev.pts)} x2={xFor(g.wk)} y2={yFor(g.pts)} stroke={up ? c.success : c.destructive} strokeWidth={2} strokeLinecap="round" />;
-            })}
-            {GAME_LOG.map((g, i) => {
-              const prev = i > 0 ? GAME_LOG[i - 1] : null;
-              const fill = prev == null ? c.foreground : g.pts >= prev.pts ? c.success : c.destructive;
-              return <Circle key={g.wk} cx={xFor(g.wk)} cy={yFor(g.pts)} r={4.5} fill={fill} />;
-            })}
-            {GAME_LOG.map((g) => (
-              <SvgText key={`l-${g.wk}`} x={xFor(g.wk)} y={H - 6} textAnchor="middle" fill={c.mutedForeground} fontSize={9}>W{g.wk}</SvgText>
-            ))}
-          </Svg>
-          <View style={[layout.row, { marginTop: 8, gap: 16 }]}>
-            <View style={[layout.row, { gap: 6 }]}>
-              <View style={{ height: 2, width: 16, backgroundColor: hex.success }} />
-              <Text variant="caption" muted>Progression</Text>
-            </View>
-            <View style={[layout.row, { gap: 6 }]}>
-              <View style={{ height: 2, width: 16, backgroundColor: hex.danger }} />
-              <Text variant="caption" muted>Regression</Text>
-            </View>
-          </View>
-        </View>
-      </Section>
-
-      <Section title="Game log">
-        <View style={surfaces.roundedCard}>
-          <View style={[layout.row, { paddingHorizontal: 16, paddingTop: 12 }]}>
-            <Text variant="eyebrow" style={{ width: 36, fontSize: 10 }}>Wk</Text>
-            <Text variant="eyebrow" style={{ width: 56, fontSize: 10 }}>Opp</Text>
-            <Text variant="eyebrow" style={[layout.flex1, { fontSize: 10 }]} />
-            <Text variant="eyebrow" style={{ width: 40, textAlign: 'right', fontSize: 10 }}>Tch</Text>
-            <Text variant="eyebrow" style={{ width: 40, textAlign: 'right', fontSize: 10 }}>Tgt</Text>
-            <Text variant="eyebrow" style={{ width: 48, textAlign: 'right', fontSize: 10 }}>Pts</Text>
-          </View>
-          <View style={{ marginTop: 4 }}>
-            {GAME_LOG.map((g, i) => (
-              <View key={g.wk} style={[layout.row, { paddingHorizontal: 16, paddingVertical: 10 }, i > 0 && layout.listRowBorder]}>
-                <Text variant="bodyMuted" style={{ width: 36, fontVariant: ['tabular-nums'] }}>{g.wk}</Text>
-                <Text variant="bodyMuted" style={{ width: 56, fontVariant: ['tabular-nums'] }}>{g.opp}</Text>
-                <Text variant="bodyMuted" style={layout.flex1}>{g.yds} yds</Text>
-                <Text variant="bodyMuted" style={{ width: 40, textAlign: 'right', fontVariant: ['tabular-nums'] }}>{g.tch}</Text>
-                <Text variant="bodyMuted" style={{ width: 40, textAlign: 'right', fontVariant: ['tabular-nums'] }}>{g.tgt}</Text>
-                <Text variant="bodySm" style={{ width: 48, textAlign: 'right', fontVariant: ['tabular-nums'] }}>{g.pts.toFixed(1)}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      </Section>
-    </>
-  );
-}
-
-function HealthTab({ player: p }: { player: Player }) {
-  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
-  const isInjured = p.health && p.health !== 'healthy';
-  return (
-    <>
-      <Section title="Fantasy doctor">
-        <View style={[surfaces.roundedCard, { padding: 16 }]}>
-          <View style={layout.rowBetween}>
-            <HealthBadge health={p.health} large />
-            <View style={layout.alignEnd}>
-              <Text variant="scoreLG" style={{ fontSize: 24, fontVariant: ['tabular-nums'] }}>{isInjured ? '72%' : '97%'}</Text>
-              <Text variant="eyebrow">to play</Text>
-            </View>
-          </View>
-          <View style={[layout.rowWrap, { marginTop: 12, gap: 8 }]}>
-            <StatBlock label="Body part" value={isInjured ? 'Calf' : '—'} />
-            <StatBlock label="Severity" value={isInjured ? 'Mild' : 'None'} />
-            <StatBlock label="Practice" value={isInjured ? 'Limited (Th)' : 'Full'} />
-            <StatBlock label="Reinjury risk" value={isInjured ? 'Moderate' : 'Low'} />
-          </View>
-        </View>
-      </Section>
-
-      <Section title="AI summary">
-        <View style={[surfaces.roundedCard, { padding: 16 }]}>
-          <Text variant="bodySm" style={{ lineHeight: 20 }}>
-            {isInjured
-              ? `${p.name} is trending toward playing this week but may have a reduced workload. The backup remains a valuable insurance option for managers worried about a late scratch.`
-              : `${p.name} is fully healthy with no practice limitations entering this week. Workload expected to remain at season norms.`}
-          </Text>
-        </View>
-      </Section>
-
-      <Section title="Recovery timeline">
-        <View style={surfaces.roundedCard}>
-          {[
-            { t: 'Today', what: 'Limited practice — expected to play' },
-            { t: 'Last week', what: 'Aggravated calf in 2nd quarter' },
-            { t: 'Comparable', what: 'Similar injuries return in 1 week (74% of cases)' },
-          ].map((row, i) => (
-            <View key={i} style={[layout.rowStart, { paddingHorizontal: 16, paddingVertical: 12 }, i > 0 && layout.listRowBorder]}>
-              <Text variant="eyebrow" style={{ width: 80, flexShrink: 0 }}>{row.t}</Text>
-              <Text variant="bodyMuted" style={[layout.flex1, { fontSize: 13 }]}>{row.what}</Text>
-            </View>
-          ))}
-        </View>
-      </Section>
-
-      <Section title="Backup beneficiary">
-        <View style={[surfaces.roundedCard, { padding: 16 }]}>
-          <Text variant="bodyMuted" style={{ fontSize: 13 }}>
-            <Text variant="bodySm">Jordan Mason</Text> projects to absorb 60% of touches if {p.name.split(' ')[1]} is limited. Strong handcuff value.
-          </Text>
-        </View>
-      </Section>
-    </>
-  );
-}
-
-function CommunityTab({ player: p }: { player: Player }) {
-  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
-  const c = useColors();
-  const [sort, setSort] = useState<'trending' | 'newest' | 'helpful'>('trending');
-  const [draft, setDraft] = useState('');
-  const [extra, setExtra] = useState<Post[]>([]);
-
-  const posts = useMemo(() => {
-    const base = [...(POSTS_BY_PLAYER[p.id] ?? DEFAULT_POSTS), ...extra];
-    return base.sort((a, b) => {
-      if (a.pinned && !b.pinned) return -1;
-      if (b.pinned && !a.pinned) return 1;
-      if (sort === 'trending') return b.reactions.likes - a.reactions.likes;
-      if (sort === 'helpful') return b.comments - a.comments;
-      return 0;
-    });
-  }, [p.id, sort, extra]);
-
-  const submit = () => {
-    if (!draft.trim()) return;
-    setExtra((prev) => [{ id: `me-${Date.now()}`, user: 'you', when: 'now', body: draft.trim(), reactions: { likes: 0, cheers: 0, laughs: 0 }, comments: 0 }, ...prev]);
-    setDraft('');
-  };
-
-  return (
-    <>
-      <Section title="Community">
-        <View style={{ gap: 8 }}>
-          <View style={[surfaces.roundedCard, { padding: 12 }]}>
-            <TextInput
-              value={draft}
-              onChangeText={setDraft}
-              placeholder={`Share your take on ${p.name}…`}
-              placeholderTextColor={c.mutedForeground}
-              multiline
-              style={[typeStyles.bodySm, { minHeight: 60, padding: 0, color: hex.foreground }]}
-            />
-            <View style={layout.rowBetween}>
-              <Text variant="caption" muted>Public · visible to all Commissioner users</Text>
-              <Pressable
-                onPress={submit}
-                disabled={!draft.trim()}
-                style={[surfaces.pill, { paddingHorizontal: 16, paddingVertical: 6, backgroundColor: hex.foreground, opacity: !draft.trim() ? 0.4 : 1 }]}
-              >
-                <Text variant="button" style={{ color: hex.background }}>Post</Text>
-              </Pressable>
-            </View>
-          </View>
-
-          <Segmented
-            value={sort}
-            onChange={setSort}
-            tabs={[
-              { key: 'trending', label: 'Trending' },
-              { key: 'newest', label: 'Newest' },
-              { key: 'helpful', label: 'Helpful' },
-            ]}
-          />
-
-          {posts.length === 0 ? (
-            <EmptyState icon={MessageCircle} title="No posts yet" body="Be the first to share your take on this player." />
-          ) : (
-            posts.map((post) => <PostCard key={post.id} post={post} />)
-          )}
-        </View>
-      </Section>
-
-      <Section title="Guidelines">
-        <View style={[surfaces.roundedCard, { padding: 16 }]}>
-          <Text variant="bodyMuted" style={{ lineHeight: 18 }}>Be respectful. No spam, no leaks, no harassment. Report or mute users from any post menu.</Text>
-        </View>
-      </Section>
-    </>
-  );
-}
-
-function PostCard({ post }: { post: Post }) {
-  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
-  const { scheme } = useTheme();
-  const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
-  const c = useColors();
-  return (
-    <View style={[surfaces.roundedCard, { padding: 16 }, post.pinned && { borderWidth: StyleSheet.hairlineWidth, borderColor: `rgba(${ink},0.1)` }]}>
-      <View style={layout.rowBetween}>
-        <View style={[layout.row, { gap: 8 }]}>
-          <View style={[surfaces.iconBoxSm, { borderRadius: 9999, backgroundColor: toneBg.neutral }]}>
-            <Text variant="pill" style={{ fontSize: 10 }}>{post.user[0]?.toUpperCase()}</Text>
-          </View>
-          <Text variant="eyebrow">{post.user}</Text>
-          <Text variant="caption" muted>·</Text>
-          <Text variant="eyebrow">{post.when}</Text>
-          {post.pinned ? (
-            <View style={[surfaces.pillMuted, { paddingHorizontal: 8, paddingVertical: 2 }]}>
-              <Text variant="pill" muted>Pinned</Text>
-            </View>
-          ) : null}
-        </View>
-        <Pressable style={{ borderRadius: 9999, padding: 6 }}>
-          <MoreHorizontal size={16} color={c.mutedForeground} />
-        </Pressable>
-      </View>
-      <Text variant="bodySm" style={{ marginTop: 8, lineHeight: 20 }}>{post.body}</Text>
-      <View style={[layout.row, { marginTop: 8, gap: 4 }]}>
-        <ReactBtn icon={ThumbsUp} count={post.reactions.likes} />
-        <ReactBtn icon={Heart} count={post.reactions.cheers} />
-        <ReactBtn icon={Laugh} count={post.reactions.laughs} />
-        <Pressable style={[layout.row, { marginLeft: 'auto', gap: 6, borderRadius: 9999, paddingHorizontal: 12, paddingVertical: 6 }]}>
-          <MessageCircle size={14} color={c.mutedForeground} />
-          <Text variant="caption">{post.comments}</Text>
-        </Pressable>
-      </View>
     </View>
   );
 }
@@ -1025,16 +699,6 @@ function TrendPill({ trend, small }: { trend: number; small?: boolean }) {
       <Text variant="caption" style={{ fontWeight: '600', fontVariant: ['tabular-nums'], color: up ? hex.success : hex.danger, fontSize: small ? 11 : 12 }}>
         {Math.abs(trend).toFixed(1)}
       </Text>
-    </View>
-  );
-}
-
-function StatBlock({ label, value }: { label: string; value: string }) {
-  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
-  return (
-    <View style={{ width: '48%', borderRadius: 18, backgroundColor: hex.background, paddingHorizontal: 12, paddingVertical: 10 }}>
-      <Text variant="eyebrow" style={{ fontSize: 10 }}>{label}</Text>
-      <Text variant="bodySm" style={{ marginTop: 2 }}>{value}</Text>
     </View>
   );
 }
@@ -1165,19 +829,7 @@ function EmptyState({ icon: Icon, title, body }: { icon: ComponentType<{ size?: 
   );
 }
 
-function ReactBtn({ icon: Icon, count }: { icon: LucideIcon; count: number }) {
-  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
-  const c = useColors();
-  return (
-    <Pressable style={[layout.row, { gap: 6, borderRadius: 9999, paddingHorizontal: 12, paddingVertical: 6 }]}>
-      <Icon size={14} color={c.mutedForeground} />
-      {count > 0 ? <Text variant="caption" style={{ fontVariant: ['tabular-nums'] }}>{count}</Text> : null}
-    </Pressable>
-  );
-}
-
 function aiSummary(p: Player): string {
-  const { hex, layout, surfaces, toneBg, toneFg, type: typeStyles } = useThemeTokens();
   if (p.health && p.health !== 'healthy') return `${p.name} is trending toward playing this week but may have a reduced workload. The backup remains a valuable insurance option.`;
   if (p.trend > 3) return `${p.name} is one of the hottest players in fantasy right now. Role and opportunity are both expanding heading into a favorable matchup.`;
   if (p.trend < -2) return `${p.name}'s usage has dipped over the last three weeks. Monitor practice reports and the depth chart before locking in lineups.`;

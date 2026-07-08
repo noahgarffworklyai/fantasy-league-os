@@ -187,18 +187,93 @@ export function teamCoaching(league: League): Recommendation[] {
 }
 
 // -------------------- Trade Assistant --------------------
+export type TradeIdeaPlayer = {
+  id: string;
+  name: string;
+  pos: string;
+  team: string;
+  posRankLabel: string;
+  tradeValue: number;
+};
+
 export interface TradeIdea {
   id: string;
-  target: string;
-  offer: string;
+  title: string;
+  type: 'Fill need' | 'Add depth' | 'Consolidate' | 'Buy low';
+  mateIndex: number;
+  give: TradeIdeaPlayer[];
+  receive: TradeIdeaPlayer[];
+  headline: string;
   likelihood: number;
-  reason: string;
-  type: 'Upgrade WR' | 'Backup RB' | 'Sell High' | 'Buy Low';
+  tone?: 'default' | 'success' | 'warning';
 }
+
 export const tradeIdeas: TradeIdea[] = [
-  { id: 'ti1', target: 'DK Metcalf', offer: 'C. Olave + 2025 3rd', likelihood: 64, reason: 'Their owner is thin at WR and chasing playoff points.', type: 'Upgrade WR' },
-  { id: 'ti2', target: 'Tank Bigsby', offer: 'R. Odunze', likelihood: 71, reason: 'Buy low after two quiet weeks; usage is climbing.', type: 'Buy Low' },
-  { id: 'ti3', target: 'Pick + RB depth', offer: 'T. Kelce', likelihood: 48, reason: 'Sell high while Kelce is on a 3-game touchdown streak.', type: 'Sell High' },
+  {
+    id: 'ti1',
+    title: 'Straight-up WR swap',
+    type: 'Fill need',
+    mateIndex: 0,
+    give: [
+      { id: '8144', name: 'Chris Olave', pos: 'WR', team: 'NO', posRankLabel: 'WR —', tradeValue: 0 },
+    ],
+    receive: [
+      { id: '5846', name: 'DK Metcalf', pos: 'WR', team: 'PIT', posRankLabel: 'WR —', tradeValue: 0 },
+    ],
+    headline: 'Even 1-for-1 value — Metcalf gives you a steadier weekly floor at your thinnest spot.',
+    likelihood: 58,
+    tone: 'success',
+  },
+  {
+    id: 'ti2',
+    title: 'Package for a WR1',
+    type: 'Fill need',
+    mateIndex: 1,
+    give: [
+      { id: '8144', name: 'Chris Olave', pos: 'WR', team: 'NO', posRankLabel: 'WR —', tradeValue: 0 },
+      { id: '11620', name: 'Rome Odunze', pos: 'WR', team: 'CHI', posRankLabel: 'WR —', tradeValue: 0 },
+    ],
+    receive: [
+      { id: '6794', name: 'Justin Jefferson', pos: 'WR', team: 'MIN', posRankLabel: 'WR —', tradeValue: 0 },
+    ],
+    headline: 'Turn two WR2/WR3 pieces into a true alpha — Jenna is rebuilding and wants youth.',
+    likelihood: 64,
+    tone: 'success',
+  },
+  {
+    id: 'ti3',
+    title: 'Consolidate for a stud',
+    type: 'Consolidate',
+    mateIndex: 2,
+    give: [
+      { id: '8183', name: 'Brock Purdy', pos: 'QB', team: 'SF', posRankLabel: 'QB —', tradeValue: 0 },
+      { id: '8144', name: 'Chris Olave', pos: 'WR', team: 'NO', posRankLabel: 'WR —', tradeValue: 0 },
+      { id: '11620', name: 'Rome Odunze', pos: 'WR', team: 'CHI', posRankLabel: 'WR —', tradeValue: 0 },
+    ],
+    receive: [
+      { id: '9509', name: 'Bijan Robinson', pos: 'RB', team: 'ATL', posRankLabel: 'RB —', tradeValue: 0 },
+    ],
+    headline: 'Three-for-one to land an elite RB1 — Devon is QB-heavy and open to a blockbuster.',
+    likelihood: 47,
+    tone: 'default',
+  },
+  {
+    id: 'ti4',
+    title: 'Trade for depth',
+    type: 'Add depth',
+    mateIndex: 3,
+    give: [
+      { id: '1466', name: 'Travis Kelce', pos: 'TE', team: 'KC', posRankLabel: 'TE —', tradeValue: 0 },
+    ],
+    receive: [
+      { id: '8228', name: 'Jaylen Warren', pos: 'RB', team: 'PIT', posRankLabel: 'RB —', tradeValue: 0 },
+      { id: '5133', name: 'Tyler Conklin', pos: 'TE', team: 'DET', posRankLabel: 'TE —', tradeValue: 0 },
+      { id: '8134', name: 'Khalil Shakir', pos: 'WR', team: 'BUF', posRankLabel: 'WR —', tradeValue: 0 },
+    ],
+    headline: 'Sell Kelce high for three usable starters — covers RB, TE, and WR depth through the bye stretch.',
+    likelihood: 51,
+    tone: 'warning',
+  },
 ];
 
 export function evaluateTrade(input: { give: string[]; receive: string[] }): {

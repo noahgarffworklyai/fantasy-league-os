@@ -17,16 +17,8 @@ export default function TradesPage() {
   return (
     <Screen>
       <View style={layout.screen}>
-        <PageIntro
-          eyebrow="League"
-          title="Trades"
-          subtitle={
-            isSynced
-              ? `Propose and evaluate trades · synced from ${active.platform}`
-              : 'Propose trades, chat with managers, and run the trade machine'
-          }
-        />
-        <TradePane synced={isSynced} platform={active.platform} onPlayer={setPlayer} />
+        <PageIntro title="Trades" />
+        <TradePane synced={isSynced} platform={active.platform} leagueId={active.id} onPlayer={setPlayer} />
       </View>
       <PlayerSheet
         player={player}

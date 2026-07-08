@@ -152,7 +152,7 @@ function LeagueHome({
           </Text>
         </View>
       ) : isError ? (
-        <View style={{ gap: 12, paddingVertical: 24 }}>
+        <View style={[layout.section, { paddingVertical: 24 }]}>
           <Text variant="bodyMuted">Could not load league data.</Text>
           <Pressable onPress={onRetry} style={surfaces.primaryButton}>
             <Text variant="button" style={{ color: hex.primaryForeground }}>Retry</Text>
@@ -308,7 +308,7 @@ function LivePane({ matchups, onOpenMatchup }: { matchups: Matchup[]; onOpenMatc
   }
 
   return (
-    <View style={{ gap: 12 }}>
+    <View style={layout.section}>
       <View style={[layout.rowBetween, { paddingHorizontal: 4 }]}>
         <Text variant="eyebrow">Matchup {active + 1} of {matchups.length}</Text>
         <Text variant="caption">Swipe →</Text>
@@ -452,7 +452,7 @@ function AnalyticsPane({ active, teams, week }: { active: League; teams: TeamRow
   const weeks = Array.from({ length: Math.min(week, 8) }, (_, i) => i + 1);
 
   return (
-    <View style={{ gap: 24 }}>
+    <View style={layout.screenStack}>
       <Section title="Team comparison">
         <MetricScatter teams={teams} />
       </Section>

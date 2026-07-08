@@ -35,9 +35,15 @@ import {
 import { Pressable, Text } from '@/components/ui/primitives';
 import { Card, Divider } from '@/components/ui/Card';
 import { Segmented } from '@/components/ui/Segmented';
+import { PlayerHealthPanel } from '@/components/player/PlayerHealthPanel';
+import { PlayerOverviewPanel, type PlayerProfileContext } from '@/components/player/PlayerOverviewPanel';
+import { PlayerPerformancePanel } from '@/components/player/PlayerPerformancePanel';
+import { PlayerProfileTabs, type PlayerProfileTab } from '@/components/player/PlayerProfileTabs';
 import { useLeague, type League } from '@/lib/league-context';
 import { useNav } from '@/lib/nav';
 import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
+import { spacing } from '@/lib/tokens';
+import { usePlayerSleeperStats } from '@/lib/use-player-sleeper-stats';
 
 type DraftView =
   | { kind: 'home' }
@@ -1278,13 +1284,34 @@ function ChatPanel({ chat, setChat }: { chat: ChatMsg[]; setChat: React.Dispatch
 }
 
 /* ============= Player Sheet ============= */
+function draftProfileContext(player: Player): PlayerProfileContext {
+  return {
+    id: player.id,
+    name: player.name,
+    pos: player.pos,
+    team: player.team,
+    proj: player.proj,
+    status: player.health === 'questionable' || player.health === 'doubtful' ? 'q' : 'ok',
+  };
+}
+
 function PlayerSheet({ player, inQueue, onClose, onQueue, onDraft }: { player: Player | null; inQueue: boolean; onClose: () => void; onQueue: () => void; onDraft: () => void }) {
   const s = useDraftStyles();
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const insets = useSafeAreaInsets();
-  if (!player) return null;
-  const outlook = player.bestAvail > 90 ? 'Top of the board. Elite production and high floor.' : player.health !== 'healthy' ? 'Watch the injury report — value is real if cleared.' : 'Solid pick at this slot with strong upside.';
+  const [tab, setTab] = useState<PlayerProfileTab>('overview');
+  const profile = player ? draftProfileContext(player) : null;
+  const { data: sleeperStats } = usePlayerSleeperStats(player?.id, player ? {
+    name: player.name,
+    pos: player.pos,
+    team: player.team,
+    status: profile?.status,
+    fallbackProj: player.proj,
+  } : undefined);
+  if (!player || !profile) return null;
+
+  const displayProj = sleeperStats?.weekProj ?? player.proj;
   const rec = player.fit > 85 ? 'This player provides the best long-term value while filling your weakest position.' : 'Reasonable value pick — consider need over upside here.';
 
   return (
@@ -1309,7 +1336,7 @@ function PlayerSheet({ player, inQueue, onClose, onQueue, onDraft }: { player: P
                   {player.name}
                 </Text>
                 <Text variant="bodyMuted">
-                  {player.team} · Proj {player.proj} · Bye {player.bye}
+                  {player.team} · Proj {displayProj.toFixed(1)} · Bye {player.bye}
                 </Text>
               </View>
               <Pressable onPress={onClose} style={s.iconBtn}>
@@ -1342,11 +1369,15 @@ function PlayerSheet({ player, inQueue, onClose, onQueue, onDraft }: { player: P
               <ScoreCell label="SOS" value={player.sos === 'Easy' ? 90 : player.sos === 'Med' ? 70 : 45} />
             </View>
 
-            <Block title="Fantasy Outlook" body={outlook} />
-            <Block title="Recent Performance" body="3-game rolling avg trending up. Two top-12 finishes in the last three weeks." />
-            <Block title="Health" body={player.health === 'healthy' ? 'Full practice all week.' : "Listed as questionable. Monitor Friday's report."} />
-            <Block title="Schedule" body={`Strength of schedule: ${player.sos}. Bye week ${player.bye}.`} />
-            <Block title="Community" body={'"Locked in starter all year." · "Worth the reach for upside." · See full discussion in Players.'} />
+            <View style={{ marginTop: spacing.section }}>
+              <PlayerProfileTabs value={tab} onChange={setTab} />
+            </View>
+
+            <View style={{ marginTop: spacing.section, gap: spacing.section }}>
+              {tab === 'overview' ? <PlayerOverviewPanel player={profile} /> : null}
+              {tab === 'performance' ? <PlayerPerformancePanel player={profile} /> : null}
+              {tab === 'health' ? <PlayerHealthPanel player={profile} /> : null}
+            </View>
 
             <View style={s.sheetActions}>
               <Pressable onPress={onQueue} style={s.queueBtn}>

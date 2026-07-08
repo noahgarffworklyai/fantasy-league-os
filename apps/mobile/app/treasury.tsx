@@ -20,6 +20,7 @@ import {
 } from 'lucide-react-native';
 import { Pressable, Text } from '@/components/ui/primitives';
 import { Screen } from '@/components/ui/Screen';
+import { PageIntro } from '@/components/ui/PageIntro';
 import { Toggle } from '@/components/ui/Toggle';
 import { AICard, AISection } from '@/components/ui/AICard';
 import { useLeague, type League } from '@/lib/league-context';
@@ -245,12 +246,16 @@ export default function TreasuryPage() {
   return (
     <Screen>
       <View style={layout.screen}>
-        <TreasuryBar
-          title={title}
-          onBack={goBack}
-          showBack={view.kind !== 'home'}
-          backLabel="Treasury"
-        />
+        {view.kind === 'home' ? (
+          <PageIntro title="Treasury" />
+        ) : (
+          <TreasuryBar
+            title={title}
+            onBack={goBack}
+            showBack
+            backLabel="Treasury"
+          />
+        )}
 
         {view.kind === 'home' ? (
           <TreasuryHome
@@ -826,7 +831,7 @@ function PaymentPage({
   };
 
   return (
-    <View style={{ gap: 20 }}>
+    <View style={layout.screenStack}>
       <View style={[surfaces.roundedCardLg, { borderWidth: 0, backgroundColor: hex.foreground, padding: 24 }]}>
         <Text variant="eyebrow" style={{ color: 'rgba(252,252,252,0.6)' }}>Pay league dues</Text>
         <Text variant="bodySm" style={{ marginTop: 4, color: 'rgba(252,252,252,0.7)' }}>{member.name}</Text>
@@ -980,7 +985,7 @@ function PayoutReview({
   };
 
   return (
-    <View style={{ gap: 20 }}>
+    <View style={layout.screenStack}>
       <View style={[surfaces.roundedCardLg, { borderWidth: 0, padding: 20 }]}>
         <Text variant="eyebrow">{active.name} · {paymentsDevMode ? 'Dev payout test' : 'Final standings'}</Text>
         <Text variant="sectionTitle" style={{ marginTop: 4 }}>{payoutsExecuted ? 'Payouts complete' : 'Review & approve'}</Text>
@@ -1077,7 +1082,7 @@ function TreasurySettings({
   const [offline, setOffline] = useState(true);
 
   return (
-    <View style={{ gap: 20 }}>
+    <View style={layout.screenStack}>
       <Section title="Buy-in">
         <View style={[layout.row, { gap: 8 }]}>
           {[25, 50, 100, 200, 500].map((n) => (

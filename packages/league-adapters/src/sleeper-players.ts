@@ -63,6 +63,25 @@ function isSearchable(p: SleeperPlayerRecord) {
   return true;
 }
 
+function isPoolPlayer(p: SleeperPlayerRecord) {
+  const name = playerName(p);
+  if (!name || name.startsWith('Player ')) return false;
+  if (p.status?.toLowerCase() === 'retired') return false;
+  return true;
+}
+
+function matchesPoolPosition(player: SleeperPlayerRecord, position?: string) {
+  if (!position || position === 'All') return true;
+  if (position === 'DEF') {
+    return (
+      player.position === 'DEF' ||
+      player.position === 'DST' ||
+      player.fantasy_positions?.some((pos) => pos === 'DEF' || pos === 'DST') === true
+    );
+  }
+  return player.position === position || player.fantasy_positions?.includes(position) === true;
+}
+
 export async function loadSleeperPlayersCache(): Promise<Map<string, SleeperPlayerRecord>> {
   const now = Date.now();
   if (playersCache && now - playersCacheAt < CACHE_TTL_MS) {
@@ -93,16 +112,18 @@ export async function searchSleeperPlayers(input: {
   query?: string;
   position?: string;
   limit?: number;
+  mode?: 'searchable' | 'pool';
 }): Promise<SleeperPlayerRecord[]> {
   const cache = await loadSleeperPlayersCache();
   const q = input.query?.trim().toLowerCase() ?? '';
-  const pos = input.position && input.position !== 'All' ? input.position : null;
-  const limit = input.limit ?? 50;
+  const mode = input.mode ?? 'searchable';
+  const include = mode === 'pool' ? isPoolPlayer : isSearchable;
+  const limit = input.limit ?? (mode === 'pool' ? Number.POSITIVE_INFINITY : 50);
 
   const results: SleeperPlayerRecord[] = [];
   for (const player of cache.values()) {
-    if (!isSearchable(player)) continue;
-    if (pos && player.position !== pos && !player.fantasy_positions?.includes(pos)) continue;
+    if (!include(player)) continue;
+    if (!matchesPoolPosition(player, input.position)) continue;
     if (q) {
       const haystack = [
         player.search_full_name,
@@ -194,7 +215,7 @@ export async function buildLeaguePlayerSearch(input: {
   externalLeagueId?: string;
   query?: string;
   position?: string;
-  tab?: 'all' | 'available' | 'injured' | 'trending';
+  tab?: 'all' | 'available' | 'injured' | 'trending' | 'pool';
   limit?: number;
 }): Promise<PlayerSearchRow[]> {
   const [added, dropped, ownedContext] = await Promise.all([
@@ -220,12 +241,26 @@ export async function buildLeaguePlayerSearch(input: {
     const found = await searchSleeperPlayers({
       query: input.query,
       position: input.position,
-      limit: input.limit ?? 50,
+      limit: input.limit,
+      mode: input.tab === 'pool' ? 'pool' : 'searchable',
     });
     return found.map((p) => toPlayerSearchRow(p, context));
   }
 
   const tab = input.tab ?? 'all';
+
+  if (tab === 'pool') {
+    const results: SleeperPlayerRecord[] = [];
+    for (const player of cache.values()) {
+      if (!isPoolPlayer(player)) continue;
+      if (!matchesPoolPosition(player, input.position)) continue;
+      results.push(player);
+    }
+    return results
+      .sort((a, b) => playerName(a).localeCompare(playerName(b)))
+      .map((p) => toPlayerSearchRow(p, context));
+  }
+
   if (tab === 'trending' || tab === 'all') {
     return enrichIds(added.slice(0, input.limit ?? 25).map((r) => r.player_id));
   }

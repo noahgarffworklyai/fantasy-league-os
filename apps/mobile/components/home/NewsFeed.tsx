@@ -191,11 +191,7 @@ function CategoryBubbles({
   const c = useColors();
 
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={{ gap: 8, paddingVertical: 2 }}
-    >
+    <View style={[layout.row, { width: '100%', gap: 6 }]}>
       {CATEGORY_TABS.map((tab) => {
         const active = tab.key === value;
         const Icon = tab.icon;
@@ -206,10 +202,14 @@ function CategoryBubbles({
             style={[
               layout.row,
               surfaces.pill,
+              layout.flex1,
               {
-                gap: 6,
-                paddingHorizontal: 14,
+                gap: 4,
+                minWidth: 0,
+                paddingHorizontal: 6,
                 paddingVertical: 8,
+                alignItems: 'center',
+                justifyContent: 'center',
                 backgroundColor: active
                   ? hex.foreground
                   : scheme === 'dark'
@@ -220,17 +220,22 @@ function CategoryBubbles({
               },
             ]}
           >
-            <Icon size={14} color={active ? hex.background : c.foreground} strokeWidth={2} />
+            <Icon size={13} color={active ? hex.background : c.foreground} strokeWidth={2} />
             <Text
               variant="tab"
-              style={{ color: active ? hex.background : hex.mutedForeground, fontSize: 12 }}
+              numberOfLines={1}
+              style={{
+                color: active ? hex.background : hex.mutedForeground,
+                fontSize: 11,
+                flexShrink: 1,
+              }}
             >
               {tab.label}
             </Text>
           </Pressable>
         );
       })}
-    </ScrollView>
+    </View>
   );
 }
 
@@ -397,7 +402,7 @@ export function NewsFeed() {
     <View style={layout.section}>
       <CategoryBubbles value={category} onChange={setCategory} />
 
-      <Text variant="sectionTitle" style={{ paddingHorizontal: 4, marginTop: 4 }}>
+      <Text variant="sectionTitle" style={{ paddingHorizontal: 4 }}>
         {sectionTitle}
       </Text>
 

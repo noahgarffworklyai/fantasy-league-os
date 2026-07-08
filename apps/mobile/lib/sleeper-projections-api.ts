@@ -7,6 +7,7 @@ export type NflState = {
   display_week: number;
   season_type: string;
   league_season: string;
+  previous_season?: string;
 };
 
 type SleeperProjRow = {
@@ -58,4 +59,11 @@ export function resolveProjectionSeason(state: NflState, fallbackSeason?: string
   if (state.league_season) return state.league_season;
   if (state.season) return state.season;
   return fallbackSeason ?? String(new Date().getFullYear());
+}
+
+export function resolveStatsSeason(state: NflState, fallbackSeason?: string): string {
+  if (state.season_type === 'regular' && state.season) return state.season;
+  if (state.previous_season) return state.previous_season;
+  if (state.league_season) return String(Number(state.league_season) - 1);
+  return fallbackSeason ?? String(new Date().getFullYear() - 1);
 }

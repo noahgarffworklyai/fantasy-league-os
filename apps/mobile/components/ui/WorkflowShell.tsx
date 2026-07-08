@@ -4,6 +4,7 @@ import { type ReactNode } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Pressable, ScrollView, Text, View } from './primitives';
 import { useColors, useHex, useThemeStyles } from '@/lib/theme';
+import { spacing } from '@/lib/tokens';
 
 export const BOTTOM_BAR_SPACE = 112;
 
@@ -92,8 +93,8 @@ export function Section({
 }) {
   const { layout: L, surfaces } = useThemeStyles();
   return (
-    <View style={{ marginBottom: 20 }}>
-      <View style={[L.rowBetween, { marginBottom: 8, paddingHorizontal: 8 }]}>
+    <View style={{ marginBottom: spacing.screen }}>
+      <View style={[L.rowBetween, { marginBottom: spacing.section, paddingHorizontal: 8 }]}>
         <Text variant="eyebrow" style={{ letterSpacing: 1.5, textTransform: 'uppercase' }}>
           {title}
         </Text>
