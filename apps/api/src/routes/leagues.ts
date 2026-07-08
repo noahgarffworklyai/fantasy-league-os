@@ -24,6 +24,10 @@ import { authMiddleware, requireLeagueMembership, type AuthenticatedRequest } fr
 import { decryptCredentials, encryptCredentials } from '../lib/crypto.js';
 import { buildHostedMatchups, buildHostedStandings } from '../lib/hosted-league.js';
 import {
+  enrichSleeperCredentials,
+  resolveSleeperUserIdForMember,
+} from '../lib/sleeper-credentials.js';
+import {
   buildHostedMyRoster,
   collectHostedOwnership,
   addHostedPlayer,
@@ -130,7 +134,10 @@ export async function leagueRoutes(app: FastifyInstance) {
     });
 
     if (body.provider && body.externalLeagueId) {
-      const credentials = (request.body as { credentials?: Record<string, unknown> }).credentials;
+      let credentials = (request.body as { credentials?: Record<string, unknown> }).credentials;
+      if (body.provider === 'sleeper' && credentials) {
+        credentials = await enrichSleeperCredentials(credentials);
+      }
       const [link] = await db
         .insert(leagueProviderLinks)
         .values({
@@ -571,10 +578,15 @@ export async function leagueRoutes(app: FastifyInstance) {
     const teams = snapshot?.teams ?? [];
 
     if (link.provider === 'sleeper') {
+      const linkCredentials = link.encryptedCredentials
+        ? decryptCredentials<Record<string, unknown>>(link.encryptedCredentials)
+        : null;
+      const sleeperUserId = await resolveSleeperUserIdForMember(authReq.userId, linkCredentials);
       const ownerId = resolveSleeperOwnerId(teams, {
         displayName: user?.displayName ?? undefined,
         teamName: membership?.teamName,
         providerTeamId: membership?.providerTeamId,
+        ownerExternalId: sleeperUserId,
       });
 
       if (!ownerId) {

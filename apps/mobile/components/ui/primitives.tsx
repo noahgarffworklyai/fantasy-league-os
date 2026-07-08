@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   Text as RNText,
   View as RNView,
@@ -53,15 +54,26 @@ type PressProps = Omit<RNPressableProps, 'className'> & {
   activeClassName?: string;
 };
 
-/** Pressable with className support and a subtle pressed opacity. */
-export function Pressable({ className, style, ...props }: PressProps) {
+/**
+ * Pressable with className support and a subtle pressed opacity.
+ * NativeWind v4 drops layout styles when `style` is a callback — keep styles static.
+ */
+export function Pressable({ className, style, onPressIn, onPressOut, ...props }: PressProps) {
+  const [pressed, setPressed] = useState(false);
+  const staticStyle = typeof style === 'function' ? undefined : style;
+
   return (
     <RNPressable
       className={className}
-      style={(state) => [
-        typeof style === 'function' ? style(state) : style,
-        state.pressed ? { opacity: 0.6 } : null,
-      ]}
+      onPressIn={(e) => {
+        setPressed(true);
+        onPressIn?.(e);
+      }}
+      onPressOut={(e) => {
+        setPressed(false);
+        onPressOut?.(e);
+      }}
+      style={[staticStyle, pressed ? { opacity: 0.6 } : null]}
       {...props}
     />
   );

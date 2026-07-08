@@ -31,9 +31,9 @@ import { useColors, useHex, useTheme, useThemeStyles } from '@/lib/theme';
 
 const NAV = [
   { to: '/', label: 'Home', icon: Home, exact: true },
-  { to: '/treasury', label: 'Pot', icon: Wallet, exact: false },
+  { to: '/treasury', label: 'Treasury', icon: Wallet, exact: false },
   { to: '/trades', label: 'Trades', icon: ArrowLeftRight, exact: false },
-  { to: '/analytics', label: 'Analytics', icon: BarChart3, exact: false },
+  { to: '/analytics', label: 'Stats', icon: BarChart3, exact: false },
 ] as const;
 
 /* ------------------------------ Top Chrome ------------------------------ */
@@ -360,19 +360,31 @@ export function BottomBar() {
                 style={[
                   layout.flex1,
                   layout.centered,
-                  { gap: 2, borderRadius: 9999, paddingVertical: 6, minWidth: 0 },
+                  {
+                    gap: 3,
+                    borderRadius: 9999,
+                    paddingVertical: 8,
+                    paddingHorizontal: 2,
+                    minWidth: 0,
+                  },
                   active ? { backgroundColor: scheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(13,13,13,0.05)' } : null,
                 ]}
               >
                 <n.icon
-                  size={20}
+                  size={18}
                   color={active ? c.foreground : c.mutedForeground}
                   strokeWidth={active ? 2.4 : 1.8}
                 />
                 <Text
                   variant="pill"
                   numberOfLines={1}
-                  style={{ color: active ? hex.foreground : hex.mutedForeground }}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.8}
+                  style={{
+                    width: '100%',
+                    textAlign: 'center',
+                    color: active ? hex.foreground : hex.mutedForeground,
+                  }}
                 >
                   {n.label}
                 </Text>
@@ -389,26 +401,32 @@ export function BottomBar() {
             layout.centered,
             {
               height: 58,
-              width: 58,
+              minWidth: 58,
+              paddingHorizontal: 6,
               flexShrink: 0,
               borderRadius: 9999,
               borderWidth: StyleSheet.hairlineWidth,
               borderColor: hex.hairline,
               backgroundColor: barBg,
-              gap: 2,
+              gap: 3,
             },
             teamActive ? { backgroundColor: scheme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(13,13,13,0.08)' } : null,
           ]}
         >
           <Users
-            size={22}
+            size={20}
             color={teamActive ? c.foreground : c.mutedForeground}
             strokeWidth={teamActive ? 2.4 : 1.8}
           />
           <Text
             variant="pill"
             numberOfLines={1}
-            style={{ color: teamActive ? hex.foreground : hex.mutedForeground }}
+            adjustsFontSizeToFit
+            minimumFontScale={0.85}
+            style={{
+              textAlign: 'center',
+              color: teamActive ? hex.foreground : hex.mutedForeground,
+            }}
           >
             Team
           </Text>

@@ -10,6 +10,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { leagueMembers, leagueProviderLinks, users } from '../db/schema.js';
 import { decryptCredentials } from '../lib/crypto.js';
+import { resolveSleeperUserIdForMember } from '../lib/sleeper-credentials.js';
 
 async function refreshMemberTeamsFromSnapshot(
   leagueId: string,
@@ -19,6 +20,7 @@ async function refreshMemberTeamsFromSnapshot(
   const rows = await db
     .select({
       memberId: leagueMembers.id,
+      userId: leagueMembers.userId,
       providerTeamId: leagueMembers.providerTeamId,
       teamName: leagueMembers.teamName,
       displayName: users.displayName,
@@ -32,29 +34,43 @@ async function refreshMemberTeamsFromSnapshot(
   const credentials = link.encryptedCredentials ? decryptCredentials(link.encryptedCredentials) : {};
 
   for (const row of rows) {
-    let externalTeamId = row.providerTeamId;
+    let ownerId: string | null = null;
 
     if (link.provider === 'espn') {
-      externalTeamId = resolveEspnTeamId(snapshot.teams, credentials as EspnCredentials, {
+      const teamExternalId = resolveEspnTeamId(snapshot.teams, credentials as EspnCredentials, {
         displayName: row.displayName ?? undefined,
         teamName: row.teamName,
         providerTeamId: row.providerTeamId,
       });
-    } else if (link.provider === 'sleeper') {
-      externalTeamId = resolveSleeperOwnerId(snapshot.teams, {
+      if (teamExternalId) {
+        const team = snapshot.teams.find((entry) => entry.externalTeamId === teamExternalId);
+        if (team?.name) {
+          await db
+            .update(leagueMembers)
+            .set({ teamName: team.name, providerTeamId: teamExternalId })
+            .where(eq(leagueMembers.id, row.memberId));
+        }
+      }
+      continue;
+    }
+
+    if (link.provider === 'sleeper') {
+      const sleeperUserId = await resolveSleeperUserIdForMember(row.userId, credentials as Record<string, unknown>);
+      ownerId = resolveSleeperOwnerId(snapshot.teams, {
         displayName: row.displayName ?? undefined,
         teamName: row.teamName,
         providerTeamId: row.providerTeamId,
+        ownerExternalId: sleeperUserId,
       });
     }
 
-    if (!externalTeamId) continue;
-    const team = snapshot.teams.find((entry) => entry.externalTeamId === externalTeamId);
+    if (!ownerId) continue;
+    const team = snapshot.teams.find((entry) => entry.ownerExternalId === ownerId);
     if (!team?.name) continue;
 
     await db
       .update(leagueMembers)
-      .set({ teamName: team.name, providerTeamId: externalTeamId })
+      .set({ teamName: team.name, providerTeamId: team.externalTeamId })
       .where(eq(leagueMembers.id, row.memberId));
   }
 }

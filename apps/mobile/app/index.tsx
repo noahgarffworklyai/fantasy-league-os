@@ -21,7 +21,7 @@ import { Card, Divider } from '@/components/ui/Card';
 import { useLeague, type League } from '@/lib/league-context';
 import { homePriorities } from '@/lib/ai-intelligence';
 import { useAuthStore } from '@/lib/auth-store';
-import { formatScore, useHomeLeagueStats } from '@/lib/league-snapshot-api';
+import { useHomeLeagueStats } from '@/lib/league-snapshot-api';
 import { useThemeTokens } from '@/lib/theme';
 
 type TabKey = 'priorities' | 'league' | 'news';
@@ -29,9 +29,8 @@ type TabKey = 'priorities' | 'league' | 'news';
 export default function HomePage() {
   const { active, user } = useLeague();
   const currentUserId = useAuthStore((s) => s.user?.id);
-  const router = useNav();
   const [tab, setTab] = useState<TabKey>('priorities');
-  const { hex, layout, surfaces } = useThemeTokens();
+  const { hex, layout } = useThemeTokens();
   const isSynced = active?.type === 'synced';
   const { data: stats, isLoading, isError, isFetching } = useHomeLeagueStats(
     active?.id,
@@ -45,10 +44,6 @@ export default function HomePage() {
 
   const firstName = (user?.name ?? 'Marc').split(/\s+/)[0];
   const week = stats?.week || active.week || 1;
-  const teamCount = stats?.teamCount || active.members;
-  const rank = stats?.rank || active.rank;
-  const record = stats?.record && stats.record !== '—' ? stats.record : active.record;
-  const teamLabel = stats?.teamName ?? active.teamName;
   const showLiveStats = !!stats?.hasSnapshot;
 
   return (
@@ -59,25 +54,12 @@ export default function HomePage() {
           <Text variant="hero" style={{ marginTop: 4 }}>
             Hi, {firstName}.
           </Text>
-          <Text variant="subtitle" style={{ marginTop: 8 }}>
-            {teamLabel ? `${teamLabel} · ${record}` : record} · {teamCount} teams ·{' '}
-            {rank > 0 ? `#${rank}` : '—'}
-          </Text>
           {isSynced && stats?.syncStatus === 'error' ? (
-            <Text variant="caption" style={{ marginTop: 6, color: hex.warning }}>
+            <Text variant="caption" style={{ marginTop: 8, color: hex.warning }}>
               {isFetching ? 'Sync issue — retrying now…' : 'Sync issue — will retry automatically.'}
             </Text>
           ) : null}
         </View>
-
-        <MatchupCard
-          active={active}
-          week={week}
-          stats={stats}
-          isLoading={isLoading}
-          showLiveStats={showLiveStats}
-          onOpen={() => router.switchTab('/analytics')}
-        />
 
         <Segmented
           tabs={[
@@ -104,119 +86,6 @@ export default function HomePage() {
         )}
       </View>
     </Screen>
-  );
-}
-
-function MatchupCard({
-  active,
-  week,
-  stats,
-  isLoading,
-  showLiveStats,
-  onOpen,
-}: {
-  active: League;
-  week: number;
-  stats: ReturnType<typeof useHomeLeagueStats>['data'];
-  isLoading: boolean;
-  showLiveStats: boolean;
-  onOpen: () => void;
-}) {
-  const { hex, layout, surfaces } = useThemeTokens();
-  const matchup = stats?.matchup;
-
-  if (isLoading) {
-    return (
-      <Card>
-        <View style={[layout.cardPad, layout.centered, { minHeight: 140 }]}>
-          <ActivityIndicator color={hex.primary} />
-          <Text variant="bodyMuted" style={{ marginTop: 12 }}>
-            Loading league stats…
-          </Text>
-        </View>
-      </Card>
-    );
-  }
-
-  if (!showLiveStats || !matchup) {
-    return (
-      <Pressable onPress={onOpen}>
-        <Card>
-          <View style={layout.cardPad}>
-            <Text variant="eyebrow">Week {week}</Text>
-            <Text variant="titleMd" style={{ marginTop: 8 }}>
-              {active.type === 'synced' ? 'Standings & matchups' : 'Your matchup'}
-            </Text>
-            <Text variant="bodyMuted" style={{ marginTop: 6 }}>
-              {active.type === 'synced'
-                ? stats?.synced && !stats.hasSnapshot
-                  ? 'Waiting for first sync from your platform.'
-                  : 'Open analytics for full standings.'
-                : 'Open analytics for full standings.'}
-            </Text>
-          </View>
-          <Divider />
-          <View style={layout.cardFooter}>
-            <Text variant="link">Open analytics</Text>
-            <ChevronRight size={16} color={hex.mutedForeground} />
-          </View>
-        </Card>
-      </Pressable>
-    );
-  }
-
-  const awayName = matchup.awayName;
-  const homeName = matchup.homeName;
-  const awayScore = formatScore(matchup.awayScore);
-  const homeScore = formatScore(matchup.homeScore);
-  const statusLabel =
-    matchup.status === 'final' ? 'Final' : matchup.status === 'in_progress' ? 'Live' : 'Scheduled';
-
-  return (
-    <Pressable onPress={onOpen}>
-      <Card>
-        <View style={layout.cardPad}>
-          <View style={layout.rowBetween}>
-            <Text variant="eyebrow">{matchup.label}</Text>
-            <View style={surfaces.pillSuccess}>
-              <Text variant="captionSuccess">{statusLabel}</Text>
-            </View>
-          </View>
-          <View style={[layout.rowEnd, { marginTop: 20 }]}>
-            <View style={{ flex: 1 }}>
-              <Text variant="bodyMuted" numberOfLines={1}>
-                {awayName}
-              </Text>
-              <Text variant="scoreXL" style={{ marginTop: 4 }}>
-                {awayScore}
-              </Text>
-              {matchup.isMine && stats?.record ? (
-                <Text variant="bodyMuted" style={{ marginTop: 8 }}>
-                  {stats.record}
-                  {stats.pointsFor > 0 ? ` · ${stats.pointsFor.toFixed(1)} PF` : ''}
-                </Text>
-              ) : null}
-            </View>
-            <Text variant="caption" style={{ paddingBottom: 4, paddingHorizontal: 8, textTransform: 'uppercase', letterSpacing: 2 }}>
-              vs
-            </Text>
-            <View style={[layout.alignEnd, { flex: 1 }]}>
-              <Text variant="bodyMuted" numberOfLines={1}>
-                {homeName}
-              </Text>
-              <Text variant="scoreXL" style={{ marginTop: 4 }}>
-                {homeScore}
-              </Text>
-            </View>
-          </View>
-        </View>
-        <Divider />
-        <View style={layout.cardFooter}>
-          <Text variant="link">Open analytics</Text>
-          <ChevronRight size={16} color={hex.mutedForeground} />
-        </View>
-      </Card>
-    </Pressable>
   );
 }
 
