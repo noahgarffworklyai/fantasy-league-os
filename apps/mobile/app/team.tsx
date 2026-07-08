@@ -1,5 +1,5 @@
-import { useState, type ReactNode, useMemo } from 'react';
-import { ActivityIndicator, Modal, StyleSheet, TextInput } from 'react-native';
+import { useState, useEffect, type ReactNode, useMemo } from 'react';
+import { ActivityIndicator, Modal, ScrollView, StyleSheet, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line as SvgLine, Text as SvgText } from 'react-native-svg';
 import {
@@ -37,16 +37,16 @@ import { TradeIdeasCarousel } from '@/components/trades/TradeIdeasCarousel';
 import { TradeMachineCard } from '@/components/trades/TradeMachineCard';
 import { TradeMachinePane } from '@/components/trades/TradeMachinePane';
 import { TradePlayerBrowser } from '@/components/trades/TradePlayerBrowser';
-import { PlayerHealthPanel } from '@/components/player/PlayerHealthPanel';
-import { PlayerOverviewPanel } from '@/components/player/PlayerOverviewPanel';
-import { PlayerPerformancePanel } from '@/components/player/PlayerPerformancePanel';
-import { PlayerProfileTabs, type PlayerProfileTab } from '@/components/player/PlayerProfileTabs';
+import { BackButton } from '@/components/ui/BackButton';
+import { PlayerProfilePanelContent } from '@/components/player/PlayerProfilePanels';
+import { PlayerHeaderProjection } from '@/components/player/PlayerHeaderProjection';
+import { PlayerProfileDataProvider } from '@/lib/use-player-sleeper-stats';
+import type { PlayerProfileTab } from '@/components/player/PlayerProfileTabs';
 import { useEnrichedTradeIdeas } from '@/lib/trade-ideas-api';
 import { personAvatar, playerAvatar } from '@/lib/avatars';
 import { useMyTeamRoster, usePatchMyTeamRoster } from '@/lib/team-roster-api';
 import { useTradePlayers, type TradeAsset } from '@/lib/trade-players-api';
 import { leagueMateAvatar, useLeagueMates } from '@/lib/league-mates-api';
-import { usePlayerSleeperStats } from '@/lib/use-player-sleeper-stats';
 import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
 
 // ====================== Player data ======================
@@ -767,7 +767,7 @@ function EmptyState({ icon: IconComp, title, sub }: { icon: LucideIcon; title: s
 
 // ====================== Trade pane ======================
 type TradeMode = 'hub' | 'pickManager' | 'machine';
-type Prefill = { mgrId: string; give: string[]; receive: string[] } | null;
+type Prefill = { mgrId?: string; give: string[]; receive: string[] } | null;
 
 type TradeManager = { id: string; name: string; team: string; avatarUrl?: string };
 
@@ -782,11 +782,17 @@ export function TradePane({
   platform,
   leagueId,
   onPlayer,
+  searchActive,
+  onSearchFocusChange,
+  onSubViewChange,
 }: {
   synced: boolean;
   platform?: string;
   leagueId?: string;
   onPlayer: (p: PlayerDetail) => void;
+  searchActive?: boolean;
+  onSearchFocusChange?: (focused: boolean) => void;
+  onSubViewChange?: (active: boolean) => void;
 }) {
   const S = useTeamStyles();
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
@@ -801,6 +807,10 @@ export function TradePane({
   const [chatWith, setChatWith] = useState<string | null>(null);
   const [proposeTo, setProposeTo] = useState<string | null>(null);
   const [prefill, setPrefill] = useState<Prefill>(null);
+
+  useEffect(() => {
+    onSubViewChange?.(mode !== 'hub' || !!chatWith || !!proposeTo);
+  }, [mode, chatWith, proposeTo, onSubViewChange]);
 
   const findTradeManager = (id: string) => tradeManagers.find((m) => m.id === id);
 
@@ -826,8 +836,8 @@ export function TradePane({
         platform={platform}
         myPlayers={myTradePlayers}
         managerPools={managerPools}
-        initialGive={prefill?.mgrId === mgr.id ? prefill?.give : undefined}
-        initialReceive={prefill?.mgrId === mgr.id ? prefill?.receive : undefined}
+        initialGive={!prefill?.mgrId || prefill.mgrId === mgr.id ? prefill?.give : undefined}
+        initialReceive={!prefill?.mgrId || prefill.mgrId === mgr.id ? prefill?.receive : undefined}
         onBack={() => {
           setProposeTo(null);
           setPrefill(null);
@@ -843,13 +853,12 @@ export function TradePane({
   if (mode === 'machine') {
     return (
       <TradeMachinePane
+        leagueId={leagueId}
         myPlayers={myTradePlayers}
-        managerPools={managerPools}
-        managers={tradeManagers}
         onBack={() => setMode('hub')}
-        onPropose={(mgrId, give, receive) => {
-          setPrefill({ mgrId, give, receive });
-          setProposeTo(mgrId);
+        onPropose={(give, receive) => {
+          setPrefill({ give, receive });
+          setMode('pickManager');
         }}
       />
     );
@@ -857,10 +866,8 @@ export function TradePane({
   if (mode === 'pickManager') {
     return (
       <View style={layout.sectionBlock}>
-        <View style={S.navBar}>
-          <Pressable onPress={() => setMode('hub')}><Text variant="bodySm" style={{ color: hex.success }}>← Trade</Text></Pressable>
-          <Text variant="body">Send a trade</Text>
-          <View style={S.navSpacer} />
+        <View style={{ marginBottom: 16 }}>
+          <BackButton onPress={() => setMode('hub')} />
         </View>
         <Card>
           {tradeManagers.map((m, i) => (
@@ -891,33 +898,39 @@ export function TradePane({
   }
 
   return (
-    <View style={layout.screenStack}>
-      <TradeMachineCard onOpen={() => setMode('machine')} />
+    <View style={[layout.screenStack, searchActive && { flex: 1 }]}>
+      {!searchActive ? (
+        <>
+          <TradeMachineCard onOpen={() => setMode('machine')} />
 
-      <View style={layout.sectionBlock}>
-        <Text
-          variant="eyebrow"
-          style={{ paddingHorizontal: 8, letterSpacing: 1.5, textTransform: 'uppercase' }}
-        >
-          Trade ideas
-        </Text>
-        <TradeIdeasCarousel
-          ideas={enrichedIdeas}
-          isLoading={ideasLoading}
-          onPropose={(idea) => {
-            setPrefill({
-              mgrId: idea.manager.id,
-              give: idea.give.map((p) => p.id),
-              receive: idea.receive.map((p) => p.id),
-            });
-            setProposeTo(idea.manager.id);
-          }}
-        />
-      </View>
+          <View style={layout.sectionBlock}>
+            <Text
+              variant="eyebrow"
+              style={{ paddingHorizontal: 8, letterSpacing: 1.5, textTransform: 'uppercase' }}
+            >
+              Trade ideas
+            </Text>
+            <TradeIdeasCarousel
+              ideas={enrichedIdeas}
+              isLoading={ideasLoading}
+              onPropose={(idea) => {
+                setPrefill({
+                  mgrId: idea.manager.id,
+                  give: idea.give.map((p) => p.id),
+                  receive: idea.receive.map((p) => p.id),
+                });
+                setProposeTo(idea.manager.id);
+              }}
+            />
+          </View>
+        </>
+      ) : null}
 
       {leagueId ? (
         <TradePlayerBrowser
           leagueId={leagueId}
+          searchMode={searchActive}
+          onSearchFocusChange={onSearchFocusChange}
           onPlayer={(p) =>
             onPlayer({
               id: p.id,
@@ -994,13 +1007,8 @@ function TradeBuilder({
 
   return (
     <View style={layout.sectionBlock}>
-      <View style={S.navBar}>
-        <Pressable onPress={onBack}><Text variant="bodySm" style={{ color: hex.success }}>← Trade</Text></Pressable>
-        <View style={{ alignItems: 'center' }}>
-          <Text variant="caption">{subtitle ?? (activeMgr ? `To ${activeMgr.name}` : 'Builder')}</Text>
-          <Text variant="body">{title}</Text>
-        </View>
-        <View style={S.navSpacer} />
+      <View style={{ marginBottom: 16 }}>
+        <BackButton onPress={onBack} />
       </View>
 
       <View style={[layout.row, { gap: 8, paddingHorizontal: 4 }]}>
@@ -1211,13 +1219,8 @@ function PrivateChat({
 
   return (
     <View style={layout.sectionBlock}>
-      <View style={S.navBar}>
-        <Pressable onPress={onBack}><Text variant="bodySm" style={{ color: hex.success }}>← Trade</Text></Pressable>
-        <View style={{ alignItems: 'center' }}>
-          <Text variant="caption">Private</Text>
-          <Text variant="body">{manager.name}</Text>
-        </View>
-        <View style={S.navSpacer} />
+      <View style={{ marginBottom: 16 }}>
+        <BackButton onPress={onBack} />
       </View>
       <Card>
         <View style={{ gap: 12, padding: 20 }}>
@@ -1459,21 +1462,20 @@ export function PlayerSheet({
   const c = useColors();
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<ProfileTab>('overview');
-  const { data: sleeperStats } = usePlayerSleeperStats(player?.id, player ? {
-    name: player.name,
-    pos: player.pos,
-    team: player.team,
-    opp: player.opp,
-    status: player.status,
-    note: player.note,
-    fallbackProj: player.proj,
-    fallbackAvg: player.avg,
-  } : undefined);
   if (!player) return null;
 
-  const displayProj = sleeperStats?.weekProj ?? player.proj;
-
   return (
+    <PlayerProfileDataProvider
+      playerId={player.id}
+      context={{
+        name: player.name,
+        pos: player.pos,
+        team: player.team,
+        opp: player.opp,
+        status: player.status,
+        note: player.note,
+      }}
+    >
     <Modal visible={!!player} animationType="slide" onRequestClose={onClose}>
       <View style={[S.sheetRoot, { paddingTop: insets.top }]}>
         <View style={S.sheetHeader}>
@@ -1483,7 +1485,13 @@ export function PlayerSheet({
           <Text variant="eyebrow">Player profile</Text>
           <View style={{ width: 36, height: 36 }} />
         </View>
-        <View style={S.sheetBody}>
+        <ScrollView
+          style={S.sheetBody}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
           <View style={S.profileCard}>
             <View style={layout.rowStart}>
               <AvatarImage
@@ -1499,7 +1507,7 @@ export function PlayerSheet({
                 {player.opp ? <Text variant="bodyMuted" style={{ marginTop: 2 }}>{player.opp}</Text> : null}
               </View>
               <View style={layout.alignEnd}>
-                <Text variant="scoreLG">{displayProj != null ? displayProj.toFixed(1) : '—'}</Text>
+                <PlayerHeaderProjection fallback={player.proj} />
                 <Text variant="caption">proj</Text>
               </View>
             </View>
@@ -1534,18 +1542,11 @@ export function PlayerSheet({
             ) : null}
           </View>
 
-          <View style={{ marginTop: 16 }}>
-            <PlayerProfileTabs value={tab} onChange={setTab} />
-          </View>
-
-          <View style={[layout.fill, { marginTop: 16 }]}>
-            {tab === 'overview' ? <PlayerOverviewPanel player={player} /> : null}
-            {tab === 'performance' ? <PlayerPerformancePanel player={player} /> : null}
-            {tab === 'health' ? <PlayerHealthPanel player={player} /> : null}
-          </View>
-        </View>
+          <PlayerProfilePanelContent player={player} tab={tab} onTabChange={setTab} />
+        </ScrollView>
       </View>
     </Modal>
+    </PlayerProfileDataProvider>
   );
 }
 

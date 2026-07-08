@@ -1,9 +1,9 @@
-import { ChevronLeft } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { type ReactNode } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BackButton } from '@/components/ui/BackButton';
 import { Pressable, ScrollView, Text, View } from './primitives';
-import { useColors, useHex, useThemeStyles } from '@/lib/theme';
+import { useHex, useThemeStyles } from '@/lib/theme';
 import { spacing } from '@/lib/tokens';
 
 export const BOTTOM_BAR_SPACE = 112;
@@ -15,17 +15,16 @@ export function WorkflowShell({
   children,
   trailing,
   onBack,
-  backLabel = 'Back',
+  hideTitle,
 }: {
   title: string;
   eyebrow?: string;
   children: ReactNode;
   trailing?: ReactNode;
   onBack?: () => void;
-  backLabel?: string;
+  hideTitle?: boolean;
 }) {
   const router = useRouter();
-  const c = useColors();
   const hex = useHex();
   const { layout: L } = useThemeStyles();
   const insets = useSafeAreaInsets();
@@ -40,36 +39,34 @@ export function WorkflowShell({
           backgroundColor: hex.surface,
         }}
       >
-        <View style={[L.rowBetween, { paddingHorizontal: 8, paddingBottom: 12 }]}>
-          <Pressable
-            onPress={() => (onBack ? onBack() : router.back())}
-            style={[L.row, { gap: 2, borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 4 }]}
-          >
-            <ChevronLeft size={20} color={c.success} />
-            <Text variant="body" style={{ color: hex.success }}>
-              {backLabel}
-            </Text>
-          </Pressable>
-          <View style={{ alignItems: 'center' }}>
-            {eyebrow ? (
-              <Text variant="pill" muted style={{ textTransform: 'uppercase', letterSpacing: 2 }}>
-                {eyebrow}
-              </Text>
-            ) : null}
-            <Text variant="titleMd">{title}</Text>
+        {hideTitle ? (
+          <View style={{ paddingHorizontal: 8, paddingBottom: 12 }}>
+            <BackButton onPress={() => (onBack ? onBack() : router.back())} />
           </View>
-          <View
-            style={{
-              minWidth: 64,
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'flex-end',
-              paddingRight: 8,
-            }}
-          >
-            {trailing}
+        ) : (
+          <View style={[L.rowBetween, { paddingHorizontal: 8, paddingBottom: 12 }]}>
+            <BackButton onPress={() => (onBack ? onBack() : router.back())} />
+            <View style={{ alignItems: 'center' }}>
+              {eyebrow ? (
+                <Text variant="pill" muted style={{ textTransform: 'uppercase', letterSpacing: 2 }}>
+                  {eyebrow}
+                </Text>
+              ) : null}
+              <Text variant="titleMd">{title}</Text>
+            </View>
+            <View
+              style={{
+                minWidth: 64,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                paddingRight: 8,
+              }}
+            >
+              {trailing}
+            </View>
           </View>
-        </View>
+        )}
       </View>
       <ScrollView
         style={L.fill}

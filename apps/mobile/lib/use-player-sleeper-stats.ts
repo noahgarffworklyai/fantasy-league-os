@@ -1,6 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import { buildPlayerFantasyOutlook } from './player-outlook';
-import { fetchPlayerSleeperSnapshot } from './player-sleeper-stats';
+import { fetchPlayerSleeperSnapshot, resolvePlayerId } from './player-sleeper-stats';
+import type { PlayerSeasonKey } from './player-season';
+
+export type { PlayerSleeperContextInput } from './player-profile-data';
+export { PlayerProfileDataProvider, usePlayerProfileData } from './player-profile-data';
 
 export function usePlayerSleeperStats(
   playerId: string | undefined,
@@ -11,50 +14,33 @@ export function usePlayerSleeperStats(
     opp?: string;
     status?: 'ok' | 'q' | 'o';
     note?: string;
+    seasonKey?: PlayerSeasonKey;
     fallbackProj?: number;
     fallbackAvg?: number;
   },
 ) {
+  const seasonKey = context?.seasonKey ?? 'current';
   return useQuery({
-    queryKey: ['player-sleeper-stats', playerId, context?.name],
+    queryKey: [
+      'player-sleeper-stats-lite',
+      playerId,
+      context?.name,
+      context?.pos,
+      context?.team,
+      seasonKey,
+    ],
     queryFn: async () => {
-      if (!playerId) return null;
-      const snapshot = await fetchPlayerSleeperSnapshot(playerId);
-      const outlook = buildPlayerFantasyOutlook({
-        name: context?.name ?? 'Player',
-        pos: context?.pos ?? '—',
-        team: context?.team ?? '—',
-        avgPpg: snapshot.avgPpg,
-        weekProj: snapshot.weekProj,
-        week: snapshot.week,
-        weekLogs: snapshot.weekLogs,
-        opp: context?.opp,
-        injuryStatus: context?.status,
-        note: context?.note,
+      const resolvedId = await resolvePlayerId(playerId, context?.name, context?.pos, context?.team);
+      if (!resolvedId) throw new Error('Could not resolve Sleeper player id');
+      return fetchPlayerSleeperSnapshot(resolvedId, {
+        name: context?.name,
+        pos: context?.pos,
+        team: context?.team,
+        seasonKey,
       });
-      return { ...snapshot, outlook };
     },
-    enabled: !!playerId,
+    enabled: !!playerId || !!(context?.name && context?.pos),
     staleTime: 5 * 60_000,
-    placeholderData: context
-      ? {
-          week: 0,
-          statsSeason: '',
-          projSeason: '',
-          weekLogs: [],
-          avgPpg: context.fallbackAvg ?? null,
-          weekProj: context.fallbackProj ?? null,
-          outlook: buildPlayerFantasyOutlook({
-            name: context.name,
-            pos: context.pos,
-            team: context.team,
-            avgPpg: context.fallbackAvg,
-            weekProj: context.fallbackProj,
-            opp: context.opp,
-            injuryStatus: context.status,
-            note: context.note,
-          }),
-        }
-      : undefined,
+    retry: 1,
   });
 }

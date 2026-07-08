@@ -1,4 +1,4 @@
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { api } from './api';
 
@@ -87,6 +87,7 @@ export function usePlayerSearch(
       }),
     enabled: (options?.enabled ?? true) && !!leagueId && input.tab !== 'watchlist',
     staleTime: 60_000,
+    placeholderData: keepPreviousData,
   });
 }
 

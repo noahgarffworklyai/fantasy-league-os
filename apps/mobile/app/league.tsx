@@ -3,7 +3,6 @@ import { ActivityIndicator, Keyboard, Modal, Platform, ScrollView, StyleSheet, T
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line as SvgLine, Rect, Text as SvgText } from 'react-native-svg';
 import {
-  ChevronLeft,
   ChevronRight,
   type LucideIcon,
   MessageCircle,
@@ -18,6 +17,7 @@ import { Pressable, Text, View } from '@/components/ui/primitives';
 import { Screen } from '@/components/ui/Screen';
 import { Segmented } from '@/components/ui/Segmented';
 import { AvatarImage } from '@/components/ui/AvatarImage';
+import { BackButton } from '@/components/ui/BackButton';
 import { PageIntro } from '@/components/ui/PageIntro';
 import { useLeague, type League } from '@/lib/league-context';
 import {
@@ -50,9 +50,7 @@ export default function LeaguePage() {
       return (
         <Screen>
           <View style={{ flex: 1, padding: 24 }}>
-            <Pressable onPress={() => setView({ kind: 'league' })}>
-              <Text variant="link">← Back to league</Text>
-            </Pressable>
+            <BackButton onPress={() => setView({ kind: 'league' })} variant="muted" />
             <Text variant="bodyMuted" style={{ marginTop: 16 }}>Matchup not found.</Text>
           </View>
         </Screen>
@@ -70,9 +68,7 @@ export default function LeaguePage() {
       return (
         <Screen>
           <View style={{ flex: 1, padding: 24 }}>
-            <Pressable onPress={() => setView({ kind: 'league' })}>
-              <Text variant="link">← Back to league</Text>
-            </Pressable>
+            <BackButton onPress={() => setView({ kind: 'league' })} variant="muted" />
           </View>
         </Screen>
       );
@@ -979,16 +975,10 @@ function InfoRow({ label, value, first }: { label: string; value: string; first?
 }
 
 /* ------------------------------ DETAIL VIEWS ------------------------------ */
-function BackBar({ onBack, title }: { onBack: () => void; title: string }) {
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
-  const c = useColors();
+function BackBar({ onBack }: { onBack: () => void }) {
   return (
-    <View style={[layout.row, { gap: 8, paddingHorizontal: 4, paddingTop: 8 }]}>
-      <Pressable onPress={onBack} style={[layout.row, { gap: 4, borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 6 }]}>
-        <ChevronLeft size={16} color={c.mutedForeground} />
-        <Text variant="bodySm" style={{ fontSize: 14, color: hex.mutedForeground }}>League</Text>
-      </Pressable>
-      <Text variant="eyebrow">/ {title}</Text>
+    <View style={{ paddingHorizontal: 4, paddingTop: 8, marginBottom: 8 }}>
+      <BackButton onPress={onBack} variant="muted" />
     </View>
   );
 }
@@ -1002,7 +992,7 @@ function MatchupDetail({ matchup: m, onBack }: { matchup: Matchup; onBack: () =>
 
   return (
     <View style={layout.screen}>
-      <BackBar onBack={onBack} title="Matchup" />
+      <BackBar onBack={onBack} />
       <View style={[surfaces.roundedCardLg, { padding: 20 }]}>
         <View style={layout.rowBetween}>
           <StateBadge state={m.state} kickoff={m.kickoff} />
@@ -1115,7 +1105,7 @@ function TeamOverview({ team, onBack }: { team: TeamRow; onBack: () => void }) {
   const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
   return (
     <View style={layout.screen}>
-      <BackBar onBack={onBack} title="Team" />
+      <BackBar onBack={onBack} />
       <View style={[surfaces.roundedCardLg, { padding: 20 }]}>
         <View style={[layout.row, { gap: 12 }]}>
           <AvatarImage src={personAvatar(team.owner + team.name, team.ownerAvatarUrl)} name={team.owner} size={56} />

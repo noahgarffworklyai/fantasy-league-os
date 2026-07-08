@@ -1,7 +1,7 @@
 import { ActivityIndicator, View } from 'react-native';
 import { Text } from '@/components/ui/primitives';
-import { PlayerFantasyOutlook } from '@/components/player/PlayerFantasyOutlook';
-import { usePlayerSleeperStats } from '@/lib/use-player-sleeper-stats';
+import { CommissionerInsightsCard } from '@/components/player/CommissionerInsightsCard';
+import { usePlayerProfileData } from '@/lib/use-player-sleeper-stats';
 import { useThemeTokens } from '@/lib/theme';
 import { spacing } from '@/lib/tokens';
 
@@ -22,7 +22,7 @@ export type PlayerProfileContext = {
 };
 
 function StatTile({ label, value }: { label: string; value: string }) {
-  const { hex, layout, surfaces } = useThemeTokens();
+  const { layout, surfaces } = useThemeTokens();
   return (
     <View style={[surfaces.roundedCard, layout.flex1, { padding: 14, alignItems: 'center' }]}>
       <Text variant="titleLg" style={{ fontVariant: ['tabular-nums'] }}>
@@ -37,27 +37,19 @@ function StatTile({ label, value }: { label: string; value: string }) {
 
 export function PlayerOverviewPanel({ player }: { player: PlayerProfileContext }) {
   const { layout } = useThemeTokens();
-  const { data, isLoading } = usePlayerSleeperStats(player.id, {
-    name: player.name,
-    pos: player.pos,
-    team: player.team,
-    opp: player.opp,
-    status: player.status,
-    note: player.note,
-    fallbackProj: player.proj,
-    fallbackAvg: player.avg,
-  });
+  const { data, isLoading, isError, isFetching } = usePlayerProfileData();
 
-  const avgPpg = data?.avgPpg ?? player.avg ?? null;
-  const weekProj = data?.weekProj ?? player.proj ?? null;
+  const avgPpg = data?.avgPpg ?? null;
+  const weekProj = data?.weekProj ?? null;
+  const projLabel = data?.week ? `Week ${data.week} proj` : data?.seasonKey === 'previous' ? 'Season complete' : 'This week';
 
   return (
     <View style={{ gap: spacing.section }}>
       <View style={[layout.row, layout.tight]}>
-        <StatTile label="Avg PPG" value={avgPpg != null ? avgPpg.toFixed(1) : '—'} />
+        <StatTile label="Avg PPG" value={avgPpg != null ? avgPpg.toFixed(1) : isLoading ? '…' : '—'} />
         <StatTile
-          label={data?.week ? `Week ${data.week} proj` : 'This week'}
-          value={weekProj != null ? weekProj.toFixed(1) : '—'}
+          label={projLabel}
+          value={weekProj != null ? weekProj.toFixed(1) : isLoading ? '…' : '—'}
         />
       </View>
 
@@ -68,13 +60,27 @@ export function PlayerOverviewPanel({ player }: { player: PlayerProfileContext }
         </View>
       ) : null}
 
-      {isLoading && !data ? (
+      {isLoading || isFetching ? (
         <View style={{ paddingVertical: 20, alignItems: 'center' }}>
           <ActivityIndicator />
+          <Text variant="caption" muted style={{ marginTop: 8 }}>
+            Loading Sleeper data…
+          </Text>
         </View>
-      ) : data?.outlook ? (
-        <PlayerFantasyOutlook outlook={data.outlook} />
-      ) : null}
+      ) : isError ? (
+        <View style={[layout.centered, { paddingVertical: 20 }]}>
+          <Text variant="bodyMuted">Could not load Sleeper data for this player.</Text>
+        </View>
+      ) : data?.insights ? (
+        <CommissionerInsightsCard
+          paragraphs={data.insights.paragraphs}
+          bullets={data.insights.bullets}
+        />
+      ) : (
+        <View style={[layout.centered, { paddingVertical: 20 }]}>
+          <Text variant="bodyMuted">No Sleeper data for {data?.statsSeason ?? 'this season'} yet.</Text>
+        </View>
+      )}
     </View>
   );
 }

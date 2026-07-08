@@ -84,7 +84,7 @@ function MembersView({ onBack }: { onBack: () => void }) {
   const isCommish = active?.role === 'commissioner';
 
   return (
-    <WorkflowShell title="Members" eyebrow="League" onBack={onBack} backLabel="League">
+    <WorkflowShell title="Members" eyebrow="League" onBack={onBack} hideTitle>
       {isLoading ? (
         <ActivityIndicator color={hex.primary} style={{ marginVertical: 24 }} />
       ) : isError ? (
@@ -176,14 +176,14 @@ function InviteView({ onBack }: { onBack: () => void }) {
 
   if (active.role !== 'commissioner') {
     return (
-      <WorkflowShell title="Invite Members" eyebrow="League" onBack={onBack} backLabel="League">
+      <WorkflowShell title="Invite Members" eyebrow="League" onBack={onBack} hideTitle>
         <Text variant="bodyMuted">Only the commissioner can send invites.</Text>
       </WorkflowShell>
     );
   }
 
   return (
-    <WorkflowShell title="Invite Members" eyebrow="League" onBack={onBack} backLabel="League">
+    <WorkflowShell title="Invite Members" eyebrow="League" onBack={onBack} hideTitle>
       <View style={[surfaces.card, { marginBottom: 16, alignItems: 'center', padding: 20 }]}>
         <Text variant="eyebrow">Capacity</Text>
         <Text variant="scoreLG" style={{ marginTop: 4, fontSize: 32 }}>
@@ -237,7 +237,7 @@ function InviteView({ onBack }: { onBack: () => void }) {
 function RulesView({ onBack }: { onBack: () => void }) {
   const { active } = useLeague();
   return (
-    <WorkflowShell title="League Rules" eyebrow="League" onBack={onBack} backLabel="League">
+    <WorkflowShell title="League Rules" eyebrow="League" onBack={onBack} hideTitle>
       <Section title="Roster">
         <Row first label="Starting Lineup" value="QB · 2RB · 2WR · TE · FLEX · K · DEF" />
         <Row label="Bench" value="6 slots" />
@@ -265,7 +265,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
   const draftSchedule = active?.draftDate ?? active?.draftSchedule ?? 'Not scheduled';
 
   return (
-    <WorkflowShell title="League Settings" eyebrow="League" onBack={onBack} backLabel="League">
+    <WorkflowShell title="League Settings" eyebrow="League" onBack={onBack} hideTitle>
       {synced ? (
         <>
           <Section title="Connected Platform">
@@ -304,7 +304,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
 
 function HistoryView({ onBack }: { onBack: () => void }) {
   return (
-    <WorkflowShell title="League History" eyebrow="League" onBack={onBack} backLabel="League">
+    <WorkflowShell title="League History" eyebrow="League" onBack={onBack} hideTitle>
       <Empty title="No past seasons yet" sub="History will appear after your first completed season." />
     </WorkflowShell>
   );

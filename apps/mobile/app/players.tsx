@@ -2,7 +2,6 @@ import { useMemo, useState, type ComponentType, type ReactNode } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, View } from 'react-native';
 import {
   Activity,
-  ChevronLeft,
   Flame,
   HeartPulse,
   type LucideIcon,
@@ -17,10 +16,12 @@ import {
   TrendingUp,
   X,
 } from 'lucide-react-native';
-import { PlayerHealthPanel } from '@/components/player/PlayerHealthPanel';
-import { PlayerOverviewPanel, type PlayerProfileContext } from '@/components/player/PlayerOverviewPanel';
-import { PlayerPerformancePanel } from '@/components/player/PlayerPerformancePanel';
-import { PlayerProfileTabs, type PlayerProfileTab } from '@/components/player/PlayerProfileTabs';
+import { PlayerProfilePanelContent } from '@/components/player/PlayerProfilePanels';
+import { PlayerHeaderProjection } from '@/components/player/PlayerHeaderProjection';
+import type { PlayerProfileContext } from '@/components/player/PlayerOverviewPanel';
+import { PlayerProfileDataProvider } from '@/lib/use-player-sleeper-stats';
+import type { PlayerProfileTab } from '@/components/player/PlayerProfileTabs';
+import { BackButton } from '@/components/ui/BackButton';
 import { AvatarImage } from '@/components/ui/AvatarImage';
 import { SearchInput } from '@/components/ui/Input';
 import { Pressable, Text } from '@/components/ui/primitives';
@@ -41,7 +42,6 @@ import { useAddPlayerToRoster } from '@/lib/team-roster-api';
 import { playerAvatar } from '@/lib/avatars';
 import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
 import { spacing } from '@/lib/tokens';
-import { usePlayerSleeperStats } from '@/lib/use-player-sleeper-stats';
 
 /* ------------------------------ TYPES + DATA ------------------------------ */
 type Pos = 'QB' | 'RB' | 'WR' | 'TE' | 'K' | 'DEF';
@@ -551,23 +551,21 @@ function PlayerDetail({
   const c = useColors();
   const [tab, setTab] = useState<Tab>('overview');
   const profile = toProfileContext(p);
-  const { data: sleeperStats } = usePlayerSleeperStats(p.id, {
-    name: p.name,
-    pos: p.pos,
-    team: p.team,
-    opp: p.opp,
-    status: profile.status,
-    fallbackProj: p.proj,
-  });
-  const displayProj = sleeperStats?.weekProj ?? p.proj;
 
   return (
+    <PlayerProfileDataProvider
+      playerId={p.id}
+      context={{
+        name: p.name,
+        pos: p.pos,
+        team: p.team,
+        opp: p.opp,
+        status: profile.status,
+      }}
+    >
     <View style={[layout.screen, { paddingTop: 0 }]}>
       <View style={[layout.rowBetween, { paddingHorizontal: 4, paddingTop: 8 }]}>
-        <Pressable onPress={onBack} style={[layout.row, { gap: 4, borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 6 }]}>
-          <ChevronLeft size={16} color={c.mutedForeground} />
-          <Text variant="link" muted>Players</Text>
-        </Pressable>
+        <BackButton onPress={onBack} variant="muted" />
         <View style={[layout.row, { gap: 4 }]}>
           <Pressable onPress={onToggleWatch} style={[layout.iconButtonSm, { backgroundColor: hex.surfaceElevated, borderWidth: 0 }]}>
             <Star size={16} color={watched ? c.foreground : c.mutedForeground} fill={watched ? c.foreground : 'none'} />
@@ -590,7 +588,7 @@ function PlayerDetail({
             </View>
           </View>
           <View style={layout.alignEnd}>
-            <Text variant="scoreLG" style={{ fontSize: 26, fontVariant: ['tabular-nums'] }}>{formatProj(displayProj)}</Text>
+            <PlayerHeaderProjection fallback={p.proj} />
             <Text variant="eyebrow">proj</Text>
             <View style={{ marginTop: 4 }}><TrendPill trend={p.trend} small /></View>
           </View>
@@ -615,11 +613,7 @@ function PlayerDetail({
         </View>
       </View>
 
-      <PlayerProfileTabs value={tab} onChange={setTab} />
-
-      {tab === 'overview' ? <PlayerOverviewPanel player={profile} /> : null}
-      {tab === 'performance' ? <PlayerPerformancePanel player={profile} /> : null}
-      {tab === 'health' ? <PlayerHealthPanel player={profile} /> : null}
+      <PlayerProfilePanelContent player={profile} tab={tab} onTabChange={setTab} />
 
       <Section title="Related players">
         {related.length === 0 ? (
@@ -641,6 +635,7 @@ function PlayerDetail({
         )}
       </Section>
     </View>
+    </PlayerProfileDataProvider>
   );
 }
 

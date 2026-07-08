@@ -4,7 +4,6 @@ import { useQuery } from '@tanstack/react-query';
 import {
   Bell,
   CheckCircle2,
-  ChevronLeft,
   ChevronRight,
   CircleDot,
   CreditCard,
@@ -20,6 +19,7 @@ import {
 } from 'lucide-react-native';
 import { Pressable, Text } from '@/components/ui/primitives';
 import { Screen } from '@/components/ui/Screen';
+import { BackButton } from '@/components/ui/BackButton';
 import { PageIntro } from '@/components/ui/PageIntro';
 import { Toggle } from '@/components/ui/Toggle';
 import { AICard, AISection } from '@/components/ui/AICard';
@@ -213,8 +213,6 @@ export default function TreasuryPage() {
     if (view.kind !== 'home') setView({ kind: 'home' });
   };
 
-  const title = view.kind === 'home' ? 'Treasury' : view.kind === 'pay' ? 'Payment' : view.kind === 'review' ? 'Payout Review' : 'Treasury Settings';
-
   if (isLoading && !treasury) {
     return (
       <Screen>
@@ -249,12 +247,7 @@ export default function TreasuryPage() {
         {view.kind === 'home' ? (
           <PageIntro title="Treasury" />
         ) : (
-          <TreasuryBar
-            title={title}
-            onBack={goBack}
-            showBack
-            backLabel="Treasury"
-          />
+          <TreasuryBar onBack={goBack} showBack />
         )}
 
         {view.kind === 'home' ? (
@@ -1167,31 +1160,11 @@ function TreasurySettings({
 }
 
 /* ------------------------------ ATOMS ------------------------------ */
-function TreasuryBar({
-  title,
-  backLabel,
-  onBack,
-  showBack,
-}: {
-  title: string;
-  backLabel: string;
-  onBack: () => void;
-  showBack: boolean;
-}) {
-  const { layout } = useThemeTokens();
-  const c = useColors();
+function TreasuryBar({ onBack, showBack }: { onBack: () => void; showBack: boolean }) {
+  if (!showBack) return null;
   return (
-    <View style={[layout.rowBetween, { paddingHorizontal: 4, paddingTop: 8 }]}>
-      {showBack ? (
-        <Pressable onPress={onBack} style={[layout.row, { gap: 4, borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 6 }]}>
-          <ChevronLeft size={16} color={c.mutedForeground} />
-          <Text variant="link" muted>{backLabel}</Text>
-        </Pressable>
-      ) : (
-        <View style={{ width: 48 }} />
-      )}
-      <Text variant="eyebrow">{title}</Text>
-      <View style={{ width: 48 }} />
+    <View style={{ paddingHorizontal: 4, paddingTop: 8, marginBottom: 8 }}>
+      <BackButton onPress={onBack} variant="muted" />
     </View>
   );
 }

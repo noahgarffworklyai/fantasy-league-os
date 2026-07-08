@@ -171,7 +171,7 @@ function ToggleRow({
 
 function AccountView({ onBack }: { onBack: () => void }) {
   return (
-    <WorkflowShell title="Account" eyebrow="Profile" onBack={onBack} backLabel="Profile">
+    <WorkflowShell title="Account" eyebrow="Profile" onBack={onBack} hideTitle>
       <Section title="Identity">
         <Row first label="Name" value="Jordan Miles" onPress={() => {}} />
         <Row label="Username" value="@jmiles" onPress={() => {}} />
@@ -210,7 +210,7 @@ function NotificationsView({ onBack }: { onBack: () => void }) {
   );
   const [channels, setChannels] = useState({ push: true, email: true, sms: false });
   return (
-    <WorkflowShell title="Notifications" eyebrow="Profile" onBack={onBack} backLabel="Profile">
+    <WorkflowShell title="Notifications" eyebrow="Profile" onBack={onBack} hideTitle>
       <Section title="Channels">
         <ToggleRow first label="Push notifications" value={channels.push} onChange={(v) => setChannels({ ...channels, push: v })} />
         <ToggleRow label="Email" value={channels.email} onChange={(v) => setChannels({ ...channels, email: v })} />
@@ -237,7 +237,7 @@ function AppearanceView({ onBack }: { onBack: () => void }) {
     { id: 'system', label: 'System', icon: SunMoon },
   ];
   return (
-    <WorkflowShell title="Appearance" eyebrow="Profile" onBack={onBack} backLabel="Profile">
+    <WorkflowShell title="Appearance" eyebrow="Profile" onBack={onBack} hideTitle>
       <Section title="Theme">
         <View style={[layout.row, { gap: 8, padding: 8 }]}>
           {themes.map(({ id, label, icon: IconComp }) => {
@@ -312,7 +312,7 @@ function ConnectedView({ onBack }: { onBack: () => void }) {
     { name: 'Yahoo', status: 'Disconnected', sync: '—' },
   ];
   return (
-    <WorkflowShell title="Connected Accounts" eyebrow="Profile" onBack={onBack} backLabel="Profile">
+    <WorkflowShell title="Connected Accounts" eyebrow="Profile" onBack={onBack} hideTitle>
       <Section title="Fantasy platforms">
         {platforms.map((p, i) => (
           <Row
@@ -356,7 +356,7 @@ function PaymentsView({ onBack }: { onBack: () => void }) {
     { brand: 'Apple Pay', last4: 'iPhone', default: false },
   ];
   return (
-    <WorkflowShell title="Payments" eyebrow="Profile" onBack={onBack} backLabel="Profile">
+    <WorkflowShell title="Payments" eyebrow="Profile" onBack={onBack} hideTitle>
       <Section title="Payment methods">
         {cards.length === 0 ? (
           <Empty title="No payment methods" sub="Add a card to pay league dues in one tap." />
@@ -397,7 +397,7 @@ function PrivacyView({ onBack }: { onBack: () => void }) {
   const [visibility, setVisibility] = useState<'public' | 'leagues' | 'private'>('leagues');
   const [dataShare, setDataShare] = useState(true);
   return (
-    <WorkflowShell title="Privacy" eyebrow="Profile" onBack={onBack} backLabel="Profile">
+    <WorkflowShell title="Privacy" eyebrow="Profile" onBack={onBack} hideTitle>
       <Section title="People">
         <Row first label="Blocked users" value="0" onPress={() => {}} trailing={<ChevronRight size={16} color={hex.mutedForeground} />} />
         <Row label="Muted users" value="2" onPress={() => {}} trailing={<ChevronRight size={16} color={hex.mutedForeground} />} />
@@ -430,7 +430,7 @@ function WatchlistView({ onBack }: { onBack: () => void }) {
   const leagues = ['Dynasty Vets'];
   const star = <Star size={16} color={hex.success} fill={hex.success} />;
   return (
-    <WorkflowShell title="Watchlist" eyebrow="Profile" onBack={onBack} backLabel="Profile">
+    <WorkflowShell title="Watchlist" eyebrow="Profile" onBack={onBack} hideTitle>
       <Section title="Players">
         {players.map((p, i) => (
           <Row key={p} first={i === 0} label={p} trailing={star} onPress={() => {}} />
@@ -460,7 +460,7 @@ function HelpView({ onBack }: { onBack: () => void }) {
   const { hex } = useThemeTokens();
   const chevron = <ChevronRight size={16} color={hex.mutedForeground} />;
   return (
-    <WorkflowShell title="Help" eyebrow="Profile" onBack={onBack} backLabel="Profile">
+    <WorkflowShell title="Help" eyebrow="Profile" onBack={onBack} hideTitle>
       <Section title="Support">
         <Row first label="Support center" onPress={() => {}} trailing={chevron} />
         <Row label="FAQ" onPress={() => {}} trailing={chevron} />
@@ -483,7 +483,7 @@ function AboutView({ onBack }: { onBack: () => void }) {
   const { hex } = useThemeTokens();
   const chevron = <ChevronRight size={16} color={hex.mutedForeground} />;
   return (
-    <WorkflowShell title="About" eyebrow="Profile" onBack={onBack} backLabel="Profile">
+    <WorkflowShell title="About" eyebrow="Profile" onBack={onBack} hideTitle>
       <Section title="Application">
         <Row first label="Version" value="1.0.0" />
         <Row label="Build" value="2026.06.25" />

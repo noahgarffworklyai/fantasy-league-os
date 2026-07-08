@@ -1,12 +1,14 @@
-import { AlertTriangle } from 'lucide-react-native';
-import { View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
+import { Newspaper } from 'lucide-react-native';
 import { Text } from '@/components/ui/primitives';
+import { CommissionerInsightsCard } from '@/components/player/CommissionerInsightsCard';
 import type { PlayerProfileContext } from '@/components/player/PlayerOverviewPanel';
+import { usePlayerProfileData } from '@/lib/use-player-sleeper-stats';
 import { useColors, useThemeTokens } from '@/lib/theme';
 import { spacing } from '@/lib/tokens';
 
 function SheetStat({ label, value, half }: { label: string; value: string; half?: boolean }) {
-  const { hex, surfaces } = useThemeTokens();
+  const { surfaces } = useThemeTokens();
   return (
     <View
       style={[
@@ -28,12 +30,56 @@ function SheetStat({ label, value, half }: { label: string; value: string; half?
 }
 
 export function PlayerHealthPanel({ player }: { player: PlayerProfileContext }) {
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+  const { hex, layout, surfaces } = useThemeTokens();
   const c = useColors();
-  const injured = player.status === 'q' || player.status === 'o';
+  const { data, isLoading, isError, isFetching } = usePlayerProfileData();
+
+  const health = data?.health;
+
+  if (isLoading || isFetching) {
+    return (
+      <View style={[layout.centered, { paddingVertical: 40 }]}>
+        <ActivityIndicator />
+        <Text variant="bodyMuted" style={{ marginTop: 12 }}>
+          Loading Sleeper injury report…
+        </Text>
+      </View>
+    );
+  }
+
+  if (isError || !health) {
+    return (
+      <View style={[layout.centered, { paddingVertical: 40 }]}>
+        <Text variant="bodyMuted">Could not load Sleeper health data for this player.</Text>
+      </View>
+    );
+  }
+
+  const injured = health.injuryStatus === 'q' || health.injuryStatus === 'o';
 
   return (
     <View style={{ gap: spacing.section }}>
+      {health.articles.length > 0 ? (
+        <View style={{ gap: spacing.tight }}>
+          <Text variant="eyebrow" style={{ paddingHorizontal: 8, letterSpacing: 1.5, textTransform: 'uppercase' }}>
+            Related news
+          </Text>
+          {health.articles.map((article) => (
+            <View key={article.id} style={[surfaces.roundedCard, { padding: 16 }]}>
+              <View style={[layout.row, layout.tight, { alignItems: 'center' }]}>
+                <Newspaper size={14} color={c.mutedForeground} />
+                <Text variant="caption" muted>
+                  {article.source} · {article.when}
+                </Text>
+              </View>
+              <Text variant="bodySm" style={{ marginTop: 8, lineHeight: 20 }}>
+                {article.title}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
       <View style={[surfaces.roundedCard, { padding: 16 }]}>
         <View style={layout.rowBetween}>
           <View>
@@ -43,27 +89,58 @@ export function PlayerHealthPanel({ player }: { player: PlayerProfileContext }) 
             </Text>
           </View>
           <View style={layout.alignEnd}>
-            <Text variant="statValue">{injured ? '72%' : '97%'}</Text>
-            <Text variant="caption">to play</Text>
+            <Text variant="statValue">{health.playProbability}%</Text>
+            <Text variant="caption">chance to play</Text>
           </View>
         </View>
         <View style={[layout.rowWrap, layout.tight, { marginTop: 12 }]}>
-          <SheetStat label="Body part" value={injured ? 'Lower body' : '—'} half />
-          <SheetStat label="Severity" value={injured ? 'Mild' : 'None'} half />
-          <SheetStat label="Practice" value={injured ? 'Limited' : 'Full'} half />
-          <SheetStat label="Reinjury risk" value={injured ? 'Moderate' : 'Low'} half />
+          <SheetStat label="Practice" value={health.practiceStatus} half />
+          <SheetStat label="Body part" value={health.bodyPart} half />
         </View>
+        {health.injuryNotes ? (
+          <Text variant="bodyMuted" style={{ marginTop: 12, lineHeight: 20 }}>
+            {health.injuryNotes}
+          </Text>
+        ) : null}
       </View>
 
-      {injured ? (
-        <View style={[layout.row, layout.tight, { borderRadius: 16, backgroundColor: toneBg.warning, paddingHorizontal: 12, paddingVertical: 8 }]}>
-          <AlertTriangle size={14} color={c.warning} />
-          <Text variant="bodyMuted">{player.note ?? 'Monitor practice reports before kickoff.'}</Text>
+      {injured && health.similarCases.length > 0 ? (
+        <View style={{ gap: spacing.tight }}>
+          <Text variant="eyebrow" style={{ paddingHorizontal: 8, letterSpacing: 1.5, textTransform: 'uppercase' }}>
+            Similar injury comps
+          </Text>
+          <View style={[surfaces.roundedCard, { padding: 16, gap: spacing.section }]}>
+            {health.similarCases.map((item, i) => (
+              <View key={`${item.player}-${i}`}>
+                {i > 0 ? (
+                  <View style={{ height: 1, backgroundColor: hex.hairline, marginBottom: spacing.section }} />
+                ) : null}
+                <View style={layout.rowBetween}>
+                  <Text variant="bodySm">
+                    {item.player} · {item.pos}
+                  </Text>
+                  <Text variant="caption" style={{ color: hex.success }}>
+                    {item.returnTimeline}
+                  </Text>
+                </View>
+                <Text variant="caption" muted style={{ marginTop: 4 }}>
+                  {item.injury}
+                </Text>
+                <Text variant="bodyMuted" style={{ marginTop: 6, lineHeight: 20 }}>
+                  {item.note}
+                </Text>
+              </View>
+            ))}
+          </View>
         </View>
-      ) : player.note ? (
-        <View style={[surfaces.roundedCard, { padding: 16 }]}>
-          <Text variant="bodySm">{player.note}</Text>
-        </View>
+      ) : !injured ? (
+        <CommissionerInsightsCard
+          paragraphs={[
+            `${player.name} is healthy with no injury designation on Sleeper. Practice participation and game status look normal heading into the week.`,
+            'No comparable injury timeline is needed — workload and matchup are the primary drivers for lineup decisions.',
+          ]}
+          bullets={['Sleeper status: active', 'Practice: full participation expected']}
+        />
       ) : null}
     </View>
   );

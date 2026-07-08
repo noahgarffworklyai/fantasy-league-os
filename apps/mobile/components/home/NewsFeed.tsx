@@ -3,13 +3,12 @@ import { Modal, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Activity,
-  ChevronLeft,
-  MoreHorizontal,
   Newspaper,
   RefreshCw,
   Trophy,
   type LucideIcon,
 } from 'lucide-react-native';
+import { BackButton } from '@/components/ui/BackButton';
 import { Pressable, Text } from '@/components/ui/primitives';
 import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
 
@@ -240,8 +239,7 @@ function CategoryBubbles({
 }
 
 function FeaturedArticleCard({ article, onPress }: { article: NewsArticle; onPress: () => void }) {
-  const { hex, layout, surfaces } = useThemeTokens();
-  const c = useColors();
+  const { hex, surfaces } = useThemeTokens();
 
   return (
     <Pressable onPress={onPress}>
@@ -261,11 +259,10 @@ function FeaturedArticleCard({ article, onPress }: { article: NewsArticle; onPre
           <Text variant="titleLg" style={{ lineHeight: 26 }}>
             {article.title}
           </Text>
-          <View style={[layout.rowBetween, { marginTop: 4 }]}>
+          <View style={{ marginTop: 4 }}>
             <Text variant="caption" muted>
               {article.publishedAgo} · {article.author}
             </Text>
-            <MoreHorizontal size={18} color={c.mutedForeground} />
           </View>
         </View>
       </View>
@@ -275,7 +272,6 @@ function FeaturedArticleCard({ article, onPress }: { article: NewsArticle; onPre
 
 function CompactArticleCard({ article, onPress }: { article: NewsArticle; onPress: () => void }) {
   const { hex, layout, surfaces } = useThemeTokens();
-  const c = useColors();
 
   return (
     <Pressable onPress={onPress}>
@@ -297,13 +293,10 @@ function CompactArticleCard({ article, onPress }: { article: NewsArticle; onPres
             <Text variant="bodySm" style={{ lineHeight: 22 }}>
               {article.title}
             </Text>
-            <View style={[layout.rowBetween, { alignItems: 'center' }]}>
-              <View style={[surfaces.pillMuted, { paddingHorizontal: 10, paddingVertical: 4 }]}>
-                <Text variant="pill" muted>
-                  More coverage
-                </Text>
-              </View>
-              <MoreHorizontal size={18} color={c.mutedForeground} />
+            <View style={[surfaces.pillMuted, { paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start' }]}>
+              <Text variant="pill" muted>
+                More coverage
+              </Text>
             </View>
           </View>
           <Thumbnail label={article.thumbnailLabel} tone={article.thumbnailTone} />
@@ -325,24 +318,14 @@ function ArticleDetailModal({
 }) {
   const insets = useSafeAreaInsets();
   const { hex, layout, surfaces } = useThemeTokens();
-  const c = useColors();
 
   if (!article) return null;
 
   return (
     <Modal visible animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: hex.background, paddingTop: insets.top }}>
-        <View style={[layout.rowBetween, { paddingHorizontal: 8, paddingVertical: 8 }]}>
-          <Pressable
-            onPress={onClose}
-            style={[layout.row, { gap: 4, borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 6 }]}
-          >
-            <ChevronLeft size={18} color={c.mutedForeground} />
-            <Text variant="link" muted>
-              News
-            </Text>
-          </Pressable>
-          <MoreHorizontal size={20} color={c.mutedForeground} />
+        <View style={{ paddingHorizontal: 8, paddingVertical: 8 }}>
+          <BackButton onPress={onClose} variant="muted" />
         </View>
 
         <ScrollView
