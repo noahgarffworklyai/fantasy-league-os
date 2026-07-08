@@ -856,10 +856,6 @@ export function TradePane({
         leagueId={leagueId}
         myPlayers={myTradePlayers}
         onBack={() => setMode('hub')}
-        onPropose={(give, receive) => {
-          setPrefill({ give, receive });
-          setMode('pickManager');
-        }}
       />
     );
   }

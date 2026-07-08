@@ -79,7 +79,7 @@ export function TradeMachineReceivePicker({
   const refreshing = isFetching && !!data;
 
   return (
-    <View style={layout.screenStack}>
+    <View style={{ gap: 10 }}>
       <Text variant="eyebrow" style={{ paddingHorizontal: 4, letterSpacing: 1.2 }}>
         Trade for
       </Text>

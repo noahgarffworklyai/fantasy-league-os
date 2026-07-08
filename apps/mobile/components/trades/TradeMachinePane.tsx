@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
-import { ArrowUpRight } from 'lucide-react-native';
+import { StyleSheet, View } from 'react-native';
 import { Pressable, Text } from '@/components/ui/primitives';
 import { AvatarImage } from '@/components/ui/AvatarImage';
 import { Card } from '@/components/ui/Card';
@@ -12,7 +11,7 @@ import { TradeOutcomeScale } from '@/components/trades/TradeOutcomeScale';
 import { playerAvatar } from '@/lib/avatars';
 import { evaluateTradeMachine } from '@/lib/trade-machine-evaluation';
 import type { TradeAsset } from '@/lib/trade-players-api';
-import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
+import { useTheme, useThemeTokens } from '@/lib/theme';
 import { spacing } from '@/lib/tokens';
 
 function TradeSideColumn({
@@ -72,16 +71,13 @@ export function TradeMachinePane({
   leagueId,
   myPlayers,
   onBack,
-  onPropose,
 }: {
   leagueId?: string;
   myPlayers: TradeAsset[];
   onBack: () => void;
-  onPropose: (give: string[], receive: string[]) => void;
 }) {
   const { hex, layout, surfaces } = useThemeTokens();
   const { scheme } = useTheme();
-  const c = useColors();
   const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
   const [give, setGive] = useState<string[]>([]);
   const [receiveAssets, setReceiveAssets] = useState<Map<string, TradeAsset>>(new Map());
@@ -123,19 +119,11 @@ export function TradeMachinePane({
     });
   };
 
-  const hasSelection = give.length > 0 || receive.length > 0;
-
   return (
     <View style={layout.sectionBlock}>
-      <View style={{ marginBottom: 16 }}>
-        <BackButton onPress={onBack} />
-      </View>
+      <BackButton onPress={onBack} />
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ gap: spacing.section, paddingBottom: 24 }}
-      >
+      <View style={{ gap: spacing.section }}>
         <Card>
           <View style={{ padding: 16, gap: 14 }}>
             <TradeOutcomeScale
@@ -216,27 +204,7 @@ export function TradeMachinePane({
             </View>
           </Card>
         )}
-
-        <Pressable
-          onPress={() => {
-            if (!hasSelection) return;
-            onPropose(give, receive);
-          }}
-          disabled={!hasSelection}
-          style={[
-            surfaces.aiButton,
-            surfaces.aiButtonSecondary,
-            {
-              opacity: !hasSelection ? 0.45 : 1,
-              borderWidth: StyleSheet.hairlineWidth,
-              borderColor: `rgba(${ink},0.12)`,
-            },
-          ]}
-        >
-          <Text variant="button">Propose in Sleeper</Text>
-          <ArrowUpRight size={14} color={c.foreground} />
-        </Pressable>
-      </ScrollView>
+      </View>
     </View>
   );
 }
