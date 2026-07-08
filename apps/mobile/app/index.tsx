@@ -76,7 +76,7 @@ export default function HomePage() {
           stats={stats}
           isLoading={isLoading}
           showLiveStats={showLiveStats}
-          onOpen={() => router.switchTab('/league')}
+          onOpen={() => router.switchTab('/analytics')}
         />
 
         <Segmented
@@ -151,13 +151,13 @@ function MatchupCard({
               {active.type === 'synced'
                 ? stats?.synced && !stats.hasSnapshot
                   ? 'Waiting for first sync from your platform.'
-                  : 'Open the league tab for full standings.'
-                : 'Open the league tab for full standings.'}
+                  : 'Open analytics for full standings.'
+                : 'Open analytics for full standings.'}
             </Text>
           </View>
           <Divider />
           <View style={layout.cardFooter}>
-            <Text variant="link">Open league</Text>
+            <Text variant="link">Open analytics</Text>
             <ChevronRight size={16} color={hex.mutedForeground} />
           </View>
         </Card>
@@ -212,7 +212,7 @@ function MatchupCard({
         </View>
         <Divider />
         <View style={layout.cardFooter}>
-          <Text variant="link">Open league</Text>
+          <Text variant="link">Open analytics</Text>
           <ChevronRight size={16} color={hex.mutedForeground} />
         </View>
       </Card>
@@ -232,7 +232,20 @@ function PrioritiesPane({ active, isSynced }: { active: League; isSynced: boolea
             key={r.id}
             rec={r}
             compact
-            onAction={() => (r.category === 'Treasury' ? router.navigate('/treasury') : router.switchTab('/team'))}
+            onAction={() => {
+              const cat = r.category ?? '';
+              if (cat === 'Treasury' || cat === 'Dues' || cat === 'Payouts') {
+                router.switchTab('/treasury');
+              } else if (cat === 'Trade') {
+                router.switchTab('/trades');
+              } else if (cat === 'League' || cat === 'Matchup' || cat === 'Reports') {
+                router.switchTab('/analytics');
+              } else if (cat === 'Draft') {
+                router.navigate('/draft');
+              } else {
+                router.switchTab('/team');
+              }
+            }}
           />
         ))}
       </View>
@@ -303,8 +316,8 @@ function LeaguePane({
           </View>
         </View>
         <Divider />
-        <Pressable onPress={() => router.switchTab('/league')} style={layout.cardFooter}>
-          <Text variant="link">Open league</Text>
+        <Pressable onPress={() => router.switchTab('/analytics')} style={layout.cardFooter}>
+          <Text variant="link">Open analytics</Text>
           <ChevronRight size={16} color={hex.mutedForeground} />
         </Pressable>
       </Card>
@@ -344,7 +357,7 @@ function LeaguePane({
             </View>
           </View>
           <Divider />
-          <Pressable onPress={() => router.switchTab('/league')} style={layout.cardFooter}>
+          <Pressable onPress={() => router.switchTab('/analytics')} style={layout.cardFooter}>
             <Text variant="link">Full standings</Text>
             <ChevronRight size={16} color={hex.mutedForeground} />
           </Pressable>
@@ -493,7 +506,7 @@ function NewsRow({
   const router = useNav();
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   return (
-    <Pressable onPress={() => router.switchTab('/players')}>
+    <Pressable onPress={() => router.navigate('/players')}>
       {divided ? <Divider /> : null}
       <View style={layout.listRow}>
         <View style={[surfaces.iconBox, { backgroundColor: toneBg[tone] }]}>

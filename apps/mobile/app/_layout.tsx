@@ -20,7 +20,7 @@ function isOnboardingPath(p: string) {
 }
 
 /** Main bottom-bar destinations — instant switch, no stack slide. */
-const TAB_SCREEN_NAMES = new Set(['index', 'team', 'league', 'players']);
+const TAB_SCREEN_NAMES = new Set(['index', 'treasury', 'trades', 'analytics', 'team']);
 
 function Shell() {
   const pathname = usePathname();

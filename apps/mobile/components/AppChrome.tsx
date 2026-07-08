@@ -3,6 +3,8 @@ import { StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePathname, useRouter } from 'expo-router';
 import {
+  ArrowLeftRight,
+  BarChart3,
   Bell,
   Check,
   ChevronDown,
@@ -10,12 +12,12 @@ import {
   Home,
   LogOut,
   Plus,
-  Search,
   Settings,
-  Trophy,
+  Shield,
   User,
   UserPlus,
   Users,
+  Wallet,
   Wifi,
 } from 'lucide-react-native';
 import { Pressable, Text, View } from './ui/primitives';
@@ -29,9 +31,9 @@ import { useColors, useHex, useTheme, useThemeStyles } from '@/lib/theme';
 
 const NAV = [
   { to: '/', label: 'Home', icon: Home, exact: true },
-  { to: '/team', label: 'Team', icon: Users, exact: false },
-  { to: '/league', label: 'League', icon: Trophy, exact: false },
-  { to: '/players', label: 'Players', icon: Search, exact: false },
+  { to: '/treasury', label: 'Pot', icon: Wallet, exact: false },
+  { to: '/trades', label: 'Trades', icon: ArrowLeftRight, exact: false },
+  { to: '/analytics', label: 'Analytics', icon: BarChart3, exact: false },
 ] as const;
 
 /* ------------------------------ Top Chrome ------------------------------ */
@@ -241,8 +243,10 @@ function ProfileMenuSheet({
     onClose();
     router.push(to as never);
   };
+  const { open: openCommissioner } = useCommissionerSheet();
   const items = [
     { icon: User, label: 'Profile', onPress: () => go('/profile') },
+    { icon: Shield, label: 'Commissioner', onPress: () => { onClose(); openCommissioner(); } },
     { icon: Plus, label: 'Create a League', onPress: () => go('/onboarding/create') },
     { icon: UserPlus, label: 'Join a League', onPress: () => go('/onboarding/join') },
     { icon: Bell, label: 'Notifications', onPress: () => go('/profile') },
@@ -308,11 +312,11 @@ export function BottomBar() {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const router = useRouter();
-  const { open } = useCommissionerSheet();
   const c = useColors();
   const hex = useHex();
   const { scheme } = useTheme();
   const { layout } = useThemeStyles();
+  const teamActive = isTabActive(pathname, '/team');
 
   const barBg = scheme === 'dark' ? 'rgba(8,8,8,0.92)' : 'rgba(242,242,242,0.92)';
 
@@ -377,7 +381,10 @@ export function BottomBar() {
           })}
         </View>
         <Pressable
-          onPress={open}
+          onPress={() => {
+            if (teamActive) return;
+            router.replace('/team' as never);
+          }}
           style={[
             layout.centered,
             {
@@ -388,29 +395,23 @@ export function BottomBar() {
               borderWidth: StyleSheet.hairlineWidth,
               borderColor: hex.hairline,
               backgroundColor: barBg,
+              gap: 2,
             },
+            teamActive ? { backgroundColor: scheme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(13,13,13,0.08)' } : null,
           ]}
         >
-          <View
-            style={[
-              layout.centered,
-              {
-                height: 28,
-                width: 28,
-                borderRadius: 9999,
-                backgroundColor: hex.primary,
-              },
-            ]}
+          <Users
+            size={22}
+            color={teamActive ? c.foreground : c.mutedForeground}
+            strokeWidth={teamActive ? 2.4 : 1.8}
+          />
+          <Text
+            variant="pill"
+            numberOfLines={1}
+            style={{ color: teamActive ? hex.foreground : hex.mutedForeground }}
           >
-            <View
-              style={{
-                height: 6,
-                width: 6,
-                borderRadius: 9999,
-                backgroundColor: hex.success,
-              }}
-            />
-          </View>
+            Team
+          </Text>
         </Pressable>
       </View>
     </View>

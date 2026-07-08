@@ -41,7 +41,7 @@ import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
 
 // ====================== Player data ======================
 type LiveStatus = 'field' | 'redzone' | 'scored';
-type PlayerDetail = {
+export type PlayerDetail = {
   id?: string;
   name: string;
   pos: string;
@@ -133,7 +133,7 @@ const VALUE_TRENDS: Record<string, 'up' | 'down' | 'flat'> = {
   'Tank Bigsby': 'up',
 };
 
-type TabKey = 'lineup' | 'health' | 'trade' | 'waivers';
+type TabKey = 'lineup' | 'health' | 'waivers';
 
 function slotEligible(slot: string, pos: string): boolean {
   if (slot === 'FLX') return pos === 'RB' || pos === 'WR' || pos === 'TE';
@@ -197,7 +197,6 @@ export default function TeamPage() {
           tabs={[
             { key: 'lineup', label: 'Lineup' },
             { key: 'health', label: 'Health' },
-            { key: 'trade', label: 'Trade' },
             { key: 'waivers', label: 'Waivers' },
           ]}
         />
@@ -247,7 +246,6 @@ export default function TeamPage() {
         {tab === 'health' ? (
           <HealthPane onPlayer={setPlayer} starters={starters} bench={bench} ir={ir} />
         ) : null}
-        {tab === 'trade' ? <TradePane synced={isSynced} platform={active.platform} onPlayer={setPlayer} /> : null}
         {tab === 'waivers' ? <WaiversPane synced={isSynced} platform={active.platform} onPlayer={setPlayer} /> : null}
       </View>
 
@@ -761,7 +759,7 @@ function EmptyState({ icon: IconComp, title, sub }: { icon: LucideIcon; title: s
 type TradeMode = 'hub' | 'pickManager' | 'machine';
 type Prefill = { mgrId: string; give: string[]; receive: string[] } | null;
 
-function TradePane({ synced, platform, onPlayer }: { synced: boolean; platform?: string; onPlayer: (p: PlayerDetail) => void }) {
+export function TradePane({ synced, platform, onPlayer }: { synced: boolean; platform?: string; onPlayer: (p: PlayerDetail) => void }) {
   const S = useTeamStyles();
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
@@ -1598,7 +1596,7 @@ const PROFILE_GAME_LOG = [
 
 type ProfileTab = 'overview' | 'performance' | 'health' | 'community';
 
-function PlayerSheet({
+export function PlayerSheet({
   player,
   onClose,
   synced,
