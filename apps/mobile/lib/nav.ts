@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 
 /** Bottom-bar tab roots — switching between these should not stack or slide. */
-export const TAB_ROUTES = ['/', '/team', '/league', '/players'] as const;
+export const TAB_ROUTES = ['/', '/treasury', '/trades', '/analytics', '/team'] as const;
 
 export function isTabRoute(path: string) {
   return TAB_ROUTES.some((t) => t === path || (t !== '/' && path.startsWith(t)));

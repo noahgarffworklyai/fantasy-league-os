@@ -1,6 +1,13 @@
 import { StyleSheet } from 'react-native';
 import { darkHex, lightHex, type HexPalette } from './colors';
 
+/** Vertical rhythm: screen (20) between major blocks; section (16) within blocks; tight (8) inline. */
+export const spacing = {
+  screen: 20,
+  section: 16,
+  tight: 8,
+} as const;
+
 export type TextVariant =
   | 'eyebrow'
   | 'hero'
@@ -152,10 +159,14 @@ export function createTokens(hex: HexPalette, dark: boolean) {
       paddingHorizontal: 16,
       paddingTop: 8,
       paddingBottom: 40,
-      gap: 20,
+      gap: spacing.screen,
     },
-    section: { gap: 16 },
-    stackSm: { gap: 10 },
+    screenStack: {
+      gap: spacing.screen,
+    },
+    section: { gap: spacing.section },
+    stackSm: { gap: spacing.section },
+    tight: { gap: spacing.tight },
     intro: { paddingHorizontal: 4, paddingTop: 4 },
     row: { flexDirection: 'row', alignItems: 'center' },
     rowBetween: {
@@ -197,7 +208,7 @@ export function createTokens(hex: HexPalette, dark: boolean) {
       borderLeftWidth: StyleSheet.hairlineWidth,
       borderLeftColor: hex.hairline,
     },
-    sectionBlock: { gap: 12 },
+    sectionBlock: { gap: spacing.section },
     sectionHeader: {
       flexDirection: 'row',
       alignItems: 'flex-end',
@@ -208,7 +219,7 @@ export function createTokens(hex: HexPalette, dark: boolean) {
       flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: spacing.tight,
       borderRadius: 16,
       backgroundColor: hex.surfaceElevated,
       paddingHorizontal: 16,

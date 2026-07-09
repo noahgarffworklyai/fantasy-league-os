@@ -91,7 +91,7 @@ function ReportDetail({
 }) {
   const { hex, layout, surfaces } = useThemeTokens();
   return (
-    <WorkflowShell title={report.title} eyebrow="Report" onBack={onBack} backLabel="Reports">
+    <WorkflowShell title={report.title} eyebrow="Report" onBack={onBack} hideTitle>
       <View style={[surfaces.roundedCardLg, { marginBottom: 20, padding: 20 }]}>
         <Text variant="eyebrow">Summary</Text>
         <Text variant="body" style={{ marginTop: 8, lineHeight: 22 }}>

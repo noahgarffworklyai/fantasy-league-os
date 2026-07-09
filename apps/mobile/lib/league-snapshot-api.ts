@@ -12,6 +12,7 @@ export type LeagueDetail = {
   membership: { role: string; paid: boolean; teamName?: string | null } | null;
   providerLink: {
     provider: string;
+    externalLeagueId?: string;
     syncStatus: string;
     syncError?: string | null;
     lastSyncedAt?: string;

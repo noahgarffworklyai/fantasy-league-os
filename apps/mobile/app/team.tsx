@@ -1,5 +1,5 @@
-import { useState, type ReactNode, useMemo } from 'react';
-import { ActivityIndicator, Modal, StyleSheet, TextInput } from 'react-native';
+import { useState, useEffect, type ReactNode, useMemo } from 'react';
+import { ActivityIndicator, Modal, ScrollView, StyleSheet, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line as SvgLine, Text as SvgText } from 'react-native-svg';
 import {
@@ -30,18 +30,28 @@ import { useLeague } from '@/lib/league-context';
 import {
   evaluateTrade,
   teamCoaching,
-  tradeIdeas,
   waiverTargets,
-  type TradeIdea,
   type WaiverTarget,
 } from '@/lib/ai-intelligence';
+import { TradeIdeasCarousel } from '@/components/trades/TradeIdeasCarousel';
+import { TradeMachineCard } from '@/components/trades/TradeMachineCard';
+import { TradeMachinePane } from '@/components/trades/TradeMachinePane';
+import { TradePlayerBrowser } from '@/components/trades/TradePlayerBrowser';
+import { BackButton } from '@/components/ui/BackButton';
+import { PlayerProfilePanelContent } from '@/components/player/PlayerProfilePanels';
+import { PlayerHeaderProjection } from '@/components/player/PlayerHeaderProjection';
+import { PlayerProfileDataProvider } from '@/lib/use-player-sleeper-stats';
+import type { PlayerProfileTab } from '@/components/player/PlayerProfileTabs';
+import { useEnrichedTradeIdeas } from '@/lib/trade-ideas-api';
 import { personAvatar, playerAvatar } from '@/lib/avatars';
 import { useMyTeamRoster, usePatchMyTeamRoster } from '@/lib/team-roster-api';
+import { useTradePlayers, type TradeAsset } from '@/lib/trade-players-api';
+import { leagueMateAvatar, useLeagueMates } from '@/lib/league-mates-api';
 import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
 
 // ====================== Player data ======================
 type LiveStatus = 'field' | 'redzone' | 'scored';
-type PlayerDetail = {
+export type PlayerDetail = {
   id?: string;
   name: string;
   pos: string;
@@ -133,7 +143,7 @@ const VALUE_TRENDS: Record<string, 'up' | 'down' | 'flat'> = {
   'Tank Bigsby': 'up',
 };
 
-type TabKey = 'lineup' | 'health' | 'trade' | 'waivers';
+type TabKey = 'lineup' | 'health' | 'waivers';
 
 function slotEligible(slot: string, pos: string): boolean {
   if (slot === 'FLX') return pos === 'RB' || pos === 'WR' || pos === 'TE';
@@ -197,7 +207,6 @@ export default function TeamPage() {
           tabs={[
             { key: 'lineup', label: 'Lineup' },
             { key: 'health', label: 'Health' },
-            { key: 'trade', label: 'Trade' },
             { key: 'waivers', label: 'Waivers' },
           ]}
         />
@@ -247,7 +256,6 @@ export default function TeamPage() {
         {tab === 'health' ? (
           <HealthPane onPlayer={setPlayer} starters={starters} bench={bench} ir={ir} />
         ) : null}
-        {tab === 'trade' ? <TradePane synced={isSynced} platform={active.platform} onPlayer={setPlayer} /> : null}
         {tab === 'waivers' ? <WaiversPane synced={isSynced} platform={active.platform} onPlayer={setPlayer} /> : null}
       </View>
 
@@ -759,31 +767,77 @@ function EmptyState({ icon: IconComp, title, sub }: { icon: LucideIcon; title: s
 
 // ====================== Trade pane ======================
 type TradeMode = 'hub' | 'pickManager' | 'machine';
-type Prefill = { mgrId: string; give: string[]; receive: string[] } | null;
+type Prefill = { mgrId?: string; give: string[]; receive: string[] } | null;
 
-function TradePane({ synced, platform, onPlayer }: { synced: boolean; platform?: string; onPlayer: (p: PlayerDetail) => void }) {
+type TradeManager = { id: string; name: string; team: string; avatarUrl?: string };
+
+function resolveTradeManagers(leagueMates: TradeManager[]): TradeManager[] {
+  return leagueMates.length > 0
+    ? leagueMates
+    : LEAGUE_MANAGERS.map((m) => ({ id: m.id, name: m.name, team: m.team }));
+}
+
+export function TradePane({
+  synced,
+  platform,
+  leagueId,
+  onPlayer,
+  searchActive,
+  onSearchFocusChange,
+  onSubViewChange,
+}: {
+  synced: boolean;
+  platform?: string;
+  leagueId?: string;
+  onPlayer: (p: PlayerDetail) => void;
+  searchActive?: boolean;
+  onSearchFocusChange?: (focused: boolean) => void;
+  onSubViewChange?: (active: boolean) => void;
+}) {
   const S = useTeamStyles();
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
+  const { data: tradeData } = useTradePlayers(leagueId, synced);
+  const { data: enrichedIdeas = [], isLoading: ideasLoading } = useEnrichedTradeIdeas(leagueId, synced);
+  const { data: leagueMates = [] } = useLeagueMates(leagueId, synced);
+  const tradeManagers = useMemo(() => resolveTradeManagers(leagueMates), [leagueMates]);
+  const myTradePlayers = tradeData?.myPlayers ?? [];
+  const managerPools = tradeData?.managerPools ?? {};
   const [mode, setMode] = useState<TradeMode>('hub');
   const [chatWith, setChatWith] = useState<string | null>(null);
   const [proposeTo, setProposeTo] = useState<string | null>(null);
   const [prefill, setPrefill] = useState<Prefill>(null);
 
+  useEffect(() => {
+    onSubViewChange?.(mode !== 'hub' || !!chatWith || !!proposeTo);
+  }, [mode, chatWith, proposeTo, onSubViewChange]);
+
+  const findTradeManager = (id: string) => tradeManagers.find((m) => m.id === id);
+
   if (chatWith) {
-    const mgr = LEAGUE_MANAGERS.find((m) => m.id === chatWith)!;
-    return <PrivateChat manager={mgr} onBack={() => setChatWith(null)} synced={synced} platform={platform} />;
+    const mgr = findTradeManager(chatWith);
+    if (!mgr) {
+      setChatWith(null);
+      return null;
+    }
+    return <PrivateChat manager={mgr} onBack={() => setChatWith(null)} synced={synced} platform={platform} myPlayers={myTradePlayers} managerPools={managerPools} />;
   }
   if (proposeTo) {
-    const mgr = LEAGUE_MANAGERS.find((m) => m.id === proposeTo)!;
+    const mgr = findTradeManager(proposeTo);
+    if (!mgr) {
+      setProposeTo(null);
+      return null;
+    }
     return (
       <TradeBuilder
         manager={mgr}
         title="Send trade"
         synced={synced}
         platform={platform}
-        initialGive={prefill?.mgrId === mgr.id ? prefill?.give : undefined}
-        initialReceive={prefill?.mgrId === mgr.id ? prefill?.receive : undefined}
+        myPlayers={myTradePlayers}
+        managerPools={managerPools}
+        initialGive={!prefill?.mgrId || prefill.mgrId === mgr.id ? prefill?.give : undefined}
+        initialReceive={!prefill?.mgrId || prefill.mgrId === mgr.id ? prefill?.receive : undefined}
         onBack={() => {
           setProposeTo(null);
           setPrefill(null);
@@ -798,29 +852,29 @@ function TradePane({ synced, platform, onPlayer }: { synced: boolean; platform?:
   }
   if (mode === 'machine') {
     return (
-      <TradeMachine
+      <TradeMachinePane
+        leagueId={leagueId}
+        myPlayers={myTradePlayers}
         onBack={() => setMode('hub')}
-        onSendTrade={(p) => {
-          setPrefill(p);
-          setProposeTo(p.mgrId);
-        }}
       />
     );
   }
   if (mode === 'pickManager') {
     return (
       <View style={layout.sectionBlock}>
-        <View style={S.navBar}>
-          <Pressable onPress={() => setMode('hub')}><Text variant="bodySm" style={{ color: hex.success }}>← Trade</Text></Pressable>
-          <Text variant="body">Send a trade</Text>
-          <View style={S.navSpacer} />
+        <View style={{ marginBottom: 16 }}>
+          <BackButton onPress={() => setMode('hub')} />
         </View>
         <Card>
-          {LEAGUE_MANAGERS.map((m, i) => (
+          {tradeManagers.map((m, i) => (
             <View key={m.id}>
               {i > 0 ? <Divider /> : null}
               <View style={layout.listRow}>
-                <AvatarImage src={personAvatar(m.id + m.name)} name={m.name} size={40} />
+                <AvatarImage
+                  src={m.avatarUrl ? leagueMateAvatar({ userId: m.id, name: m.name, avatarUrl: m.avatarUrl }) : personAvatar(m.id + m.name)}
+                  name={m.name}
+                  size={40}
+                />
                 <View style={[layout.flex1, { minWidth: 0 }]}>
                   <Text variant="body" numberOfLines={1}>{m.name}</Text>
                   <Text variant="bodyMuted" numberOfLines={1}>{m.team}</Text>
@@ -840,264 +894,51 @@ function TradePane({ synced, platform, onPlayer }: { synced: boolean; platform?:
   }
 
   return (
-    <View style={layout.section}>
-      <View style={[layout.row, { gap: 12 }]}>
-        <Pressable onPress={() => setMode('pickManager')} style={S.tradeTile}>
-          <View style={S.tradeTileIcon}>
-            <Send size={20} color={c.background} />
+    <View style={[layout.screenStack, searchActive && { flex: 1 }]}>
+      {!searchActive ? (
+        <>
+          <TradeMachineCard onOpen={() => setMode('machine')} />
+
+          <View style={layout.sectionBlock}>
+            <Text
+              variant="eyebrow"
+              style={{ paddingHorizontal: 8, letterSpacing: 1.5, textTransform: 'uppercase' }}
+            >
+              Trade ideas
+            </Text>
+            <TradeIdeasCarousel
+              ideas={enrichedIdeas}
+              isLoading={ideasLoading}
+              onPropose={(idea) => {
+                setPrefill({
+                  mgrId: idea.manager.id,
+                  give: idea.give.map((p) => p.id),
+                  receive: idea.receive.map((p) => p.id),
+                });
+                setProposeTo(idea.manager.id);
+              }}
+            />
           </View>
-          <Text variant="titleMd" style={{ marginTop: 16 }}>Send a trade</Text>
-          <Text variant="bodyMuted" style={{ marginTop: 4 }}>Pick a manager, chat privately, or build a proposal.</Text>
-        </Pressable>
-        <Pressable onPress={() => setMode('machine')} style={S.tradeTile}>
-          <View style={S.tradeTileIcon}>
-            <Repeat size={20} color={c.background} />
-          </View>
-          <Text variant="titleMd" style={{ marginTop: 16 }}>Mock trade machine</Text>
-          <Text variant="bodyMuted" style={{ marginTop: 4 }}>Explore needs, generate trades, send when one fits.</Text>
-        </Pressable>
-      </View>
+        </>
+      ) : null}
 
-      <TeamSection title="Player values" caption="Updated daily">
-        <Card>
-          {PLAYER_VALUES.map((p, i) => {
-            const trend = VALUE_TRENDS[p.name] ?? 'flat';
-            const TrendIcon = trend === 'up' ? TrendingUp : trend === 'down' ? TrendingDown : Activity;
-            const trendColor = trend === 'up' ? c.success : trend === 'down' ? c.danger : c.mutedForeground;
-            return (
-              <Pressable key={p.name} onPress={() => onPlayer(p)}>
-                {i > 0 ? <Divider /> : null}
-                <View style={layout.listRow}>
-                  <View style={[S.slotBadge, { height: 36, borderRadius: 12 }]}>
-                    <Text variant="caption">{p.pos}</Text>
-                  </View>
-                  <View style={[layout.flex1, { minWidth: 0 }]}>
-                    <Text variant="body" numberOfLines={1}>{p.name}</Text>
-                    <Text variant="bodyMuted" numberOfLines={1}>{p.team}</Text>
-                  </View>
-                  <TrendIcon size={16} color={trendColor} />
-                  <Text variant="body" style={S.scoreCol}>{p.value}</Text>
-                </View>
-              </Pressable>
-            );
-          })}
-        </Card>
-      </TeamSection>
-
-      <AISection title="Trade ideas">
-        {tradeIdeas.map((idea) => (
-          <TradeIdeaCard key={idea.id} idea={idea} synced={synced} platform={platform} />
-        ))}
-      </AISection>
-    </View>
-  );
-}
-
-type Need = 'QB' | 'RB' | 'WR' | 'TE';
-type GeneratedTrade = {
-  id: string;
-  mgrId: string;
-  mgrName: string;
-  team: string;
-  give: { id: string; name: string; pos: string; value: number }[];
-  receive: { id: string; name: string; pos: string; value: number }[];
-  grade: 'A' | 'B' | 'C';
-  why: string;
-};
-
-const MANAGER_POOLS: Record<string, typeof THEIR_PLAYERS> = {
-  m1: [
-    { id: 'm1-1', name: 'Tank Bigsby', pos: 'RB', value: 18 },
-    { id: 'm1-2', name: 'Jaylen Warren', pos: 'RB', value: 14 },
-    { id: 'm1-3', name: 'Diontae Johnson', pos: 'WR', value: 13 },
-  ],
-  m2: [
-    { id: 'm2-1', name: 'DK Metcalf', pos: 'WR', value: 26 },
-    { id: 'm2-2', name: 'Jordan Love', pos: 'QB', value: 17 },
-    { id: 'm2-3', name: 'Tyler Conklin', pos: 'TE', value: 9 },
-  ],
-  m3: [
-    { id: 'm3-1', name: 'Geno Smith', pos: 'QB', value: 12 },
-    { id: 'm3-2', name: 'Tyjae Spears', pos: 'RB', value: 15 },
-    { id: 'm3-3', name: 'Jakobi Meyers', pos: 'WR', value: 12 },
-  ],
-  m4: [
-    { id: 'm4-1', name: 'Dallas Goedert', pos: 'TE', value: 14 },
-    { id: 'm4-2', name: 'Khalil Shakir', pos: 'WR', value: 16 },
-    { id: 'm4-3', name: 'Brian Robinson', pos: 'RB', value: 13 },
-  ],
-};
-
-function gradeFor(delta: number): GeneratedTrade['grade'] {
-  if (delta >= -2) return 'A';
-  if (delta >= -6) return 'B';
-  return 'C';
-}
-
-function generateTrades(needs: Need[], seed: number, include: string[] = []): GeneratedTrade[] {
-  const out: GeneratedTrade[] = [];
-  const targetNeeds = needs.length ? needs : (['RB', 'WR'] as Need[]);
-  const forced = MY_PLAYERS.filter((p) => include.includes(p.id));
-  LEAGUE_MANAGERS.forEach((mgr, mi) => {
-    const pool = MANAGER_POOLS[mgr.id] ?? [];
-    const want = pool.find((p) => targetNeeds.includes(p.pos as Need));
-    if (!want) return;
-    const candidates = [...MY_PLAYERS].sort((a, b) => Math.abs(a.value - want.value) - Math.abs(b.value - want.value));
-    const give = forced.length ? forced[(seed + mi) % forced.length] : candidates[(seed + mi) % candidates.length];
-    const delta = want.value - give.value;
-    out.push({
-      id: `${mgr.id}-${seed}`,
-      mgrId: mgr.id,
-      mgrName: mgr.name,
-      team: mgr.team,
-      give: [{ ...give }],
-      receive: [{ ...want }],
-      grade: gradeFor(delta),
-      why: delta >= 0 ? `You gain ${delta} in trade value and patch your ${want.pos} room.` : `Slight value loss (${delta}) but addresses ${want.pos} need directly.`,
-    });
-  });
-  return out.slice(0, 4);
-}
-
-function TradeMachine({ onBack, onSendTrade }: { onBack: () => void; onSendTrade: (p: { mgrId: string; give: string[]; receive: string[] }) => void }) {
-  const S = useTeamStyles();
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
-  const [needs, setNeeds] = useState<Need[]>([]);
-  const [include, setInclude] = useState<string[]>([]);
-  const [seed, setSeed] = useState(0);
-  const [generated, setGenerated] = useState<GeneratedTrade[]>([]);
-  const toggleNeed = (n: Need) => setNeeds((p) => (p.includes(n) ? p.filter((x) => x !== n) : [...p, n]));
-  const toggleInclude = (id: string) => setInclude((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
-  const generate = () => {
-    const next = seed + 1;
-    setSeed(next);
-    setGenerated(generateTrades(needs, next, include));
-  };
-  const byPos = MY_PLAYERS.reduce<Record<string, number>>((acc, p) => {
-    acc[p.pos] = (acc[p.pos] ?? 0) + p.value;
-    return acc;
-  }, {});
-
-  return (
-    <View style={layout.sectionBlock}>
-      <View style={S.navBar}>
-        <Pressable onPress={onBack}><Text variant="bodySm" style={{ color: hex.success }}>← Trade</Text></Pressable>
-        <Text variant="body">Mock trade machine</Text>
-        <View style={S.navSpacer} />
-      </View>
-
-      <TeamSection title="Your roster" caption="Tap to include in mock">
-        <Card>
-          <View style={[layout.healthRow, { paddingHorizontal: 4, paddingVertical: 12 }]}>
-            {(['QB', 'RB', 'WR', 'TE'] as Need[]).map((pos, i) => (
-              <View key={pos} style={i > 0 ? layout.healthCellBorder : layout.healthCell}>
-                <Text variant="caption">{pos}</Text>
-                <Text variant="body" style={{ marginTop: 2 }}>{byPos[pos] ?? 0}</Text>
-              </View>
-            ))}
-          </View>
-          <Divider />
-          {MY_PLAYERS.map((p, i) => {
-            const picked = include.includes(p.id);
-            return (
-              <Pressable key={p.id} onPress={() => toggleInclude(p.id)}>
-                {i > 0 ? <Divider /> : null}
-                <View style={layout.listRow}>
-                  <View style={[surfaces.iconBox, { backgroundColor: hex.muted }]}>
-                    <Text variant="caption">{p.pos}</Text>
-                  </View>
-                  <View style={[layout.flex1, { minWidth: 0 }]}>
-                    <Text variant="body" numberOfLines={1}>{p.name}</Text>
-                    <Text variant="bodyMuted">Value {p.value}</Text>
-                  </View>
-                  <View style={[S.selectPill, picked ? S.selectPillOn : S.selectPillOff]}>
-                    <Text variant="caption" style={{ color: picked ? hex.background : hex.mutedForeground }}>
-                      {picked ? 'Included' : 'Include'}
-                    </Text>
-                  </View>
-                </View>
-              </Pressable>
-            );
-          })}
-        </Card>
-      </TeamSection>
-
-      <TeamSection title="Trade builder" caption="Tag positions to shape the trade">
-        <Card>
-          <View style={{ gap: 16, padding: 20 }}>
-            <View>
-              <Text variant="eyebrow" style={{ marginBottom: 8 }}>Position tags</Text>
-              <View style={[layout.row, { gap: 8 }]}>
-                {(['QB', 'RB', 'WR', 'TE'] as Need[]).map((n) => {
-                  const on = needs.includes(n);
-                  return (
-                    <Pressable key={n} onPress={() => toggleNeed(n)} style={[S.needTag, on ? S.needTagOn : S.needTagOff]}>
-                      <Text variant="body" style={{ color: on ? hex.background : hex.foreground }}>{n}</Text>
-                      <Text variant="caption" style={{ color: on ? 'rgba(252,252,252,0.7)' : hex.mutedForeground }}>
-                        {on ? 'Targeted' : 'Tap'}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-            <Pressable onPress={generate} style={S.generateBtn}>
-              <Text variant="button" style={{ color: hex.background }}>{generated.length ? 'Mock again' : 'Generate'}</Text>
-            </Pressable>
-          </View>
-        </Card>
-      </TeamSection>
-
-      {generated.length > 0 ? (
-        <TeamSection title="Generated trades" caption={`Round ${seed}`}>
-          <View style={layout.stackSm}>
-            {generated.map((t) => (
-              <Card key={t.id}>
-                <View style={{ padding: 16 }}>
-                  <View style={layout.row}>
-                    <AvatarImage src={personAvatar(t.mgrId + t.mgrName)} name={t.mgrName} size={36} />
-                    <View style={[layout.flex1, { minWidth: 0, marginLeft: 12 }]}>
-                      <Text variant="bodySm" numberOfLines={1}>{t.mgrName}</Text>
-                      <Text variant="bodyMuted" numberOfLines={1}>{t.team}</Text>
-                    </View>
-                    <View
-                      style={[
-                        S.gradeBadge,
-                        { backgroundColor: t.grade === 'A' ? hex.success : t.grade === 'B' ? hex.warning : hex.danger },
-                      ]}
-                    >
-                      <Text variant="bodySm" style={{ color: hex.background, fontWeight: '700' }}>{t.grade}</Text>
-                    </View>
-                  </View>
-                  <View style={[layout.row, { gap: 8, marginTop: 12 }]}>
-                    <View style={S.tradeCol}>
-                      <Text variant="caption">You give</Text>
-                      {t.give.map((p) => (
-                        <Text key={p.id} variant="bodySm" style={{ marginTop: 4 }}>{p.name} · {p.pos} {p.value}</Text>
-                      ))}
-                    </View>
-                    <View style={S.tradeCol}>
-                      <Text variant="caption">You receive</Text>
-                      {t.receive.map((p) => (
-                        <Text key={p.id} variant="bodySm" style={{ marginTop: 4 }}>{p.name} · {p.pos} {p.value}</Text>
-                      ))}
-                    </View>
-                  </View>
-                  <Text variant="bodySm" style={{ marginTop: 12, color: hex.mutedForeground }}>{t.why}</Text>
-                  <Pressable
-                    onPress={() => onSendTrade({ mgrId: t.mgrId, give: t.give.map((p) => p.id).filter((id) => MY_PLAYERS.some((m) => m.id === id)), receive: t.receive.map((p) => p.id) })}
-                    style={S.sendBtn}
-                  >
-                    <Text variant="button" style={{ color: hex.background }}>Send trade</Text>
-                  </Pressable>
-                </View>
-              </Card>
-            ))}
-          </View>
-        </TeamSection>
-      ) : (
-        <Text variant="bodyMuted" style={{ paddingHorizontal: 8 }}>Choose positions above, then generate to see trade ideas.</Text>
-      )}
+      {leagueId ? (
+        <TradePlayerBrowser
+          leagueId={leagueId}
+          searchMode={searchActive}
+          onSearchFocusChange={onSearchFocusChange}
+          onPlayer={(p) =>
+            onPlayer({
+              id: p.id,
+              name: p.name,
+              pos: p.pos,
+              team: p.team,
+              imageUrl: p.imageUrl,
+              rank: p.posRankLabel,
+            })
+          }
+        />
+      ) : null}
     </View>
   );
 }
@@ -1108,6 +949,8 @@ function TradeBuilder({
   subtitle,
   synced,
   platform,
+  myPlayers,
+  managerPools,
   onBack,
   onSent,
   initialGive,
@@ -1118,6 +961,8 @@ function TradeBuilder({
   subtitle?: string;
   synced: boolean;
   platform?: string;
+  myPlayers: TradeAsset[];
+  managerPools: Record<string, TradeAsset[]>;
   onBack: () => void;
   onSent: (mgrId: string) => void;
   initialGive?: string[];
@@ -1140,16 +985,16 @@ function TradeBuilder({
         : hex.danger;
   const activeMgrId = manager?.id ?? '';
   const activeMgr = manager ?? LEAGUE_MANAGERS.find((m) => m.id === activeMgrId);
-  const theirPool = MANAGER_POOLS[activeMgrId] ?? THEIR_PLAYERS;
-  const giveTotal = MY_PLAYERS.filter((p) => give.includes(p.id)).reduce((s, p) => s + p.value, 0);
-  const recvTotal = theirPool.filter((p) => receive.includes(p.id)).reduce((s, p) => s + p.value, 0);
+  const theirPool = managerPools[activeMgrId] ?? [];
+  const giveTotal = myPlayers.filter((p) => give.includes(p.id)).reduce((s, p) => s + p.tradeValue, 0);
+  const recvTotal = theirPool.filter((p) => receive.includes(p.id)).reduce((s, p) => s + p.tradeValue, 0);
   const delta = recvTotal - giveTotal;
   const pitch =
     delta >= 4
-      ? `This deal sends ${recvTotal} in value your way for ${giveTotal} — a clear win on paper.`
+      ? `This deal improves your positional ranks on paper (${recvTotal} vs ${giveTotal} trade score).`
       : delta <= -4
-        ? `You're paying ${Math.abs(delta)} in surplus value here. Worth it only if the fit unlocks your lineup.`
-        : `Value is essentially even (${giveTotal} ↔ ${recvTotal}). The edge comes from positional fit.`;
+        ? `You're giving up rank value here. Worth it only if the fit unlocks your lineup.`
+        : `Rank value is essentially even. The edge comes from positional fit.`;
 
   const handleSend = () => {
     setSent(true);
@@ -1158,13 +1003,8 @@ function TradeBuilder({
 
   return (
     <View style={layout.sectionBlock}>
-      <View style={S.navBar}>
-        <Pressable onPress={onBack}><Text variant="bodySm" style={{ color: hex.success }}>← Trade</Text></Pressable>
-        <View style={{ alignItems: 'center' }}>
-          <Text variant="caption">{subtitle ?? (activeMgr ? `To ${activeMgr.name}` : 'Builder')}</Text>
-          <Text variant="body">{title}</Text>
-        </View>
-        <View style={S.navSpacer} />
+      <View style={{ marginBottom: 16 }}>
+        <BackButton onPress={onBack} />
       </View>
 
       <View style={[layout.row, { gap: 8, paddingHorizontal: 4 }]}>
@@ -1183,8 +1023,8 @@ function TradeBuilder({
       {step === 1 ? (
         <TeamSection title="Your roster" caption="Pick players to send">
           <Card>
-            {MY_PLAYERS.map((p, i) => (
-              <RosterPickRow key={p.id} name={p.name} pos={p.pos} value={p.value} selected={give.includes(p.id)} divided={i > 0} onPress={() => toggle(setGive, p.id)} />
+            {myPlayers.map((p, i) => (
+              <RosterPickRow key={p.id} player={p} selected={give.includes(p.id)} divided={i > 0} onPress={() => toggle(setGive, p.id)} />
             ))}
           </Card>
         </TeamSection>
@@ -1194,7 +1034,7 @@ function TradeBuilder({
         <TeamSection title={`${activeMgr.name}'s roster`} caption="Pick players you want back">
           <Card>
             {theirPool.map((p, i) => (
-              <RosterPickRow key={p.id} name={p.name} pos={p.pos} value={p.value} selected={receive.includes(p.id)} divided={i > 0} onPress={() => toggle(setReceive, p.id)} />
+              <RosterPickRow key={p.id} player={p} selected={receive.includes(p.id)} divided={i > 0} onPress={() => toggle(setReceive, p.id)} />
             ))}
           </Card>
         </TeamSection>
@@ -1208,8 +1048,8 @@ function TradeBuilder({
                 <View style={[layout.flex1, { padding: 16 }]}>
                   <Text variant="caption">You give</Text>
                   <Text variant="statValue" style={{ marginTop: 4 }}>{giveTotal}</Text>
-                  {MY_PLAYERS.filter((p) => give.includes(p.id)).map((p) => (
-                    <Text key={p.id} variant="bodySm" style={{ marginTop: 4 }}>{p.name} · {p.pos}</Text>
+                  {myPlayers.filter((p) => give.includes(p.id)).map((p) => (
+                    <Text key={p.id} variant="bodySm" style={{ marginTop: 4 }}>{p.name} · {p.posRankLabel}</Text>
                   ))}
                   {give.length === 0 ? <Text variant="bodyMuted" style={{ marginTop: 4 }}>None</Text> : null}
                 </View>
@@ -1218,7 +1058,7 @@ function TradeBuilder({
                   <Text variant="caption">You receive</Text>
                   <Text variant="statValue" style={{ marginTop: 4 }}>{recvTotal}</Text>
                   {theirPool.filter((p) => receive.includes(p.id)).map((p) => (
-                    <Text key={p.id} variant="bodySm" style={{ marginTop: 4 }}>{p.name} · {p.pos}</Text>
+                    <Text key={p.id} variant="bodySm" style={{ marginTop: 4 }}>{p.name} · {p.posRankLabel}</Text>
                   ))}
                   {receive.length === 0 ? <Text variant="bodyMuted" style={{ marginTop: 4 }}>None</Text> : null}
                 </View>
@@ -1274,19 +1114,36 @@ function TradeBuilder({
   );
 }
 
-function RosterPickRow({ name, pos, value, selected, divided, onPress }: { name: string; pos: string; value: number; selected: boolean; divided?: boolean; onPress: () => void }) {
+function RosterPickRow({
+  player,
+  selected,
+  divided,
+  onPress,
+}: {
+  player: TradeAsset;
+  selected: boolean;
+  divided?: boolean;
+  onPress: () => void;
+}) {
   const S = useTeamStyles();
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+  const { hex, layout } = useThemeTokens();
   return (
     <Pressable onPress={onPress}>
       {divided ? <Divider /> : null}
       <View style={layout.listRow}>
-        <View style={[surfaces.iconBox, { backgroundColor: hex.muted }]}>
-          <Text variant="caption">{pos}</Text>
-        </View>
-        <View style={[layout.flex1, { minWidth: 0 }]}>
-          <Text variant="body" numberOfLines={1}>{name}</Text>
-          <Text variant="bodyMuted">Value {value}</Text>
+        <AvatarImage
+          src={playerAvatar({
+            playerId: player.id,
+            name: player.name,
+            team: player.team,
+            imageUrl: player.imageUrl,
+          })}
+          name={player.name}
+          size={40}
+        />
+        <View style={[layout.flex1, { minWidth: 0, marginLeft: 12 }]}>
+          <Text variant="body" numberOfLines={1}>{player.name}</Text>
+          <Text variant="bodyMuted">{player.posRankLabel}</Text>
         </View>
         <View style={[S.selectPill, selected ? S.selectPillOn : S.selectPillOff, { minWidth: 72 }]}>
           <Text variant="caption" style={{ color: selected ? hex.background : hex.mutedForeground }}>
@@ -1309,26 +1166,22 @@ function EvalCell({ label, value }: { label: string; value: string }) {
   );
 }
 
-function TradeIdeaCard({ idea, synced, platform }: { idea: TradeIdea; synced: boolean; platform?: string }) {
-  const S = useTeamStyles();
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
-  return (
-    <View style={S.ideaCard}>
-      <View style={layout.rowBetween}>
-        <Text variant="caption">{idea.type}</Text>
-        <Text variant="caption">{idea.likelihood}% likely</Text>
-      </View>
-      <Text variant="body" style={{ marginTop: 4 }}>Target: {idea.target}</Text>
-      <Text variant="bodyMuted">Offer: {idea.offer}</Text>
-      <Text variant="bodyMuted" style={{ marginTop: 8 }}>{idea.reason}</Text>
-      <Pressable style={[S.editPillIdle, { marginTop: 12, alignItems: 'center', paddingVertical: 8 }]}>
-        <Text variant="caption">{synced ? `Build in ${platform}` : 'Propose trade'}</Text>
-      </Pressable>
-    </View>
-  );
-}
 
-function PrivateChat({ manager, onBack, synced, platform }: { manager: { id: string; name: string; team: string }; onBack: () => void; synced: boolean; platform?: string }) {
+function PrivateChat({
+  manager,
+  onBack,
+  synced,
+  platform,
+  myPlayers,
+  managerPools,
+}: {
+  manager: { id: string; name: string; team: string };
+  onBack: () => void;
+  synced: boolean;
+  platform?: string;
+  myPlayers: TradeAsset[];
+  managerPools: Record<string, TradeAsset[]>;
+}) {
   const S = useTeamStyles();
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
@@ -1349,6 +1202,8 @@ function PrivateChat({ manager, onBack, synced, platform }: { manager: { id: str
         subtitle={`To ${manager.name}`}
         synced={synced}
         platform={platform}
+        myPlayers={myPlayers}
+        managerPools={managerPools}
         onBack={() => setBuilding(false)}
         onSent={() => {
           setMessages((m) => [...m, { from: 'me', trade: { give: ['Travis Kelce'], receive: ['Tank Bigsby'] } }]);
@@ -1360,13 +1215,8 @@ function PrivateChat({ manager, onBack, synced, platform }: { manager: { id: str
 
   return (
     <View style={layout.sectionBlock}>
-      <View style={S.navBar}>
-        <Pressable onPress={onBack}><Text variant="bodySm" style={{ color: hex.success }}>← Trade</Text></Pressable>
-        <View style={{ alignItems: 'center' }}>
-          <Text variant="caption">Private</Text>
-          <Text variant="body">{manager.name}</Text>
-        </View>
-        <View style={S.navSpacer} />
+      <View style={{ marginBottom: 16 }}>
+        <BackButton onPress={onBack} />
       </View>
       <Card>
         <View style={{ gap: 12, padding: 20 }}>
@@ -1586,19 +1436,9 @@ function WaiverCard({ target, synced, platform }: { target: WaiverTarget; synced
 }
 
 // ====================== Player profile sheet ======================
-const PROFILE_GAME_LOG = [
-  { wk: 1, opp: 'vs NYJ', pts: 18.4 },
-  { wk: 2, opp: '@ MIN', pts: 12.1 },
-  { wk: 3, opp: 'vs LAR', pts: 24.6 },
-  { wk: 4, opp: '@ ARI', pts: 16.2 },
-  { wk: 5, opp: 'vs SEA', pts: 29.1 },
-  { wk: 6, opp: '@ KC', pts: 14.8 },
-  { wk: 7, opp: 'vs DAL', pts: 21.3 },
-];
+type ProfileTab = PlayerProfileTab;
 
-type ProfileTab = 'overview' | 'performance' | 'health' | 'community';
-
-function PlayerSheet({
+export function PlayerSheet({
   player,
   onClose,
   synced,
@@ -1619,7 +1459,19 @@ function PlayerSheet({
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<ProfileTab>('overview');
   if (!player) return null;
+
   return (
+    <PlayerProfileDataProvider
+      playerId={player.id}
+      context={{
+        name: player.name,
+        pos: player.pos,
+        team: player.team,
+        opp: player.opp,
+        status: player.status,
+        note: player.note,
+      }}
+    >
     <Modal visible={!!player} animationType="slide" onRequestClose={onClose}>
       <View style={[S.sheetRoot, { paddingTop: insets.top }]}>
         <View style={S.sheetHeader}>
@@ -1629,7 +1481,13 @@ function PlayerSheet({
           <Text variant="eyebrow">Player profile</Text>
           <View style={{ width: 36, height: 36 }} />
         </View>
-        <View style={S.sheetBody}>
+        <ScrollView
+          style={S.sheetBody}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
           <View style={S.profileCard}>
             <View style={layout.rowStart}>
               <AvatarImage
@@ -1645,7 +1503,7 @@ function PlayerSheet({
                 {player.opp ? <Text variant="bodyMuted" style={{ marginTop: 2 }}>{player.opp}</Text> : null}
               </View>
               <View style={layout.alignEnd}>
-                <Text variant="scoreLG">{player.proj?.toFixed(1) ?? '—'}</Text>
+                <PlayerHeaderProjection fallback={player.proj} />
                 <Text variant="caption">proj</Text>
               </View>
             </View>
@@ -1680,187 +1538,11 @@ function PlayerSheet({
             ) : null}
           </View>
 
-          <View style={{ marginTop: 16 }}>
-            <Segmented tabs={(['overview', 'performance', 'health', 'community'] as ProfileTab[]).map((t) => ({ key: t, label: t[0].toUpperCase() + t.slice(1) }))} value={tab} onChange={setTab} />
-          </View>
-
-          <View style={[layout.fill, { marginTop: 16 }]}>
-            {tab === 'overview' ? <ProfileOverview player={player} /> : null}
-            {tab === 'performance' ? <ProfilePerformance /> : null}
-            {tab === 'health' ? <ProfileHealth player={player} /> : null}
-            {tab === 'community' ? <ProfileCommunity player={player} /> : null}
-          </View>
-        </View>
+          <PlayerProfilePanelContent player={player} tab={tab} onTabChange={setTab} />
+        </ScrollView>
       </View>
     </Modal>
-  );
-}
-
-function ProfileOverview({ player }: { player: PlayerDetail }) {
-  const S = useTeamStyles();
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
-  return (
-    <View style={layout.sectionBlock}>
-      <View style={[layout.row, { gap: 8 }]}>
-        <SheetStat label="Proj" value={player.proj?.toFixed(1) ?? '—'} />
-        <SheetStat label="Avg" value={player.avg?.toFixed(1) ?? '—'} />
-        <SheetStat label="Total" value={player.seasonPts?.toFixed(0) ?? '—'} />
-        <SheetStat label="Value" value={player.value?.toString() ?? '—'} />
-      </View>
-      {player.ownership ? (
-        <View style={S.rosteredRow}>
-          <Text variant="bodyMuted">Rostered</Text>
-          <Text variant="bodySm">{player.ownership}</Text>
-        </View>
-      ) : null}
-      <View style={S.outlookCard}>
-        <Text variant="eyebrow">Fantasy outlook</Text>
-        <Text variant="bodySm" style={{ marginTop: 4 }}>
-          High-floor producer with consistent volume regardless of game script. Schedule turns favorable through the playoff stretch.
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-function ProfilePerformance() {
-  const S = useTeamStyles();
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
-  const c = useColors();
-  const log = PROFILE_GAME_LOG;
-  const avg = log.reduce((s, g) => s + g.pts, 0) / log.length;
-  const n = log.length;
-  const sumX = log.reduce((s, g) => s + g.wk, 0);
-  const sumY = log.reduce((s, g) => s + g.pts, 0);
-  const sumXY = log.reduce((s, g) => s + g.wk * g.pts, 0);
-  const sumXX = log.reduce((s, g) => s + g.wk * g.wk, 0);
-  const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
-  const W = 320, H = 160, padL = 28, padR = 12, padT = 12, padB = 22;
-  const innerW = W - padL - padR;
-  const innerH = H - padT - padB;
-  const xs = log.map((g) => g.wk);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const yMax = Math.ceil(Math.max(...log.map((g) => g.pts), avg) / 5) * 5;
-  const xFor = (wk: number) => padL + ((wk - minX) / Math.max(1, maxX - minX)) * innerW;
-  const yFor = (pts: number) => padT + innerH - (pts / yMax) * innerH;
-  const trendDir = slope >= 0 ? 'up' : 'down';
-  const yTicks = [0, yMax / 2, yMax];
-
-  return (
-    <View style={layout.sectionBlock}>
-      <View style={S.chartCard}>
-        <View style={[layout.rowBetween, { marginBottom: 12 }]}>
-          <View>
-            <Text variant="eyebrow">Points per week</Text>
-            <Text variant="bodySm" style={{ marginTop: 2 }}>
-              Trend{' '}
-              <Text variant="bodySm" style={{ color: trendDir === 'up' ? hex.success : hex.danger }}>
-                {trendDir === 'up' ? '▲' : '▼'} {Math.abs(slope).toFixed(2)} pts/wk
-              </Text>
-            </Text>
-          </View>
-          <View style={layout.alignEnd}>
-            <Text variant="titleLg">{avg.toFixed(1)}</Text>
-            <Text variant="caption">avg</Text>
-          </View>
-        </View>
-        <Svg viewBox={`0 0 ${W} ${H}`} width="100%" height={176}>
-          {yTicks.map((t) => (
-            <SvgLine key={t} x1={padL} x2={W - padR} y1={yFor(t)} y2={yFor(t)} stroke={c.foreground} strokeOpacity={0.08} />
-          ))}
-          <SvgLine x1={padL} x2={W - padR} y1={yFor(avg)} y2={yFor(avg)} stroke={c.foreground} strokeOpacity={0.25} strokeDasharray="3 3" />
-          {log.slice(1).map((g, i) => {
-            const prev = log[i];
-            const up = g.pts >= prev.pts;
-            return (
-              <SvgLine key={`seg-${g.wk}`} x1={xFor(prev.wk)} y1={yFor(prev.pts)} x2={xFor(g.wk)} y2={yFor(g.pts)} stroke={up ? c.success : c.danger} strokeWidth={2} strokeLinecap="round" />
-            );
-          })}
-          {log.map((g, i) => {
-            const prev = i > 0 ? log[i - 1] : null;
-            const fill = prev == null ? c.foreground : g.pts >= prev.pts ? c.success : c.danger;
-            return (
-              <Circle key={g.wk} cx={xFor(g.wk)} cy={yFor(g.pts)} r={4.5} fill={fill} />
-            );
-          })}
-          {log.map((g) => (
-            <SvgText key={`l-${g.wk}`} x={xFor(g.wk)} y={H - 6} textAnchor="middle" fill={c.mutedForeground} fontSize={9}>W{g.wk}</SvgText>
-          ))}
-        </Svg>
-      </View>
-
-      <View style={surfaces.roundedCard}>
-        {log.map((g, i) => (
-          <View key={g.wk}>
-            {i > 0 ? <View style={S.logRowBorder} /> : null}
-            <View style={S.logRow}>
-              <Text variant="bodySm" style={{ width: 40, color: hex.mutedForeground }}>W{g.wk}</Text>
-              <Text variant="bodySm" style={[layout.flex1, { color: hex.mutedForeground }]}>{g.opp}</Text>
-              <Text variant="bodySm">{g.pts.toFixed(1)}</Text>
-            </View>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function ProfileHealth({ player }: { player: PlayerDetail }) {
-  const S = useTeamStyles();
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
-  const injured = player.status === 'q' || player.status === 'o';
-  return (
-    <View style={layout.sectionBlock}>
-      <View style={S.chartCard}>
-        <View style={layout.rowBetween}>
-          <View>
-            <Text variant="eyebrow">Fantasy doctor</Text>
-            <Text variant="body" style={{ marginTop: 2 }}>{injured ? 'Monitor closely' : 'Cleared to play'}</Text>
-          </View>
-          <View style={layout.alignEnd}>
-            <Text variant="statValue">{injured ? '72%' : '97%'}</Text>
-            <Text variant="caption">to play</Text>
-          </View>
-        </View>
-        <View style={[layout.rowWrap, { gap: 8, marginTop: 12 }]}>
-          <SheetStat label="Body part" value={injured ? 'Calf' : '—'} half />
-          <SheetStat label="Severity" value={injured ? 'Mild' : 'None'} half />
-          <SheetStat label="Practice" value={injured ? 'Limited' : 'Full'} half />
-          <SheetStat label="Reinjury risk" value={injured ? 'Moderate' : 'Low'} half />
-        </View>
-      </View>
-      {player.note ? (
-        <View style={S.outlookCard}>
-          <Text variant="bodySm">{player.note}</Text>
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
-function ProfileCommunity({ player }: { player: PlayerDetail }) {
-  const S = useTeamStyles();
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
-  const c = useColors();
-  return (
-    <View style={S.outlookCard}>
-      <MessageCircle size={16} color={c.mutedForeground} />
-      <Text variant="bodySm" style={{ marginTop: 8, color: hex.mutedForeground }}>
-        Community discussion for {player.name} will appear here. Share takes, ask questions, and react.
-      </Text>
-    </View>
-  );
-}
-
-function SheetStat({ label, value, half }: { label: string; value: string; half?: boolean }) {
-  const S = useTeamStyles();
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
-  return (
-    <View style={[S.sheetStat, half ? S.sheetStatHalf : S.sheetStatFlex]}>
-      <Text variant="titleLg">{value}</Text>
-      <Text variant="caption">{label}</Text>
-    </View>
+    </PlayerProfileDataProvider>
   );
 }
 

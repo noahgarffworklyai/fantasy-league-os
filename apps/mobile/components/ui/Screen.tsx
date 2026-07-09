@@ -13,6 +13,8 @@ export function Screen({ children }: { children: ReactNode }) {
       style={{ flex: 1, backgroundColor: hex.background }}
       contentContainerStyle={{ paddingBottom: BOTTOM_BAR_SPACE + insets.bottom }}
       showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
     >
       {children}
     </ScrollView>

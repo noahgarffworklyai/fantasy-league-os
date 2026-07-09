@@ -190,7 +190,12 @@ export default function SyncPage() {
     const credentials =
       provider === 'sleeper'
         ? sleeperMode === 'leagueId' || sleeperLeagueId.trim()
-          ? { leagueId: selected.externalId }
+          ? {
+              leagueId: selected.externalId,
+              ...(sleeperUsername.trim()
+                ? { username: sleeperUsername.trim().replace(/^@/, '') }
+                : {}),
+            }
           : { username: sleeperUsername.trim().replace(/^@/, '') }
         : {
             leagueId: selected.externalId,
@@ -362,8 +367,15 @@ export default function SyncPage() {
                   autoCorrect={false}
                   keyboardType="number-pad"
                 />
+                <Input
+                  value={sleeperUsername}
+                  onChangeText={setSleeperUsername}
+                  placeholder="@username (to find your team)"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
                 <Text variant="bodyMuted" style={{ fontSize: 13, lineHeight: 18 }}>
-                  Sleeper app → league → share link, or the long number in the URL.
+                  Sleeper app → league → share link, or the long number in the URL. Your @username links this app to your roster.
                 </Text>
               </>
             )}
@@ -375,7 +387,8 @@ export default function SyncPage() {
               submitting ||
               (sleeperMode === 'username'
                 ? sleeperUsername.trim().replace(/^@/, '').length < 2
-                : sleeperLeagueId.trim().length < 5)
+                : sleeperLeagueId.trim().length < 5 ||
+                  sleeperUsername.trim().replace(/^@/, '').length < 2)
             }
             style={[
               surfaces.primaryButton,
@@ -383,7 +396,8 @@ export default function SyncPage() {
               submitting ||
               (sleeperMode === 'username'
                 ? sleeperUsername.trim().replace(/^@/, '').length < 2
-                : sleeperLeagueId.trim().length < 5)
+                : sleeperLeagueId.trim().length < 5 ||
+                  sleeperUsername.trim().replace(/^@/, '').length < 2)
                 ? { opacity: 0.4 }
                 : null,
             ]}

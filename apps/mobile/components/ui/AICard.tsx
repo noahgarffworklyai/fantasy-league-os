@@ -2,6 +2,7 @@ import { ArrowUpRight, ChevronRight, Sparkles } from 'lucide-react-native';
 import { type ReactNode } from 'react';
 import { Pressable, Text, View } from './primitives';
 import { useColors, useHex, useTheme, useThemeStyles } from '@/lib/theme';
+import { spacing } from '@/lib/tokens';
 import type { Confidence, Recommendation } from '@/lib/ai-intelligence';
 
 export function AICard({
@@ -112,7 +113,7 @@ export function AISection({
   const { layout } = useThemeStyles();
   return (
     <View>
-      <View style={[layout.rowBetween, { marginBottom: 8, paddingHorizontal: 8 }]}>
+      <View style={[layout.rowBetween, { marginBottom: spacing.section, paddingHorizontal: 8 }]}>
         <View style={[layout.row, { gap: 6 }]}>
           <Sparkles size={14} color={c.mutedForeground} />
           <Text variant="eyebrow">{title}</Text>

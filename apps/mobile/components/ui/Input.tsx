@@ -1,4 +1,4 @@
-import { TextInput, type TextInputProps } from 'react-native';
+import { Platform, TextInput, type TextInputProps } from 'react-native';
 import { useColors, useHex, useThemeStyles } from '@/lib/theme';
 
 type Props = TextInputProps & { className?: string };
@@ -30,15 +30,34 @@ export function Input({ className, style, ...props }: Props) {
 }
 
 /** Compact search input for player lists. */
-export function SearchInput(props: TextInputProps) {
+export function SearchInput({ onKeyPress, ...props }: TextInputProps) {
   const c = useColors();
   const hex = useHex();
   const { type } = useThemeStyles();
+  const webKeyProps =
+    Platform.OS === 'web'
+      ? {
+          onKeyDown: (event: { key?: string; stopPropagation?: () => void }) => {
+            if (event.key === ' ') {
+              event.stopPropagation?.();
+            }
+          },
+        }
+      : {};
+
   return (
     <TextInput
       placeholderTextColor={c.mutedForeground}
       style={[type.body, { flex: 1, padding: 0, margin: 0, color: hex.foreground }]}
+      blurOnSubmit={false}
+      {...webKeyProps}
       {...props}
+      onKeyPress={(event) => {
+        if (Platform.OS === 'web' && event.nativeEvent.key === ' ') {
+          event.stopPropagation?.();
+        }
+        onKeyPress?.(event);
+      }}
     />
   );
 }

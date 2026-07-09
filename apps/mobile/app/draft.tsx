@@ -5,7 +5,6 @@ import {
   AlertCircle,
   ArrowDownAZ,
   Check,
-  ChevronLeft,
   ChevronRight,
   Circle,
   ClipboardList,
@@ -32,12 +31,19 @@ import {
   Users,
   X,
 } from 'lucide-react-native';
+import { BackButton } from '@/components/ui/BackButton';
 import { Pressable, Text } from '@/components/ui/primitives';
 import { Card, Divider } from '@/components/ui/Card';
 import { Segmented } from '@/components/ui/Segmented';
+import { PlayerProfilePanelContent } from '@/components/player/PlayerProfilePanels';
+import { PlayerHeaderProjection } from '@/components/player/PlayerHeaderProjection';
+import type { PlayerProfileContext } from '@/components/player/PlayerOverviewPanel';
+import { PlayerProfileDataProvider } from '@/lib/use-player-sleeper-stats';
+import type { PlayerProfileTab } from '@/components/player/PlayerProfileTabs';
 import { useLeague, type League } from '@/lib/league-context';
 import { useNav } from '@/lib/nav';
 import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
+import { spacing } from '@/lib/tokens';
 
 type DraftView =
   | { kind: 'home' }
@@ -546,26 +552,25 @@ function Shell({
       <View style={[s.shellHeader, { paddingTop: Math.max(insets.top, 14) }]}>
         <View style={s.shellHeaderRow}>
           {hideBack || !onBack ? (
-            <View style={s.backSpacer} />
+            <>
+              <View style={s.backSpacer} />
+              <View style={s.headerCenter}>
+                <Text variant="caption" muted>
+                  Current Draft
+                </Text>
+                <Text variant="titleMd">{title}</Text>
+                {subtitle ? (
+                  <Text variant="caption" muted>
+                    {subtitle}
+                  </Text>
+                ) : null}
+              </View>
+            </>
           ) : (
-            <Pressable onPress={onBack} style={s.backBtn}>
-              <ChevronLeft size={20} color={toneFg.success} />
-              <Text variant="body" style={{ color: toneFg.success }}>
-                Back
-              </Text>
-            </Pressable>
+            <View style={{ flex: 1, paddingHorizontal: 4 }}>
+              <BackButton onPress={onBack} />
+            </View>
           )}
-          <View style={s.headerCenter}>
-            <Text variant="caption" muted>
-              Current Draft
-            </Text>
-            <Text variant="titleMd">{title}</Text>
-            {subtitle ? (
-              <Text variant="caption" muted>
-                {subtitle}
-              </Text>
-            ) : null}
-          </View>
           <View style={s.headerTrailing}>
             {trailing}
             <Pressable onPress={onExit} style={s.exitBtn}>
@@ -1278,16 +1283,38 @@ function ChatPanel({ chat, setChat }: { chat: ChatMsg[]; setChat: React.Dispatch
 }
 
 /* ============= Player Sheet ============= */
+function draftProfileContext(player: Player): PlayerProfileContext {
+  return {
+    id: player.id,
+    name: player.name,
+    pos: player.pos,
+    team: player.team,
+    proj: player.proj,
+    status: player.health === 'questionable' || player.health === 'doubtful' ? 'q' : 'ok',
+  };
+}
+
 function PlayerSheet({ player, inQueue, onClose, onQueue, onDraft }: { player: Player | null; inQueue: boolean; onClose: () => void; onQueue: () => void; onDraft: () => void }) {
   const s = useDraftStyles();
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const insets = useSafeAreaInsets();
-  if (!player) return null;
-  const outlook = player.bestAvail > 90 ? 'Top of the board. Elite production and high floor.' : player.health !== 'healthy' ? 'Watch the injury report — value is real if cleared.' : 'Solid pick at this slot with strong upside.';
+  const [tab, setTab] = useState<PlayerProfileTab>('overview');
+  const profile = player ? draftProfileContext(player) : null;
+  if (!player || !profile) return null;
+
   const rec = player.fit > 85 ? 'This player provides the best long-term value while filling your weakest position.' : 'Reasonable value pick — consider need over upside here.';
 
   return (
+    <PlayerProfileDataProvider
+      playerId={player.id}
+      context={{
+        name: player.name,
+        pos: player.pos,
+        team: player.team,
+        status: profile.status,
+      }}
+    >
     <Modal visible={!!player} transparent animationType="slide" onRequestClose={onClose}>
       <View style={[StyleSheet.absoluteFillObject, { justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }]}>
         <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
@@ -1308,9 +1335,11 @@ function PlayerSheet({ player, inQueue, onClose, onQueue, onDraft }: { player: P
                 <Text variant="sectionTitle" numberOfLines={1}>
                   {player.name}
                 </Text>
-                <Text variant="bodyMuted">
-                  {player.team} · Proj {player.proj} · Bye {player.bye}
-                </Text>
+                <View style={[s.row, { gap: 4, flexWrap: 'wrap' }]}>
+                  <Text variant="bodyMuted">{player.team} · Proj </Text>
+                  <PlayerHeaderProjection fallback={player.proj} size="md" />
+                  <Text variant="bodyMuted"> · Bye {player.bye}</Text>
+                </View>
               </View>
               <Pressable onPress={onClose} style={s.iconBtn}>
                 <X size={16} color={c.mutedForeground} />
@@ -1342,11 +1371,7 @@ function PlayerSheet({ player, inQueue, onClose, onQueue, onDraft }: { player: P
               <ScoreCell label="SOS" value={player.sos === 'Easy' ? 90 : player.sos === 'Med' ? 70 : 45} />
             </View>
 
-            <Block title="Fantasy Outlook" body={outlook} />
-            <Block title="Recent Performance" body="3-game rolling avg trending up. Two top-12 finishes in the last three weeks." />
-            <Block title="Health" body={player.health === 'healthy' ? 'Full practice all week.' : "Listed as questionable. Monitor Friday's report."} />
-            <Block title="Schedule" body={`Strength of schedule: ${player.sos}. Bye week ${player.bye}.`} />
-            <Block title="Community" body={'"Locked in starter all year." · "Worth the reach for upside." · See full discussion in Players.'} />
+            <PlayerProfilePanelContent player={profile} tab={tab} onTabChange={setTab} />
 
             <View style={s.sheetActions}>
               <Pressable onPress={onQueue} style={s.queueBtn}>
@@ -1363,6 +1388,7 @@ function PlayerSheet({ player, inQueue, onClose, onQueue, onDraft }: { player: P
         </View>
       </View>
     </Modal>
+    </PlayerProfileDataProvider>
   );
 }
 

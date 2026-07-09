@@ -78,7 +78,7 @@ export async function playerRoutes(app: FastifyInstance) {
     const { search, position, tab, limit } = request.query as {
       search?: string;
       position?: string;
-      tab?: 'all' | 'available' | 'injured' | 'trending';
+      tab?: 'all' | 'available' | 'injured' | 'trending' | 'pool';
       limit?: string;
     };
 

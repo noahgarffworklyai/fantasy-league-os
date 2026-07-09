@@ -1,10 +1,9 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import {
   Bell,
   CheckCircle2,
-  ChevronLeft,
   ChevronRight,
   CircleDot,
   CreditCard,
@@ -20,6 +19,8 @@ import {
 } from 'lucide-react-native';
 import { Pressable, Text } from '@/components/ui/primitives';
 import { Screen } from '@/components/ui/Screen';
+import { BackButton } from '@/components/ui/BackButton';
+import { PageIntro } from '@/components/ui/PageIntro';
 import { Toggle } from '@/components/ui/Toggle';
 import { AICard, AISection } from '@/components/ui/AICard';
 import { useLeague, type League } from '@/lib/league-context';
@@ -37,7 +38,6 @@ import {
   updateTreasurySettings,
   type TreasuryData,
 } from '@/lib/treasury-api';
-import { useNav } from '@/lib/nav';
 import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
 
 type PayState = 'paid' | 'pending' | 'overdue' | 'failed' | 'refunded' | 'unpaid';
@@ -97,7 +97,6 @@ export default function TreasuryPage() {
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const { active, refreshLeagues } = useLeague();
   const currentUserId = useAuthStore((s) => s.user?.id);
-  const nav = useNav();
   const [view, setView] = useState<TreasuryView>({ kind: 'home' });
   const [structure, setStructure] = useState<PayoutStructure>('top3');
   const [buyIn, setBuyIn] = useState<number>(active?.buyIn ?? 100);
@@ -205,12 +204,14 @@ export default function TreasuryPage() {
     }
   };
 
+  const platformFeePct =
+    treasury && treasury.buyInCents > 0
+      ? ((treasury.platformFeeCents / treasury.buyInCents) * 100).toFixed(1)
+      : '2.9';
+
   const goBack = () => {
     if (view.kind !== 'home') setView({ kind: 'home' });
-    else nav.back();
   };
-
-  const title = view.kind === 'home' ? 'Treasury' : view.kind === 'pay' ? 'Payment' : view.kind === 'review' ? 'Payout Review' : 'Treasury Settings';
 
   if (isLoading && !treasury) {
     return (
@@ -243,7 +244,11 @@ export default function TreasuryPage() {
   return (
     <Screen>
       <View style={layout.screen}>
-        <TreasuryBar title={title} onBack={goBack} backLabel={view.kind === 'home' ? 'Home' : 'Treasury'} />
+        {view.kind === 'home' ? (
+          <PageIntro title="Treasury" />
+        ) : (
+          <TreasuryBar onBack={goBack} showBack />
+        )}
 
         {view.kind === 'home' ? (
           <TreasuryHome
@@ -267,6 +272,7 @@ export default function TreasuryPage() {
             onReview={() => setView({ kind: 'review' })}
             onSettings={() => setView({ kind: 'settings' })}
             payoutsExecuted={payoutsExecuted}
+            platformFeePct={platformFeePct}
           />
         ) : null}
 
@@ -354,6 +360,7 @@ function TreasuryHome({
   onReview,
   onSettings,
   payoutsExecuted,
+  platformFeePct,
 }: {
   active: League;
   members: Member[];
@@ -375,6 +382,7 @@ function TreasuryHome({
   onReview: () => void;
   onSettings: () => void;
   payoutsExecuted: boolean;
+  platformFeePct: string;
 }) {
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
@@ -439,7 +447,7 @@ function TreasuryHome({
       </View>
 
       {tab === 'pot' ? (
-        <PotPane active={active} members={members} buyIn={buyIn} collected={collected} remaining={remaining} fee={fee} net={net} isCommish={isCommish} paymentsDevMode={paymentsDevMode} activity={activity} onMarkPaid={onMarkPaid} onRemind={onRemind} onRefund={onRefund} onResetPayment={onResetPayment} onPay={onPay} />
+        <PotPane active={active} members={members} buyIn={buyIn} collected={collected} remaining={remaining} fee={fee} net={net} isCommish={isCommish} paymentsDevMode={paymentsDevMode} activity={activity} platformFeePct={platformFeePct} onMarkPaid={onMarkPaid} onRemind={onRemind} onRefund={onRefund} onResetPayment={onResetPayment} onPay={onPay} />
       ) : (
         <PayoutPane
           active={active}
@@ -474,6 +482,7 @@ function PotPane({
   isCommish,
   paymentsDevMode,
   activity,
+  platformFeePct,
   onMarkPaid,
   onRemind,
   onRefund,
@@ -490,6 +499,7 @@ function PotPane({
   isCommish: boolean;
   paymentsDevMode: boolean;
   activity: ActivityItem[];
+  platformFeePct: string;
   onMarkPaid: (id: string) => void;
   onRemind: (id: string) => void;
   onRefund: (id: string) => void;
@@ -509,7 +519,7 @@ function PotPane({
         <View style={[layout.rowWrap, { gap: 8 }]}>
           <Stat label="Collected" value={`$${collected.toLocaleString()}`} />
           <Stat label="Remaining" value={`$${remaining.toLocaleString()}`} accent={remaining > 0} />
-          <Stat label="Platform fee" value={`-$${fee.toLocaleString()}`} sub="2.9%" />
+          <Stat label={`Platform Fee (${platformFeePct}%)`} value={`-$${fee.toLocaleString()}`} />
           <Stat label="Net prize pool" value={`$${net.toLocaleString()}`} />
         </View>
       </Section>
@@ -703,59 +713,83 @@ function MemberRow({
   onResetPayment: () => void;
   onPay: () => void;
 }) {
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
-  const c = useColors();
+  const { hex, layout, surfaces, toneBg } = useThemeTokens();
   const [open, setOpen] = useState(false);
+  const isPaid = m.status === 'paid';
+
+  const actions: { key: string; node: ReactNode }[] = [];
+  if (m.isMe && !isPaid && m.status !== 'refunded') {
+    actions.push({
+      key: 'pay',
+      node: <ChipBtn primary onPress={onPay} icon={Wallet}>Pay ${buyIn}</ChipBtn>,
+    });
+  }
+  if (isPaid) {
+    actions.push({ key: 'receipt', node: <ChipBtn icon={Receipt}>View receipt</ChipBtn> });
+  }
+  if (paymentsDevMode && isPaid) {
+    actions.push({
+      key: 'reset',
+      node: <ChipBtn icon={RefreshCw} onPress={onResetPayment}>Reset payment (dev)</ChipBtn>,
+    });
+  }
+  if (isCommish && !isPaid && m.status !== 'refunded') {
+    actions.push({ key: 'remind', node: <ChipBtn icon={Bell} onPress={onRemind}>Send reminder</ChipBtn> });
+    actions.push({
+      key: 'mark',
+      node: <ChipBtn icon={CheckCircle2} onPress={onMarkPaid}>Mark offline payment</ChipBtn>,
+    });
+  }
+  if (isCommish && isPaid) {
+    actions.push({ key: 'refund', node: <ChipBtn icon={RefreshCw} onPress={onRefund}>Issue refund</ChipBtn> });
+  }
+  actions.push({ key: 'history', node: <ChipBtn icon={Receipt}>Payment history</ChipBtn> });
+
   return (
     <View style={!isFirst ? layout.listRowBorder : undefined}>
       <Pressable onPress={() => setOpen((o) => !o)}>
-        <View style={[layout.row, { gap: 12, paddingHorizontal: 16, paddingVertical: 12 }]}>
-          <Avatar name={m.name} />
-          <View style={[layout.flex1, { minWidth: 0 }]}>
-            <View style={[layout.row, { gap: 6 }]}>
-              <Text variant="body" numberOfLines={1}>{m.name}</Text>
-              {m.isMe ? <Text variant="eyebrow" style={{ textTransform: 'none' }}>You</Text> : null}
-              {m.isCommish ? (
-                <View style={[surfaces.pillMuted, { paddingHorizontal: 6, paddingVertical: 2 }]}>
-                  <Text variant="pill" muted style={{ fontSize: 9, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' }}>Commish</Text>
-                </View>
-              ) : null}
-            </View>
-            <Text variant="bodyMuted" numberOfLines={1}>
-              {m.status === 'paid'
-                ? `${m.method ?? 'Paid'} · ${m.paidOn}`
-                : m.status === 'overdue'
-                  ? `Overdue · reminded ${m.reminded ?? 0}×`
-                  : m.status === 'pending'
-                    ? `Pending · reminded ${m.reminded ?? 0}×`
-                    : m.status === 'refunded'
-                      ? 'Refunded'
-                      : 'Payment failed'}
+        <View style={[layout.rowBetween, { gap: 12, paddingHorizontal: 16, paddingVertical: 14 }]}>
+          <Text variant="body" numberOfLines={1} style={[layout.flex1, { minWidth: 0 }]}>
+            {m.name}
+          </Text>
+          <View
+            style={[
+              surfaces.pill,
+              {
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+                backgroundColor: isPaid ? toneBg.success : toneBg.danger,
+              },
+            ]}
+          >
+            <Text
+              variant="eyebrow"
+              style={{
+                color: isPaid ? hex.success : hex.danger,
+                textTransform: 'capitalize',
+                letterSpacing: 0.5,
+              }}
+            >
+              {isPaid ? 'Paid' : 'Unpaid'}
             </Text>
-          </View>
-          <View style={[layout.row, { gap: 8 }]}>
-            <StatusPill status={m.status} amount={buyIn} />
-            <ChevronRight size={16} color={c.mutedForeground} style={{ transform: [{ rotate: open ? '90deg' : '0deg' }] }} />
           </View>
         </View>
       </Pressable>
 
-      {open ? (
-        <View style={[layout.rowWrap, { gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: hex.hairline, paddingHorizontal: 16, paddingVertical: 12 }]}>
-          {m.isMe && m.status !== 'paid' && m.status !== 'refunded' ? <ChipBtn primary onPress={onPay} icon={Wallet}>Pay ${buyIn}</ChipBtn> : null}
-          {m.status === 'paid' ? <ChipBtn icon={Receipt}>View receipt</ChipBtn> : null}
-          {paymentsDevMode && m.status === 'paid' ? (
-            <ChipBtn icon={RefreshCw} onPress={onResetPayment}>Reset payment (dev)</ChipBtn>
-          ) : null}
-          {isCommish && m.status !== 'paid' && m.status !== 'refunded' ? (
-            <>
-              <ChipBtn icon={Bell} onPress={onRemind}>Send reminder</ChipBtn>
-              <ChipBtn icon={CheckCircle2} onPress={onMarkPaid}>Mark offline payment</ChipBtn>
-            </>
-          ) : null}
-          {isCommish && m.status === 'paid' ? <ChipBtn icon={RefreshCw} onPress={onRefund}>Issue refund</ChipBtn> : null}
-          <ChipBtn icon={Receipt}>Payment history</ChipBtn>
-        </View>
+      {open && actions.length > 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 8, paddingHorizontal: 16, paddingVertical: 12 }}
+          style={{
+            borderTopWidth: StyleSheet.hairlineWidth,
+            borderTopColor: hex.hairline,
+          }}
+        >
+          {actions.map((action) => (
+            <View key={action.key}>{action.node}</View>
+          ))}
+        </ScrollView>
       ) : null}
     </View>
   );
@@ -790,7 +824,7 @@ function PaymentPage({
   };
 
   return (
-    <View style={{ gap: 20 }}>
+    <View style={layout.screenStack}>
       <View style={[surfaces.roundedCardLg, { borderWidth: 0, backgroundColor: hex.foreground, padding: 24 }]}>
         <Text variant="eyebrow" style={{ color: 'rgba(252,252,252,0.6)' }}>Pay league dues</Text>
         <Text variant="bodySm" style={{ marginTop: 4, color: 'rgba(252,252,252,0.7)' }}>{member.name}</Text>
@@ -944,7 +978,7 @@ function PayoutReview({
   };
 
   return (
-    <View style={{ gap: 20 }}>
+    <View style={layout.screenStack}>
       <View style={[surfaces.roundedCardLg, { borderWidth: 0, padding: 20 }]}>
         <Text variant="eyebrow">{active.name} · {paymentsDevMode ? 'Dev payout test' : 'Final standings'}</Text>
         <Text variant="sectionTitle" style={{ marginTop: 4 }}>{payoutsExecuted ? 'Payouts complete' : 'Review & approve'}</Text>
@@ -1041,7 +1075,7 @@ function TreasurySettings({
   const [offline, setOffline] = useState(true);
 
   return (
-    <View style={{ gap: 20 }}>
+    <View style={layout.screenStack}>
       <Section title="Buy-in">
         <View style={[layout.row, { gap: 8 }]}>
           {[25, 50, 100, 200, 500].map((n) => (
@@ -1126,17 +1160,11 @@ function TreasurySettings({
 }
 
 /* ------------------------------ ATOMS ------------------------------ */
-function TreasuryBar({ title, backLabel, onBack }: { title: string; backLabel: string; onBack: () => void }) {
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
-  const c = useColors();
+function TreasuryBar({ onBack, showBack }: { onBack: () => void; showBack: boolean }) {
+  if (!showBack) return null;
   return (
-    <View style={[layout.rowBetween, { paddingHorizontal: 4, paddingTop: 8 }]}>
-      <Pressable onPress={onBack} style={[layout.row, { gap: 4, borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 6 }]}>
-        <ChevronLeft size={16} color={c.mutedForeground} />
-        <Text variant="link" muted>{backLabel}</Text>
-      </Pressable>
-      <Text variant="eyebrow">{title}</Text>
-      <View style={{ width: 48 }} />
+    <View style={{ paddingHorizontal: 4, paddingTop: 8, marginBottom: 8 }}>
+      <BackButton onPress={onBack} variant="muted" />
     </View>
   );
 }
@@ -1154,41 +1182,12 @@ function Section({ title, children, action }: { title: string; children: ReactNo
   );
 }
 
-function Stat({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: boolean }) {
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  const { hex, surfaces } = useThemeTokens();
   return (
     <View style={[surfaces.roundedCard, { width: '48%', padding: 16, borderRadius: 20 }]}>
       <Text variant="eyebrow" style={{ fontSize: 10 }}>{label}</Text>
       <Text variant="statValue" style={{ marginTop: 4, fontVariant: ['tabular-nums'], color: accent ? hex.warning : hex.foreground }}>{value}</Text>
-      {sub ? <Text variant="caption" muted>{sub}</Text> : null}
-    </View>
-  );
-}
-
-function StatusPill({ status, amount }: { status: PayState; amount: number }) {
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
-  const map: Record<PayState, { label: string; bg: string; fg: string }> = {
-    paid: { label: `Paid · $${amount}`, bg: toneBg.success, fg: hex.success },
-    pending: { label: 'Pending', bg: toneBg.neutral, fg: hex.foreground },
-    overdue: { label: 'Overdue', bg: toneBg.danger, fg: hex.danger },
-    failed: { label: 'Failed', bg: toneBg.danger, fg: hex.danger },
-    refunded: { label: 'Refunded', bg: toneBg.neutral, fg: hex.mutedForeground },
-    unpaid: { label: 'Unpaid', bg: toneBg.neutral, fg: hex.mutedForeground },
-  };
-  const s = map[status];
-  return (
-    <View style={[surfaces.pill, { paddingHorizontal: 10, paddingVertical: 4, backgroundColor: s.bg }]}>
-      <Text variant="eyebrow" style={{ color: s.fg, textTransform: 'none', letterSpacing: 0.5 }}>{s.label}</Text>
-    </View>
-  );
-}
-
-function Avatar({ name }: { name: string }) {
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
-  const initials = name.split(' ').map((w) => w[0]).slice(0, 2).join('');
-  return (
-    <View style={[surfaces.iconBoxSm, { flexShrink: 0, borderRadius: 9999, backgroundColor: hex.background }]}>
-      <Text variant="bodySm" style={{ fontSize: 12 }}>{initials}</Text>
     </View>
   );
 }

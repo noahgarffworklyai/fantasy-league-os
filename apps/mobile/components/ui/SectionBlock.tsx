@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 import { Text, View } from './primitives';
 import { useThemeStyles } from '@/lib/theme';
+import { spacing } from '@/lib/tokens';
 
 /** Section with uppercase label + elevated card body (WorkflowShell style). */
 export function SectionBlock({
@@ -14,8 +15,8 @@ export function SectionBlock({
 }) {
   const { layout, surfaces } = useThemeStyles();
   return (
-    <View style={{ marginBottom: 20 }}>
-      <View style={[layout.rowBetween, { marginBottom: 8, paddingHorizontal: 8 }]}>
+    <View style={{ marginBottom: spacing.screen }}>
+      <View style={[layout.rowBetween, { marginBottom: spacing.section, paddingHorizontal: 8 }]}>
         <Text variant="eyebrow" style={{ letterSpacing: 1.5, textTransform: 'uppercase' }}>
           {title}
         </Text>

@@ -71,11 +71,24 @@ function mapPosition(position?: string) {
 
 export function resolveSleeperOwnerId(
   teams: CanonicalTeam[],
-  input: { displayName?: string; teamName?: string | null; providerTeamId?: string | null },
+  input: {
+    displayName?: string;
+    teamName?: string | null;
+    providerTeamId?: string | null;
+    ownerExternalId?: string | null;
+  },
 ): string | null {
+  if (input.ownerExternalId) {
+    const byOwner = teams.find((t) => t.ownerExternalId === input.ownerExternalId);
+    if (byOwner?.ownerExternalId) return byOwner.ownerExternalId;
+  }
+
   if (input.providerTeamId) {
     const byRoster = teams.find((t) => t.externalTeamId === input.providerTeamId);
     if (byRoster?.ownerExternalId) return byRoster.ownerExternalId;
+    // Legacy rows stored owner_id in provider_team_id.
+    const byStoredOwner = teams.find((t) => t.ownerExternalId === input.providerTeamId);
+    if (byStoredOwner?.ownerExternalId) return byStoredOwner.ownerExternalId;
   }
 
   if (input.teamName) {
