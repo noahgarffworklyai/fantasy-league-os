@@ -101,7 +101,7 @@ export default function JoinPage() {
               Buy-in ${Math.round(preview.buyInCents / 100)} · {preview.memberCount} members
             </Text>
           </View>
-          <PreviewRow label="Platform fee" value={`$${Math.round(preview.platformFeeCents / 100)}`} />
+          <PreviewRow label="Processing fee (5%)" value={`$${Math.round(preview.platformFeeCents / 100)}`} />
           <PreviewRow label="Members" value={`${preview.memberCount}`} />
           <PreviewRow
             label="Expires"

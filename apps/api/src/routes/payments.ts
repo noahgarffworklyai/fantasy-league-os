@@ -89,7 +89,7 @@ export async function paymentRoutes(app: FastifyInstance) {
         {
           price_data: {
             currency: 'usd',
-            product_data: { name: 'Platform fee' },
+            product_data: { name: 'Processing fee (5%)' },
             unit_amount: league.platformFeeCents,
           },
           quantity: 1,

@@ -250,15 +250,16 @@ export async function buildLeaguePlayerSearch(input: {
   const tab = input.tab ?? 'all';
 
   if (tab === 'pool') {
-    const results: SleeperPlayerRecord[] = [];
-    for (const player of cache.values()) {
-      if (!isPoolPlayer(player)) continue;
-      if (!matchesPoolPosition(player, input.position)) continue;
-      results.push(player);
-    }
-    return results
-      .sort((a, b) => playerName(a).localeCompare(playerName(b)))
-      .map((p) => toPlayerSearchRow(p, context));
+    const q = input.query?.trim() ?? '';
+    if (!q) return [];
+
+    const found = await searchSleeperPlayers({
+      query: q,
+      position: input.position,
+      limit: input.limit ?? 80,
+      mode: 'pool',
+    });
+    return found.map((p) => toPlayerSearchRow(p, context));
   }
 
   if (tab === 'trending' || tab === 'all') {

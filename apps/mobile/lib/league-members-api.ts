@@ -18,7 +18,7 @@ export async function fetchLeagueMemberRows(leagueId: string): Promise<LeagueMem
 
   return treasury.members.map((member) => ({
     ...member,
-    role: roleByUser.get(member.userId) ?? 'member',
+    role: (member.userId ? roleByUser.get(member.userId) : undefined) ?? 'member',
   }));
 }
 

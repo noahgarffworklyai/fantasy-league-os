@@ -1,16 +1,16 @@
 import { sleeperPlayerImageUrl } from '@flos/shared';
 import {
-  fetchSeasonPlayerDirectory,
-  fetchSeasonPlayerRanks,
   formatPosRankLabel,
+  loadCurrentSeasonPlayerStats,
   rankTradeValue,
   type PlayerDirectoryEntry,
+  type PlayerRankInfo,
 } from './sleeper-player-ranks';
-import { fetchNflState, resolveStatsSeason } from './sleeper-projections-api';
 import { fetchLeagueDetail } from './league-snapshot-api';
 import { fetchMyTeamRoster } from './team-roster-api';
 import type { TradeAsset } from './trade-players-api';
 import { fetchLeagueMates } from './league-mates-api';
+import { fetchWithTimeout } from './fetch-timeout';
 
 const SLEEPER_BASE = 'https://api.sleeper.app/v1';
 
@@ -21,7 +21,7 @@ type SleeperRoster = {
 };
 
 async function sleeperFetch<T>(path: string): Promise<T> {
-  const res = await fetch(`${SLEEPER_BASE}${path}`);
+  const res = await fetchWithTimeout(`${SLEEPER_BASE}${path}`);
   if (!res.ok) throw new Error(`Sleeper API error: ${res.status} ${path}`);
   return res.json() as Promise<T>;
 }
@@ -29,7 +29,7 @@ async function sleeperFetch<T>(path: string): Promise<T> {
 function toTradeAsset(
   playerId: string,
   directory: Map<string, PlayerDirectoryEntry>,
-  ranks: Map<string, { posRank: number; position?: string }>,
+  ranks: Map<string, PlayerRankInfo>,
 ): TradeAsset | null {
   const info = directory.get(playerId);
   if (!info) return null;
@@ -71,7 +71,7 @@ const DEMO_POOLS: Record<string, Array<{ id: string; name: string; pos: string; 
 };
 
 function demoPools(
-  ranks: Map<string, { posRank: number }>,
+  ranks: Map<string, PlayerRankInfo>,
   mates: Array<{ id: string }>,
 ): Record<string, TradeAsset[]> {
   const fallbackKeys = Object.keys(DEMO_POOLS);
@@ -99,14 +99,24 @@ function demoPools(
 export async function fetchLeagueRosterPools(
   leagueId: string,
   isSynced: boolean,
+  preloaded?: {
+    ranks: Map<string, PlayerRankInfo>;
+    directory: Map<string, PlayerDirectoryEntry>;
+  },
 ): Promise<Record<string, TradeAsset[]>> {
-  const mates = await fetchLeagueMates(leagueId, isSynced);
-  const state = await fetchNflState();
-  const season = resolveStatsSeason(state);
-  const [ranks, directory] = await Promise.all([
-    fetchSeasonPlayerRanks(season),
-    fetchSeasonPlayerDirectory(season),
-  ]);
+  const mates = await fetchLeagueMates(leagueId, isSynced).catch(() => [] as Awaited<ReturnType<typeof fetchLeagueMates>>);
+
+  let ranks = preloaded?.ranks ?? new Map<string, PlayerRankInfo>();
+  let directory = preloaded?.directory ?? new Map<string, PlayerDirectoryEntry>();
+  if (!preloaded) {
+    try {
+      const stats = await loadCurrentSeasonPlayerStats();
+      ranks = stats.ranks;
+      directory = stats.directory;
+    } catch {
+      return demoPools(ranks, mates);
+    }
+  }
 
   const detail = await fetchLeagueDetail(leagueId);
   const externalId = detail.providerLink?.externalLeagueId;

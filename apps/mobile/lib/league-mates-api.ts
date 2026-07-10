@@ -4,6 +4,8 @@ import { personAvatar } from './avatars';
 import { fetchLeagueDetail } from './league-snapshot-api';
 import { fetchMyTeamRoster } from './team-roster-api';
 
+import { fetchWithTimeout } from './fetch-timeout';
+
 const SLEEPER_BASE = 'https://api.sleeper.app/v1';
 
 export type LeagueMate = {
@@ -29,7 +31,7 @@ type SleeperRoster = {
 };
 
 async function sleeperFetch<T>(path: string): Promise<T> {
-  const res = await fetch(`${SLEEPER_BASE}${path}`);
+  const res = await fetchWithTimeout(`${SLEEPER_BASE}${path}`);
   if (!res.ok) throw new Error(`Sleeper API error: ${res.status} ${path}`);
   return res.json() as Promise<T>;
 }

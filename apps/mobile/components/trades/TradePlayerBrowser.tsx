@@ -6,15 +6,14 @@ import { AvatarImage } from '@/components/ui/AvatarImage';
 import { Card, Divider } from '@/components/ui/Card';
 import { Pressable, Text } from '@/components/ui/primitives';
 import { playerAvatar } from '@/lib/avatars';
-import { mapSearchRowToPlayer, usePlayerSearch } from '@/lib/players-api';
+import { mapSearchRowToPlayer, usePlayerSearch, usePoolValuePreview } from '@/lib/players-api';
 import {
   formatPosRankLabel,
-  loadCurrentSeasonPlayerRanks,
   rankTradeValue,
+  useSeasonPlayerRanks,
 } from '@/lib/sleeper-player-ranks';
 import { useColors, useThemeTokens } from '@/lib/theme';
 import { spacing } from '@/lib/tokens';
-import { useQuery } from '@tanstack/react-query';
 
 const FILTERS = ['All', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 type PositionFilter = (typeof FILTERS)[number];
@@ -147,6 +146,53 @@ function SortHeader({
   );
 }
 
+function PlayerRow({
+  player,
+  onPress,
+}: {
+  player: TradeBrowserPlayer;
+  onPress: (player: TradeBrowserPlayer) => void;
+}) {
+  const { layout } = useThemeTokens();
+
+  return (
+    <Pressable onPress={() => onPress(player)}>
+      <View style={[layout.listRow, { paddingHorizontal: 16, paddingVertical: 12, gap: 12 }]}>
+        <View style={{ flex: 2, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <AvatarImage
+            src={playerAvatar({
+              playerId: player.id,
+              name: player.name,
+              team: player.team,
+              imageUrl: player.imageUrl,
+            })}
+            name={player.name}
+            size={40}
+          />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text variant="body" numberOfLines={1}>
+              {player.name}
+            </Text>
+            <Text variant="bodyMuted" numberOfLines={1}>
+              {player.team} · {player.pos}
+            </Text>
+          </View>
+        </View>
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <Text variant="bodySm" numberOfLines={1} style={{ fontVariant: ['tabular-nums'], textAlign: 'center' }}>
+            {formatRankValue(player.posRank)}
+          </Text>
+        </View>
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <Text variant="bodySm" style={{ fontVariant: ['tabular-nums'], textAlign: 'center' }}>
+            {player.tradeValue || 0}
+          </Text>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
 export function TradePlayerBrowser({
   leagueId,
   onPlayer,
@@ -166,6 +212,7 @@ export function TradePlayerBrowser({
   const [filterOpen, setFilterOpen] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('value');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const hasQuery = q.trim().length >= 1;
 
   const handleSort = (key: SortKey) => {
     if (key === sortKey) {
@@ -176,18 +223,19 @@ export function TradePlayerBrowser({
     setSortDir(defaultSortDir(key));
   };
 
-  const { data, isLoading, isError, isFetching } = usePlayerSearch(leagueId, {
-    search: q,
-    position: pos,
-    tab: 'pool',
-  });
-  const { data: ranks, isLoading: ranksLoading } = useQuery({
-    queryKey: ['trade-browser-ranks'],
-    queryFn: loadCurrentSeasonPlayerRanks,
-    staleTime: 5 * 60_000,
-  });
+  const { data, isLoading, isError, isFetching } = usePlayerSearch(
+    leagueId,
+    { search: q, position: pos, tab: 'pool' },
+    { enabled: hasQuery },
+  );
+  const {
+    players: previewPlayers,
+    isLoading: previewLoading,
+    isError: previewError,
+  } = usePoolValuePreview({ position: pos });
+  const { data: ranks } = useSeasonPlayerRanks();
 
-  const players = useMemo(() => {
+  const searchPlayers = useMemo(() => {
     const rankMap = ranks ?? new Map();
     const rows = (data?.players ?? []).map((row) =>
       enrichSearchPlayer(mapSearchRowToPlayer(row), rankMap),
@@ -196,8 +244,19 @@ export function TradePlayerBrowser({
     return sortPlayers(filtered, sortKey, sortDir);
   }, [data?.players, ranks, pos, sortKey, sortDir]);
 
-  const loading = (ranksLoading && !ranks) || (isLoading && !data);
-  const refreshing = isFetching && !!data;
+  const previewAsBrowser = useMemo(
+    (): TradeBrowserPlayer[] =>
+      previewPlayers.map((p) => ({
+        ...p,
+        mine: false,
+      })),
+    [previewPlayers],
+  );
+
+  const players = hasQuery ? searchPlayers : previewAsBrowser;
+  const loading = hasQuery ? isLoading && !data : previewLoading;
+  const refreshing = hasQuery && isFetching && !!data;
+  const showError = hasQuery ? isError : previewError;
 
   const searchRow = (
     <View style={[layout.row, layout.tight]}>
@@ -273,7 +332,7 @@ export function TradePlayerBrowser({
     <View style={{ paddingVertical: 20, alignItems: 'center' }}>
       <ActivityIndicator color={hex.primary} />
     </View>
-  ) : isError ? (
+  ) : showError ? (
     <View style={[surfaces.emptyState, { marginTop: 0 }]}>
       <Text variant="bodySm">Could not load players</Text>
       <Text variant="bodyMuted" style={{ marginTop: 4 }}>
@@ -288,52 +347,32 @@ export function TradePlayerBrowser({
       </Text>
     </View>
   ) : (
-    <Card>
-      {refreshing ? (
-        <View style={{ paddingVertical: 8, alignItems: 'center' }}>
-          <ActivityIndicator color={hex.primary} size="small" />
-        </View>
+    <View style={{ gap: 8 }}>
+      {!hasQuery ? (
+        <Text variant="eyebrow" style={{ paddingHorizontal: 4, letterSpacing: 1.1 }}>
+          Top by value
+        </Text>
       ) : null}
-      <SortHeader sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-      <Divider />
-      {players.map((p, i) => (
-        <Pressable key={p.id} onPress={() => onPlayer(p)}>
-          {i > 0 ? <Divider /> : null}
-          <View style={[layout.listRow, { paddingHorizontal: 16, paddingVertical: 12, gap: 12 }]}>
-            <View style={{ flex: 2, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <AvatarImage
-                src={playerAvatar({
-                  playerId: p.id,
-                  name: p.name,
-                  team: p.team,
-                  imageUrl: p.imageUrl,
-                })}
-                name={p.name}
-                size={40}
-              />
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text variant="body" numberOfLines={1}>
-                  {p.name}
-                </Text>
-                <Text variant="bodyMuted" numberOfLines={1}>
-                  {p.team} · {p.pos}
-                </Text>
-              </View>
-            </View>
-            <View style={{ flex: 1, alignItems: 'center' }}>
-              <Text variant="bodySm" numberOfLines={1} style={{ fontVariant: ['tabular-nums'], textAlign: 'center' }}>
-                {formatRankValue(p.posRank)}
-              </Text>
-            </View>
-            <View style={{ flex: 1, alignItems: 'center' }}>
-              <Text variant="bodySm" style={{ fontVariant: ['tabular-nums'], textAlign: 'center' }}>
-                {p.tradeValue || 0}
-              </Text>
-            </View>
+      <Card>
+        {refreshing ? (
+          <View style={{ paddingVertical: 8, alignItems: 'center' }}>
+            <ActivityIndicator color={hex.primary} size="small" />
           </View>
-        </Pressable>
-      ))}
-    </Card>
+        ) : null}
+        {hasQuery ? (
+          <>
+            <SortHeader sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <Divider />
+          </>
+        ) : null}
+        {players.map((p, i) => (
+          <View key={p.id}>
+            {i > 0 ? <Divider /> : null}
+            <PlayerRow player={p} onPress={onPlayer} />
+          </View>
+        ))}
+      </Card>
+    </View>
   );
 
   if (searchMode) {

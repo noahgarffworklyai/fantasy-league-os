@@ -1,12 +1,27 @@
 import { api } from './api';
 
 export type TreasuryMember = {
-  userId: string;
+  id: string;
+  userId: string | null;
   displayName: string;
   teamName: string | null;
   providerTeamId: string | null;
+  ownerExternalId: string | null;
+  ownerAvatarUrl: string | null;
   paid: boolean;
   paidAt: string | null;
+  isAppMember: boolean;
+  rank: number | null;
+};
+
+export type TreasuryPayoutSlot = {
+  place: number;
+  percent: number;
+  amountCents: number;
+  teamExternalId: string | null;
+  teamName: string | null;
+  ownerName: string | null;
+  userId: string | null;
 };
 
 export type TreasuryLedgerActivity = {
@@ -25,13 +40,26 @@ export type TreasuryData = {
   totalMemberCount: number;
   payoutTemplate: string;
   payoutPreview: Array<{ place: number; percent: number; amountCents: number }>;
+  payoutSlots: TreasuryPayoutSlot[];
   stripeConnectOnboarded: boolean;
   paymentsDevMode?: boolean;
   members: TreasuryMember[];
   ledgerActivity?: TreasuryLedgerActivity[];
+  rosterSource?: string;
 };
 
-export async function fetchTreasury(leagueId: string): Promise<TreasuryData> {
+export async function syncLeagueFromProvider(leagueId: string): Promise<void> {
+  try {
+    await api.post(`/leagues/${leagueId}/sync`);
+  } catch {
+    // Fall back to cached snapshot if live sync fails.
+  }
+}
+
+export async function fetchTreasury(leagueId: string, options?: { sync?: boolean }): Promise<TreasuryData> {
+  if (options?.sync) {
+    await syncLeagueFromProvider(leagueId);
+  }
   return api.get<TreasuryData>(`/leagues/${leagueId}/treasury`);
 }
 

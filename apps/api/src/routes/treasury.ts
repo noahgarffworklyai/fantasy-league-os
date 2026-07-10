@@ -1,11 +1,13 @@
 import { executePayoutSchema } from '@flos/shared';
 import { and, eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
+import type { CanonicalLeague } from '@flos/shared';
 import { z } from 'zod';
 import { config } from '../config.js';
 import { db } from '../db/index.js';
 import {
   leagueMembers,
+  leagueProviderLinks,
   leagues,
   payments,
   treasuryLedger,
@@ -13,7 +15,14 @@ import {
 } from '../db/schema.js';
 import { authMiddleware, requireLeagueMembership, type AuthenticatedRequest } from '../lib/auth-middleware.js';
 import { completeBuyInPayment } from '../lib/complete-buy-in.js';
+import { decryptCredentials } from '../lib/crypto.js';
 import { requireStripe } from '../lib/stripe.js';
+import {
+  buildPayoutPreviewWithMembers,
+  dbMembersToTreasuryRoster,
+  mergeTreasuryRoster,
+  resolveTreasuryLeagueSnapshot,
+} from '../lib/treasury-members.js';
 import { computePayoutPreview, computePotFromLedger, getPayoutSplits } from '../lib/treasury.js';
 
 export async function treasuryRoutes(app: FastifyInstance) {
@@ -64,12 +73,18 @@ export async function treasuryRoutes(app: FastifyInstance) {
     }
 
     const [league] = await db.select().from(leagues).where(eq(leagues.id, id)).limit(1);
+    const [link] = await db
+      .select()
+      .from(leagueProviderLinks)
+      .where(eq(leagueProviderLinks.leagueId, id))
+      .limit(1);
+
     const ledger = await db
       .select()
       .from(treasuryLedger)
       .where(eq(treasuryLedger.leagueId, id));
 
-    const members = await db
+    const dbMembers = await db
       .select({
         userId: leagueMembers.userId,
         displayName: users.displayName,
@@ -82,16 +97,44 @@ export async function treasuryRoutes(app: FastifyInstance) {
       .innerJoin(users, eq(leagueMembers.userId, users.id))
       .where(eq(leagueMembers.leagueId, id));
 
+    const snapshot = link?.snapshot as CanonicalLeague | null;
+    const { teams, standings } = link
+      ? await resolveTreasuryLeagueSnapshot({
+          provider: link.provider,
+          externalLeagueId: link.externalLeagueId,
+          snapshot,
+          encryptedCredentials: link.encryptedCredentials,
+          decryptCredentials,
+        })
+      : { teams: [], standings: [] };
+
+    const members =
+      teams.length > 0
+        ? mergeTreasuryRoster(teams, standings, dbMembers)
+        : dbMembersToTreasuryRoster(dbMembers);
+
     const potCents = computePotFromLedger(ledger);
     const paidMemberCount = members.filter((m) => m.paid).length;
+    const totalMemberCount = members.length;
+    const payoutPreview = computePayoutPreview(potCents, league.payoutTemplate);
+    const payoutSlots =
+      teams.length > 0
+        ? buildPayoutPreviewWithMembers(potCents, league.payoutTemplate, standings, teams, members)
+        : payoutPreview.map((slot) => ({
+            ...slot,
+            teamExternalId: null,
+            teamName: null,
+            ownerName: null,
+            userId: null,
+          }));
 
     const ledgerActivity = ledger
       .slice()
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .slice(0, 12)
       .map((entry) => {
-        const member = members.find((m) => m.userId === entry.userId);
-        const who = member?.displayName ?? 'Member';
+        const member = members.find((m) => m.userId && m.userId === entry.userId);
+        const who = member?.displayName ?? member?.teamName ?? 'Member';
         const dollars = (entry.amountCents / 100).toLocaleString(undefined, {
           style: 'currency',
           currency: 'USD',
@@ -115,13 +158,15 @@ export async function treasuryRoutes(app: FastifyInstance) {
       platformFeeCents: league.platformFeeCents,
       buyInCents: league.buyInCents,
       paidMemberCount,
-      totalMemberCount: members.length,
+      totalMemberCount,
       payoutTemplate: league.payoutTemplate,
-      payoutPreview: computePayoutPreview(potCents, league.payoutTemplate),
+      payoutPreview,
+      payoutSlots,
       stripeConnectOnboarded: league.connectOnboarded,
       paymentsDevMode: !config.stripeSecretKey,
       members,
       ledgerActivity,
+      rosterSource: teams.length > 0 ? (link?.provider ?? 'snapshot') : 'hosted',
     };
   });
 

@@ -3,11 +3,10 @@ import { sleeperPlayerImageUrl } from '@flos/shared';
 import { tradeIdeas, type TradeIdea, type TradeIdeaPlayer } from './ai-intelligence';
 import { fetchLeagueMates, type LeagueMate } from './league-mates-api';
 import {
-  fetchSeasonPlayerRanks,
   formatPosRankLabel,
+  loadCurrentSeasonPlayerRanksShared,
   rankTradeValue,
 } from './sleeper-player-ranks';
-import { fetchNflState, resolveStatsSeason } from './sleeper-projections-api';
 
 export type EnrichedTradeIdeaPlayer = TradeIdeaPlayer & {
   imageUrl: string;
@@ -34,6 +33,23 @@ const FALLBACK_MANAGERS: EnrichedTradeIdeaManager[] = [
   { id: 'm3', userId: 'm3', username: 'devonreed', name: 'Devon Reed', team: 'Reed Between' },
   { id: 'm4', userId: 'm4', username: 'priyashah', name: 'Priya Shah', team: 'Shah Bros' },
 ];
+
+function buildInitialEnrichedTradeIdeas(): EnrichedTradeIdea[] {
+  return tradeIdeas.map((idea) => ({
+    ...idea,
+    manager: FALLBACK_MANAGERS[idea.mateIndex % FALLBACK_MANAGERS.length],
+    give: idea.give.map((p) => ({
+      ...p,
+      imageUrl: sleeperPlayerImageUrl(p.id),
+    })),
+    receive: idea.receive.map((p) => ({
+      ...p,
+      imageUrl: sleeperPlayerImageUrl(p.id),
+    })),
+  }));
+}
+
+const INITIAL_TRADE_IDEAS = buildInitialEnrichedTradeIdeas();
 
 function enrichPlayer(
   player: TradeIdeaPlayer,
@@ -70,13 +86,19 @@ function resolveManager(mates: LeagueMate[], mateIndex: number): EnrichedTradeId
 export function useEnrichedTradeIdeas(leagueId: string | undefined, isSynced: boolean) {
   return useQuery({
     queryKey: ['trade-ideas-enriched', leagueId, isSynced],
+    initialData: INITIAL_TRADE_IDEAS,
+    initialDataUpdatedAt: 0,
     queryFn: async (): Promise<EnrichedTradeIdea[]> => {
-      const [state, mates] = await Promise.all([
-        fetchNflState(),
-        leagueId ? fetchLeagueMates(leagueId, isSynced) : Promise.resolve([] as LeagueMate[]),
-      ]);
-      const season = resolveStatsSeason(state);
-      const ranks = await fetchSeasonPlayerRanks(season);
+      const mates = leagueId
+        ? await fetchLeagueMates(leagueId, isSynced).catch(() => [] as LeagueMate[])
+        : [];
+
+      let ranks = new Map<string, { posRank: number; position?: string }>();
+      try {
+        ranks = await loadCurrentSeasonPlayerRanksShared();
+      } catch {
+        // Show ideas without live ranks if Sleeper is slow or unreachable.
+      }
 
       return tradeIdeas.map((idea) => ({
         ...idea,
@@ -87,6 +109,7 @@ export function useEnrichedTradeIdeas(leagueId: string | undefined, isSynced: bo
     },
     enabled: !!leagueId,
     staleTime: 5 * 60_000,
+    retry: 1,
     refetchOnWindowFocus: isSynced,
   });
 }

@@ -12,7 +12,13 @@ import { CommissionerSheetProvider } from '@/lib/commissioner-sheet-context';
 import { LeagueProvider, useLeague } from '@/lib/league-context';
 import { ThemeProvider, useTheme, useHex } from '@/lib/theme';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+    },
+  },
+});
 
 const ONBOARDING_PATHS = ['/welcome', '/auth', '/onboarding'];
 function isOnboardingPath(p: string) {

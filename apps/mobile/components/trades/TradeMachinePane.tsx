@@ -71,10 +71,12 @@ export function TradeMachinePane({
   leagueId,
   myPlayers,
   onBack,
+  onSearchFocusChange,
 }: {
   leagueId?: string;
   myPlayers: TradeAsset[];
   onBack: () => void;
+  onSearchFocusChange?: (focused: boolean) => void;
 }) {
   const { hex, layout, surfaces } = useThemeTokens();
   const { scheme } = useTheme();
@@ -82,6 +84,7 @@ export function TradeMachinePane({
   const [give, setGive] = useState<string[]>([]);
   const [receiveAssets, setReceiveAssets] = useState<Map<string, TradeAsset>>(new Map());
   const [scoreSubmitted, setScoreSubmitted] = useState(false);
+  const [pickerSearchActive, setPickerSearchActive] = useState(false);
 
   const myPlayerIds = useMemo(() => new Set(myPlayers.map((p) => p.id)), [myPlayers]);
 
@@ -119,92 +122,101 @@ export function TradeMachinePane({
     });
   };
 
+  const handlePickerSearchFocus = (focused: boolean) => {
+    setPickerSearchActive(focused);
+    onSearchFocusChange?.(focused);
+  };
+
   return (
-    <View style={layout.sectionBlock}>
+    <View style={[layout.sectionBlock, pickerSearchActive && { flex: 1 }]}>
       <BackButton onPress={onBack} />
 
-      <View style={{ gap: spacing.section }}>
-        <Card>
-          <View style={{ padding: 16, gap: 14 }}>
-            <TradeOutcomeScale
-              score={evaluation.score}
-              verdict={evaluation.verdict}
-              verdictLabel={evaluation.verdictLabel}
-            />
-          </View>
-        </Card>
-
-        <Card>
-          <View style={{ padding: 16 }}>
-            <Text variant="eyebrow" style={{ marginBottom: 12, letterSpacing: 1.2 }}>
-              Trade breakdown
-            </Text>
-            <View style={[layout.row, { gap: 16, alignItems: 'flex-start' }]}>
-              <TradeSideColumn
-                title="You send"
-                players={givePlayers}
-                accent={hex.danger}
-                emptyLabel="Swipe your roster and tap to trade away."
-              />
-              <View style={{ width: StyleSheet.hairlineWidth, alignSelf: 'stretch', backgroundColor: hex.hairline }} />
-              <TradeSideColumn
-                title="You receive"
-                players={receivePlayers}
-                accent={hex.success}
-                emptyLabel="Search the pool below to trade for players."
-              />
-            </View>
-
-            {mockTradeReady && !scoreSubmitted ? (
-              <Pressable
-                onPress={() => setScoreSubmitted(true)}
-                style={[
-                  surfaces.aiButton,
-                  surfaces.aiButtonSecondary,
-                  {
-                    marginTop: 16,
-                    borderWidth: StyleSheet.hairlineWidth,
-                    borderColor: `rgba(${ink},0.12)`,
-                  },
-                ]}
-              >
-                <Text variant="button">Score trade</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        </Card>
-
-        {scoreSubmitted && mockTradeReady ? (
-          <CommissionerInsightsCard paragraphs={evaluation.paragraphs} bullets={evaluation.bullets} />
-        ) : null}
-
-        <View style={{ gap: 10 }}>
-          <Text variant="eyebrow" style={{ paddingHorizontal: 4, letterSpacing: 1.2 }}>
-            Trade away
-          </Text>
-          <TradeMachineMyPlayersCarousel
-            players={myPlayers}
-            selectedIds={give}
-            onToggle={toggleGive}
-          />
-        </View>
-
-        {leagueId ? (
-          <TradeMachineReceivePicker
-            leagueId={leagueId}
-            excludeIds={myPlayerIds}
-            selectedIds={receive}
-            selectedAssets={receiveAssets}
-            onToggle={toggleReceive}
-          />
-        ) : (
+      {pickerSearchActive ? null : (
+        <View style={{ gap: spacing.section }}>
           <Card>
-            <View style={{ padding: 16 }}>
-              <Text variant="bodyMuted">Connect a league to search the Sleeper player pool.</Text>
+            <View style={{ padding: 16, gap: 14 }}>
+              <TradeOutcomeScale
+                score={evaluation.score}
+                verdict={evaluation.verdict}
+                verdictLabel={evaluation.verdictLabel}
+              />
             </View>
           </Card>
-        )}
-      </View>
+
+          <Card>
+            <View style={{ padding: 16 }}>
+              <Text variant="eyebrow" style={{ marginBottom: 12, letterSpacing: 1.2 }}>
+                Trade breakdown
+              </Text>
+              <View style={[layout.row, { gap: 16, alignItems: 'flex-start' }]}>
+                <TradeSideColumn
+                  title="You send"
+                  players={givePlayers}
+                  accent={hex.danger}
+                  emptyLabel="Swipe your roster and tap to trade away."
+                />
+                <View style={{ width: StyleSheet.hairlineWidth, alignSelf: 'stretch', backgroundColor: hex.hairline }} />
+                <TradeSideColumn
+                  title="You receive"
+                  players={receivePlayers}
+                  accent={hex.success}
+                  emptyLabel="Search the pool below to trade for players."
+                />
+              </View>
+
+              {mockTradeReady && !scoreSubmitted ? (
+                <Pressable
+                  onPress={() => setScoreSubmitted(true)}
+                  style={[
+                    surfaces.aiButton,
+                    surfaces.aiButtonSecondary,
+                    {
+                      marginTop: 16,
+                      borderWidth: StyleSheet.hairlineWidth,
+                      borderColor: `rgba(${ink},0.12)`,
+                    },
+                  ]}
+                >
+                  <Text variant="button">Score trade</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </Card>
+
+          {scoreSubmitted && mockTradeReady ? (
+            <CommissionerInsightsCard paragraphs={evaluation.paragraphs} bullets={evaluation.bullets} />
+          ) : null}
+
+          <View style={{ gap: 10 }}>
+            <Text variant="eyebrow" style={{ paddingHorizontal: 4, letterSpacing: 1.2 }}>
+              Trade away
+            </Text>
+            <TradeMachineMyPlayersCarousel
+              players={myPlayers}
+              selectedIds={give}
+              onToggle={toggleGive}
+            />
+          </View>
+        </View>
+      )}
+
+      {leagueId ? (
+        <TradeMachineReceivePicker
+          leagueId={leagueId}
+          excludeIds={myPlayerIds}
+          selectedIds={receive}
+          selectedAssets={receiveAssets}
+          onToggle={toggleReceive}
+          searchMode={pickerSearchActive}
+          onSearchFocusChange={handlePickerSearchFocus}
+        />
+      ) : (
+        <Card>
+          <View style={{ padding: 16 }}>
+            <Text variant="bodyMuted">Connect a league to search the Sleeper player pool.</Text>
+          </View>
+        </Card>
+      )}
     </View>
   );
 }
