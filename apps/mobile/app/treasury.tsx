@@ -16,7 +16,9 @@ import { Pressable, Text } from '@/components/ui/primitives';
 import { AvatarImage } from '@/components/ui/AvatarImage';
 import { Screen } from '@/components/ui/Screen';
 import { BackButton } from '@/components/ui/BackButton';
+import { HeaderAvatarButton } from '@/components/AppChrome';
 import { PageIntro } from '@/components/ui/PageIntro';
+import { SegmentedTabLabel } from '@/components/ui/Segmented';
 import { Toggle } from '@/components/ui/Toggle';
 import { useLeague, type League } from '@/lib/league-context';
 import { useAuthStore } from '@/lib/auth-store';
@@ -206,7 +208,7 @@ export default function TreasuryPage() {
     <Screen>
       <View style={layout.screen}>
         {view.kind === 'home' ? (
-          <PageIntro title="Treasury" />
+          <PageIntro title="Treasury" trailing={<HeaderAvatarButton />} />
         ) : (
           <TreasuryBar onBack={goBack} showBack />
         )}
@@ -431,7 +433,7 @@ function TreasuryHome({
           const isActive = t.key === tab;
           return (
             <Pressable key={t.key} onPress={() => setTab(t.key)} style={isActive ? surfaces.segmentedTabActive : surfaces.segmentedTab}>
-              <Text variant="tab" style={{ color: isActive ? hex.primaryForeground : hex.mutedForeground }}>{t.label}</Text>
+              <SegmentedTabLabel active={isActive}>{t.label}</SegmentedTabLabel>
             </Pressable>
           );
         })}
@@ -1054,7 +1056,7 @@ function PaymentPage({
         </Text>
       </View>
 
-      <Pressable onPress={submit} disabled={processing} style={[surfaces.primaryButton, { height: 52, opacity: processing ? 0.5 : 1 }]}>
+      <Pressable onPress={submit} disabled={processing} style={[surfaces.primaryButton, { opacity: processing ? 0.5 : 1 }]}>
         <Text variant="body" style={{ color: hex.background }}>
           {processing ? 'Processing…' : devMode ? `Record $${total.toLocaleString()} (dev)` : `Pay $${total.toLocaleString()}`}
         </Text>
@@ -1233,7 +1235,7 @@ function PayoutReview({
       <Pressable
         onPress={handleApprove}
         disabled={approved || executing || isLoading || isError}
-        style={[surfaces.primaryButton, { height: 52, backgroundColor: approved ? hex.success : hex.foreground, opacity: approved || executing ? 0.7 : 1 }]}
+        style={[surfaces.primaryButton, { backgroundColor: approved ? hex.success : hex.foreground, opacity: approved || executing ? 0.7 : 1 }]}
       >
         <Text variant="body" style={{ color: hex.background }}>
           {approved ? 'Payouts distributed' : executing ? 'Distributing…' : 'Approve payouts'}
@@ -1321,7 +1323,7 @@ function TreasurySettings({
               onPress={() => setReminder(o.id as typeof reminder)}
               style={reminder === o.id ? surfaces.segmentedTabActive : surfaces.segmentedTab}
             >
-              <Text variant="tab" style={{ color: reminder === o.id ? hex.primaryForeground : hex.mutedForeground }}>{o.label}</Text>
+              <SegmentedTabLabel active={reminder === o.id}>{o.label}</SegmentedTabLabel>
             </Pressable>
           ))}
         </View>
@@ -1344,7 +1346,7 @@ function TreasurySettings({
       <Pressable
         onPress={() => onSave(localBuyIn, localStructure)}
         disabled={saving}
-        style={[surfaces.primaryButton, { height: 52, opacity: saving ? 0.5 : 1 }]}
+        style={[surfaces.primaryButton, { opacity: saving ? 0.5 : 1 }]}
       >
         <Text variant="body" style={{ color: hex.background }}>{saving ? 'Saving…' : 'Save treasury settings'}</Text>
       </Pressable>

@@ -2,13 +2,14 @@ import { useCallback, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { View } from '@/components/ui/primitives';
+import { HeaderAvatarButton } from '@/components/AppChrome';
 import { PageIntro } from '@/components/ui/PageIntro';
 import { BOTTOM_BAR_SPACE } from '@/components/ui/WorkflowShell';
 import { useLeague } from '@/lib/league-context';
 import { useHex, useThemeTokens } from '@/lib/theme';
 import { PlayerSheet, TradePane, type PlayerDetail } from './team';
 
-const TOP_CHROME_HEIGHT = 44;
+const KEYBOARD_TOP_OFFSET = 12;
 
 export default function TradesPage() {
   const { active } = useLeague();
@@ -25,7 +26,7 @@ export default function TradesPage() {
   const isSynced = active?.type === 'synced';
   const keyboardActive = searchActive || machineSearchActive;
 
-  const topChromeOffset = Math.max(insets.top, 12) + TOP_CHROME_HEIGHT;
+  const topOffset = Math.max(insets.top, KEYBOARD_TOP_OFFSET);
 
   const handleSearchFocusChange = useCallback((focused: boolean) => {
     if (focused) {
@@ -72,13 +73,13 @@ export default function TradesPage() {
       <KeyboardAvoidingView
         style={{ flex: 1, backgroundColor: hex.background }}
         behavior={keyboardActive ? (Platform.OS === 'ios' ? 'padding' : 'height') : undefined}
-        keyboardVerticalOffset={topChromeOffset}
+        keyboardVerticalOffset={topOffset}
       >
         <ScrollView
           ref={scrollRef}
           style={{ flex: 1, backgroundColor: hex.background }}
           contentContainerStyle={[
-            { paddingBottom: BOTTOM_BAR_SPACE + insets.bottom },
+            { paddingTop: topOffset, paddingBottom: BOTTOM_BAR_SPACE + insets.bottom },
             keyboardActive && { flexGrow: 1 },
           ]}
           scrollEnabled={!keyboardActive}
@@ -91,7 +92,9 @@ export default function TradesPage() {
           }}
         >
           <View style={[layout.screen, keyboardActive && { flex: 1 }]}>
-            {!keyboardActive && !tradeSubView ? <PageIntro title="Trades" /> : null}
+            {!keyboardActive && !tradeSubView ? (
+              <PageIntro title="Trades" trailing={<HeaderAvatarButton />} />
+            ) : null}
             <TradePane
               synced={isSynced}
               platform={active.platform}

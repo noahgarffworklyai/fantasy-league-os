@@ -32,9 +32,11 @@ import {
   X,
 } from 'lucide-react-native';
 import { BackButton } from '@/components/ui/BackButton';
+import { FilterChip } from '@/components/ui/FilterChip';
+import { SearchInput } from '@/components/ui/Input';
 import { Pressable, Text } from '@/components/ui/primitives';
 import { Card, Divider } from '@/components/ui/Card';
-import { Segmented } from '@/components/ui/Segmented';
+import { Segmented, SegmentedTabLabel } from '@/components/ui/Segmented';
 import { PlayerProfilePanelContent } from '@/components/player/PlayerProfilePanels';
 import { PlayerHeaderProjection } from '@/components/player/PlayerHeaderProjection';
 import type { PlayerProfileContext } from '@/components/player/PlayerOverviewPanel';
@@ -43,7 +45,7 @@ import type { PlayerProfileTab } from '@/components/player/PlayerProfileTabs';
 import { useLeague, type League } from '@/lib/league-context';
 import { useNav } from '@/lib/nav';
 import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
-import { spacing } from '@/lib/tokens';
+import { CONTROL_ICON_SIZE, spacing } from '@/lib/tokens';
 
 type DraftView =
   | { kind: 'home' }
@@ -249,7 +251,16 @@ function useDraftStyles() {
     backgroundColor: hex.primary,
     padding: 16,
   },
-  filterPill: { flexShrink: 0, borderRadius: 9999, paddingHorizontal: 12, paddingVertical: 4 },
+  filterPill: {
+    flexShrink: 0,
+    minHeight: 44,
+    minWidth: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9999,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
   needPill: {
     borderRadius: 9999,
     backgroundColor: hex.muted,
@@ -1100,43 +1111,29 @@ function DraftBoard({
         </View>
       </View>
 
-      <View style={s.boardTabs}>
+      <View style={[surfaces.segmented, { marginBottom: 12 }]}>
         {[
           { k: 'players' as const, label: 'Available' },
           { k: 'queue' as const, label: `Queue · ${queue.length}` },
           { k: 'chat' as const, label: 'Chat' },
         ].map((t) => (
-          <Pressable key={t.k} onPress={() => setTab(t.k)} style={tab === t.k ? s.boardTabActive : s.boardTab}>
-            <Text variant="pill" style={{ textAlign: 'center', color: tab === t.k ? hex.foreground : hex.mutedForeground }}>
+          <Pressable key={t.k} onPress={() => setTab(t.k)} style={tab === t.k ? surfaces.segmentedTabActive : surfaces.segmentedTab}>
+            <SegmentedTabLabel active={tab === t.k} center>
               {t.label}
-            </Text>
+            </SegmentedTabLabel>
           </Pressable>
         ))}
       </View>
 
       {tab === 'players' ? (
         <>
-          <View style={[layout.searchBar, { marginBottom: 8, borderRadius: 9999 }]}>
-            <Search size={16} color={c.mutedForeground} />
-            <TextInput
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Search players"
-              placeholderTextColor={c.mutedForeground}
-              style={s.textInputSm}
-            />
+          <View style={[layout.searchBar, { marginBottom: 8 }]}>
+            <Search size={CONTROL_ICON_SIZE} color={c.mutedForeground} />
+            <SearchInput value={search} onChangeText={setSearch} placeholder="Search players" />
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingBottom: 12 }}>
             {(['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const).map((p) => (
-              <Pressable
-                key={p}
-                onPress={() => setPos(p)}
-                style={[s.filterPill, { backgroundColor: pos === p ? hex.primary : hex.muted }]}
-              >
-                <Text variant="pill" style={{ color: pos === p ? hex.primaryForeground : hex.mutedForeground }}>
-                  {p}
-                </Text>
-              </Pressable>
+              <FilterChip key={p} label={p} active={pos === p} onPress={() => setPos(p)} />
             ))}
           </ScrollView>
           <View style={surfaces.roundedCard}>
@@ -1450,18 +1447,18 @@ function QueueView({ onBack, onExit, queue, setQueue }: { onBack: () => void; on
 
   return (
     <Shell title="Player Queue" subtitle={`${players.length} queued`} onBack={onBack} onExit={onExit}>
-      <View style={s.boardTabs}>
-        <Pressable onPress={() => setMode('rank')} style={mode === 'rank' ? s.rankTabActive : s.rankTab}>
-          <ArrowDownAZ size={12} color={mode === 'rank' ? c.foreground : c.mutedForeground} />
-          <Text variant="pill" style={{ color: mode === 'rank' ? hex.foreground : hex.mutedForeground }}>
-            Rank
-          </Text>
+      <View style={surfaces.segmented}>
+        <Pressable onPress={() => setMode('rank')} style={mode === 'rank' ? surfaces.segmentedTabActive : surfaces.segmentedTab}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <ArrowDownAZ size={CONTROL_ICON_SIZE} color={mode === 'rank' ? hex.foreground : hex.mutedForeground} />
+            <SegmentedTabLabel active={mode === 'rank'}>Rank</SegmentedTabLabel>
+          </View>
         </Pressable>
-        <Pressable onPress={() => setMode('tier')} style={mode === 'tier' ? s.rankTabActive : s.rankTab}>
-          <Hash size={12} color={mode === 'tier' ? c.foreground : c.mutedForeground} />
-          <Text variant="pill" style={{ color: mode === 'tier' ? hex.foreground : hex.mutedForeground }}>
-            Tiers
-          </Text>
+        <Pressable onPress={() => setMode('tier')} style={mode === 'tier' ? surfaces.segmentedTabActive : surfaces.segmentedTab}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Hash size={CONTROL_ICON_SIZE} color={mode === 'tier' ? hex.foreground : hex.mutedForeground} />
+            <SegmentedTabLabel active={mode === 'tier'}>Tiers</SegmentedTabLabel>
+          </View>
         </Pressable>
       </View>
 

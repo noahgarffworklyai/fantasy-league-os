@@ -4,9 +4,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BackButton } from '@/components/ui/BackButton';
 import { Pressable, ScrollView, Text, View } from './primitives';
 import { useHex, useThemeStyles } from '@/lib/theme';
-import { spacing } from '@/lib/tokens';
+import { spacing, BOTTOM_BAR_SPACE } from '@/lib/tokens';
 
-export const BOTTOM_BAR_SPACE = 112;
+export { BOTTOM_BAR_SPACE };
 
 /** Full-screen workflow page with a back header (mirrors WorkflowShell). */
 export function WorkflowShell({

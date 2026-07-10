@@ -18,17 +18,17 @@ export function PageIntro({
   return (
     <View style={layout.intro}>
       {eyebrow ? <Text variant="eyebrow">{eyebrow}</Text> : null}
-      <View style={[layout.rowBetween, { alignItems: 'flex-start', marginTop: eyebrow ? 4 : 0 }]}>
+      <View style={[layout.pageTitleRow, { marginTop: eyebrow ? 4 : 0 }]}>
         <View style={[layout.flex1, { minWidth: 0 }]}>
           <Text variant="hero">{title}</Text>
-          {subtitle ? (
-            <Text variant="subtitle" style={{ marginTop: 8 }}>
-              {subtitle}
-            </Text>
-          ) : null}
         </View>
         {trailing}
       </View>
+      {subtitle ? (
+        <Text variant="subtitle" style={{ marginTop: 8 }}>
+          {subtitle}
+        </Text>
+      ) : null}
     </View>
   );
 }

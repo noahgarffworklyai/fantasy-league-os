@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
-import { Check, Plus, Search, SlidersHorizontal, X } from 'lucide-react-native';
-import { SearchInput } from '@/components/ui/Input';
+import { Check, Plus } from 'lucide-react-native';
+import { PositionFilterPanel, SearchFilterRow } from '@/components/ui/SearchFilterRow';
 import { AvatarImage } from '@/components/ui/AvatarImage';
 import { Card, Divider } from '@/components/ui/Card';
 import { Pressable, Text } from '@/components/ui/primitives';
@@ -159,74 +159,29 @@ export function TradeMachineReceivePicker({
   const showError = hasQuery ? isError : previewError;
 
   const searchRow = (
-    <View style={[layout.row, layout.tight]}>
-      <View style={layout.searchBar}>
-        <Search size={16} color={c.mutedForeground} />
-        <SearchInput
-          value={q}
-          onChangeText={setQ}
-          placeholder="Search players"
-          onFocus={() => onSearchFocusChange?.(true)}
-          onBlur={() => onSearchFocusChange?.(false)}
-        />
-        {q ? (
-          <Pressable onPress={() => setQ('')}>
-            <X size={16} color={c.mutedForeground} />
-          </Pressable>
-        ) : null}
-      </View>
-      <Pressable
-        onPress={() => setFilterOpen((open) => !open)}
-        style={[
-          layout.iconButton,
-          (pos !== 'All' || filterOpen) && { backgroundColor: hex.foreground },
-        ]}
-      >
-        <SlidersHorizontal
-          size={16}
-          color={pos !== 'All' || filterOpen ? hex.background : c.foreground}
-        />
-        {pos !== 'All' ? (
-          <View style={surfaces.badge}>
-            <Text variant="pill" style={{ color: hex.background, fontSize: 9, fontWeight: '600' }}>
-              {pos}
-            </Text>
-          </View>
-        ) : null}
-      </Pressable>
-    </View>
-  );
-
-  const filterPanel = filterOpen ? (
-    <View style={[surfaces.roundedCard, { padding: 12 }]}>
-      <Text variant="eyebrow" style={{ paddingHorizontal: 4, paddingBottom: 8 }}>
-        Position
-      </Text>
-      <View style={[layout.rowWrap, { gap: 6 }]}>
-        {FILTERS.map((f) => (
-          <Pressable
-            key={f}
-            onPress={() => {
+    <SearchFilterRow
+      value={q}
+      onChangeValue={setQ}
+      onFocus={() => onSearchFocusChange?.(true)}
+      onBlur={() => onSearchFocusChange?.(false)}
+      filterActive={pos !== 'All'}
+      filterOpen={filterOpen}
+      onToggleFilter={() => setFilterOpen((open) => !open)}
+      positionBadge={pos !== 'All' ? pos : null}
+      filterPanel={
+        filterOpen ? (
+          <PositionFilterPanel
+            options={FILTERS}
+            value={pos}
+            onChange={(f) => {
               setPos(f);
               setFilterOpen(false);
             }}
-            style={[
-              surfaces.pill,
-              {
-                paddingHorizontal: 12,
-                paddingVertical: 6,
-                backgroundColor: f === pos ? hex.foreground : hex.background,
-              },
-            ]}
-          >
-            <Text variant="caption" style={{ color: f === pos ? hex.background : hex.mutedForeground }}>
-              {f}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-    </View>
-  ) : null;
+          />
+        ) : null
+      }
+    />
+  );
 
   const resultsBody = loading ? (
     <View style={{ paddingVertical: 20, alignItems: 'center' }}>
@@ -277,7 +232,6 @@ export function TradeMachineReceivePicker({
           Trade for
         </Text>
         {searchRow}
-        {filterPanel}
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={{ paddingBottom: 8 }}
@@ -298,7 +252,6 @@ export function TradeMachineReceivePicker({
         Trade for
       </Text>
       {searchRow}
-      {filterPanel}
       {resultsBody}
     </View>
   );

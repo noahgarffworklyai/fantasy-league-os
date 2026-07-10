@@ -1,6 +1,36 @@
 import { StyleSheet } from 'react-native';
 import { darkHex, lightHex, type HexPalette } from './colors';
 
+/** Minimum touch target (Apple HIG / WCAG). */
+export const MIN_TOUCH_TARGET = 44;
+
+/** Shared pill control shell padding used by segmented controls and search/filter rows. */
+export const CONTROL_SHELL_PADDING = 4;
+
+/** Outer height for segmented controls, search bar, and filter buttons. */
+export const CONTROL_HEIGHT = MIN_TOUCH_TARGET + CONTROL_SHELL_PADDING * 2;
+
+/** Nav bar is taller for icon + label stacking with vertical cushion. */
+export const NAV_SHELL_PADDING = 6;
+
+/** Inner tab area height inside the nav shell. */
+export const NAV_TAB_HEIGHT = 48;
+
+/** Floating bottom nav bar height. */
+export const NAV_BAR_HEIGHT = NAV_TAB_HEIGHT + NAV_SHELL_PADDING * 2;
+
+/** Hero title line height — profile avatar aligns to this on page headers. */
+export const PAGE_TITLE_LINE_HEIGHT = 36;
+
+/** Nav bar icon size (matches reference screenshot). */
+export const NAV_ICON_SIZE = 20;
+
+/** Icon size used inside search bars, filters, and nav tabs. */
+export const CONTROL_ICON_SIZE = 18;
+
+/** Space reserved above bottom safe area for the floating nav bar. */
+export const BOTTOM_BAR_SPACE = 8 + NAV_BAR_HEIGHT + 52;
+
 /** Vertical rhythm: screen (20) between major blocks; section (16) within blocks; tight (8) inline. */
 export const spacing = {
   screen: 20,
@@ -22,6 +52,7 @@ export type TextVariant =
   | 'statValue'
   | 'link'
   | 'tab'
+  | 'navLabel'
   | 'pill'
   | 'button'
   | 'sectionTitle'
@@ -32,6 +63,45 @@ export type TextVariant =
 
 export function createTokens(hex: HexPalette, dark: boolean) {
   const ink = dark ? '255,255,255' : '13,13,13';
+
+  const floatingShadow = {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: dark ? 6 : 4 },
+    shadowOpacity: dark ? 0.38 : 0.1,
+    shadowRadius: dark ? 16 : 12,
+    elevation: dark ? 10 : 6,
+  } as const;
+
+  const segmentedTrackBg = dark ? '#1A1A1A' : '#EBEBEB';
+  const segmentedTrackBorder = dark ? '#333333' : '#E4E4E4';
+  const navSurfaceBg = dark ? 'rgba(28,28,28,0.94)' : 'rgba(255,255,255,0.88)';
+  const navSurfaceBorder = dark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.85)';
+  const navActiveBg = dark ? 'rgba(255,255,255,0.18)' : 'rgba(13,13,13,0.08)';
+  const navFg = dark ? hex.foreground : '#0D0D0D';
+
+  const navShadow = {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: dark ? 0.22 : 0.06,
+    shadowRadius: 10,
+    elevation: 4,
+  } as const;
+
+  const segmentedShadow = {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: dark ? 0.18 : 0.03,
+    shadowRadius: dark ? 5 : 3,
+    elevation: dark ? 2 : 1,
+  } as const;
+
+  const activeSegmentShadow = {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: dark ? 0.12 : 0.03,
+    shadowRadius: 2,
+    elevation: 1,
+  } as const;
 
   const type = StyleSheet.create({
     eyebrow: {
@@ -106,18 +176,26 @@ export function createTokens(hex: HexPalette, dark: boolean) {
       color: hex.foreground,
     },
     tab: {
-      fontSize: 13,
+      fontSize: 14,
       fontWeight: '600',
       letterSpacing: -0.2,
+      lineHeight: 18,
+      textAlign: 'center',
+    },
+    navLabel: {
+      fontSize: 10,
+      fontWeight: '500',
+      letterSpacing: 0,
+      lineHeight: 12,
       textAlign: 'center',
     },
     pill: {
-      fontSize: 10,
-      fontWeight: '500',
-      letterSpacing: 0.5,
+      fontSize: 11,
+      fontWeight: '600',
+      letterSpacing: 0.3,
     },
     button: {
-      fontSize: 13,
+      fontSize: 15,
       fontWeight: '600',
     },
     sectionTitle: {
@@ -174,6 +252,20 @@ export function createTokens(hex: HexPalette, dark: boolean) {
       alignItems: 'center',
       justifyContent: 'space-between',
     },
+    pageTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      justifyContent: 'space-between',
+    },
+    pageTitle: {
+      flex: 1,
+      minWidth: 0,
+      fontSize: 34,
+      fontWeight: '600',
+      lineHeight: PAGE_TITLE_LINE_HEIGHT,
+      height: PAGE_TITLE_LINE_HEIGHT,
+      letterSpacing: -0.6,
+    },
     rowStart: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
     rowEnd: {
       flexDirection: 'row',
@@ -217,26 +309,33 @@ export function createTokens(hex: HexPalette, dark: boolean) {
     },
     searchBar: {
       flex: 1,
+      height: CONTROL_HEIGHT,
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.tight,
-      borderRadius: 16,
+      borderRadius: 9999,
       backgroundColor: hex.surfaceElevated,
       paddingHorizontal: 16,
-      paddingVertical: 12,
+    },
+    clearButton: {
+      width: MIN_TOUCH_TARGET,
+      height: MIN_TOUCH_TARGET,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: -8,
     },
     iconButton: {
-      width: 44,
-      height: 44,
+      width: CONTROL_HEIGHT,
+      height: CONTROL_HEIGHT,
       flexShrink: 0,
       alignItems: 'center',
       justifyContent: 'center',
-      borderRadius: 16,
+      borderRadius: 9999,
       backgroundColor: hex.surfaceElevated,
     },
     iconButtonSm: {
-      width: 36,
-      height: 36,
+      width: MIN_TOUCH_TARGET,
+      height: MIN_TOUCH_TARGET,
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: 9999,
@@ -303,26 +402,80 @@ export function createTokens(hex: HexPalette, dark: boolean) {
     segmented: {
       flexDirection: 'row',
       width: '100%',
-      backgroundColor: hex.surfaceElevated,
+      height: CONTROL_HEIGHT,
+      backgroundColor: segmentedTrackBg,
       borderRadius: 9999,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: hex.border,
-      padding: 4,
+      borderColor: segmentedTrackBorder,
+      padding: CONTROL_SHELL_PADDING,
+      ...segmentedShadow,
     },
     segmentedTab: {
       flex: 1,
+      height: MIN_TOUCH_TARGET,
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: 9999,
-      paddingVertical: 8,
+      paddingHorizontal: 10,
     },
     segmentedTabActive: {
       flex: 1,
+      height: MIN_TOUCH_TARGET,
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: 9999,
-      paddingVertical: 8,
-      backgroundColor: hex.primary,
+      paddingHorizontal: 10,
+      backgroundColor: hex.surfaceElevated,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: segmentedTrackBorder,
+      ...activeSegmentShadow,
+    },
+    navBarFloat: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      height: NAV_BAR_HEIGHT,
+      borderRadius: 9999,
+      padding: NAV_SHELL_PADDING,
+      backgroundColor: navSurfaceBg,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: navSurfaceBorder,
+      ...navShadow,
+    },
+    navTeamCircle: {
+      width: NAV_BAR_HEIGHT,
+      height: NAV_BAR_HEIGHT,
+      borderRadius: NAV_BAR_HEIGHT / 2,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: navSurfaceBg,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: navSurfaceBorder,
+      ...navShadow,
+    },
+    navTab: {
+      flex: 1,
+      height: NAV_TAB_HEIGHT,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 9999,
+      paddingHorizontal: 4,
+      gap: 4,
+    },
+    navTabActive: {
+      backgroundColor: navActiveBg,
+    },
+    filterChip: {
+      minHeight: MIN_TOUCH_TARGET,
+      minWidth: MIN_TOUCH_TARGET,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 9999,
+      paddingHorizontal: 16,
+      backgroundColor: hex.background,
+    },
+    filterChipActive: {
+      backgroundColor: hex.foreground,
     },
     hairline: {
       height: StyleSheet.hairlineWidth,
@@ -338,12 +491,14 @@ export function createTokens(hex: HexPalette, dark: boolean) {
     aiButton: {
       marginTop: 12,
       width: '100%',
+      minHeight: MIN_TOUCH_TARGET,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       gap: 4,
       borderRadius: 9999,
-      paddingVertical: 10,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
     },
     aiButtonPrimary: {
       backgroundColor: hex.primary,
@@ -352,20 +507,24 @@ export function createTokens(hex: HexPalette, dark: boolean) {
       backgroundColor: hex.muted,
     },
     primaryButton: {
+      minHeight: 56,
       height: 56,
       width: '100%',
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: 9999,
       backgroundColor: hex.primary,
+      paddingHorizontal: 20,
     },
     secondaryButton: {
+      minHeight: 56,
       height: 56,
       width: '100%',
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: 9999,
       backgroundColor: hex.surfaceElevated,
+      paddingHorizontal: 20,
     },
     authButton: {
       height: 56,
@@ -449,7 +608,7 @@ export function createTokens(hex: HexPalette, dark: boolean) {
     neutral: hex.mutedForeground,
   } as const;
 
-  return { type, layout, surfaces, toneBg, toneFg };
+  return { type, layout, surfaces, toneBg, toneFg, navFg };
 }
 
 export type TokenSet = ReturnType<typeof createTokens>;

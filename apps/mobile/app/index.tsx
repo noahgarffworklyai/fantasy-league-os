@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Text, View } from '@/components/ui/primitives';
 import { Screen } from '@/components/ui/Screen';
 import { Segmented } from '@/components/ui/Segmented';
+import { HeaderAvatarButton } from '@/components/AppChrome';
 import { NewsFeed } from '@/components/home/NewsFeed';
 import { StartSitCarousel } from '@/components/home/StartSitCarousel';
 import { useLeague, type League } from '@/lib/league-context';
@@ -36,9 +37,12 @@ export default function HomePage() {
       <View style={layout.screen}>
         <View style={layout.intro}>
           <Text variant="eyebrow">Week {week}</Text>
-          <Text variant="hero" style={{ marginTop: 4 }}>
-            Hi, {firstName}.
-          </Text>
+          <View style={[layout.pageTitleRow, { marginTop: 4 }]}>
+            <Text variant="hero" style={[layout.pageTitle, { color: hex.foreground }]}>
+              Hi, {firstName}
+            </Text>
+            <HeaderAvatarButton />
+          </View>
           {isSynced && stats?.syncStatus === 'error' ? (
             <Text variant="caption" style={{ marginTop: 8, color: hex.warning }}>
               {isFetching ? 'Sync issue — retrying now…' : 'Sync issue — will retry automatically.'}

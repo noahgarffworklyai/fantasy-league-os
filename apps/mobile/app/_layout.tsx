@@ -5,7 +5,7 @@ import { Stack, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { BottomBar, TopChrome } from '@/components/AppChrome';
+import { BottomBar } from '@/components/AppChrome';
 import { AuthGate } from '@/components/AuthGate';
 import { CommissionerSheet } from '@/components/CommissionerSheet';
 import { CommissionerSheetProvider } from '@/lib/commissioner-sheet-context';
@@ -44,7 +44,6 @@ function Shell() {
     <AuthGate>
       <View style={{ flex: 1, backgroundColor: hex.background }}>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-      {showChrome ? <TopChrome /> : null}
       <View style={{ flex: 1 }}>
         <Stack
           screenOptions={({ route }) => ({
