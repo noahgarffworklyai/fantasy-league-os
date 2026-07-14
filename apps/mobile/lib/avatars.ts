@@ -2,13 +2,13 @@ import { sleeperPlayerImageUrl, sleeperUserAvatarUrl } from '@flos/shared';
 
 // Use `personAvatar` for users/managers and `playerAvatar` for athletes.
 
-export function personAvatar(seed: string, avatarRef?: string | null): string {
+export function personAvatar(_seed: string, avatarRef?: string | null): string | null {
   if (avatarRef) {
     if (avatarRef.startsWith('http://') || avatarRef.startsWith('https://')) return avatarRef;
     const url = sleeperUserAvatarUrl(avatarRef);
     if (url) return url;
   }
-  return `https://i.pravatar.cc/120?u=${encodeURIComponent(seed)}`;
+  return null;
 }
 
 /** Sleeper player id when known; otherwise falls back to a deterministic placeholder. */

@@ -1,4 +1,4 @@
-import { createCheckoutSchema } from '@flos/shared';
+import { computePlatformFeeCents, createCheckoutSchema } from '@flos/shared';
 import { and, eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { config } from '../config.js';
@@ -31,7 +31,8 @@ export async function paymentRoutes(app: FastifyInstance) {
     if (!member) return reply.status(403).send({ error: 'Not a league member' });
     if (member.paid) return reply.status(400).send({ error: 'Already paid' });
 
-    const amountCents = league.buyInCents + league.platformFeeCents;
+    const platformFeeCents = computePlatformFeeCents(league.buyInCents);
+    const amountCents = league.buyInCents + platformFeeCents;
 
     if (!config.stripeSecretKey) {
       await db.insert(payments).values({
@@ -39,7 +40,7 @@ export async function paymentRoutes(app: FastifyInstance) {
         userId: authReq.userId,
         amountCents,
         buyInCents: league.buyInCents,
-        platformFeeCents: league.platformFeeCents,
+        platformFeeCents,
         status: 'completed',
       });
 
@@ -47,7 +48,7 @@ export async function paymentRoutes(app: FastifyInstance) {
         leagueId: id,
         userId: authReq.userId,
         buyInCents: league.buyInCents,
-        platformFeeCents: league.platformFeeCents,
+        platformFeeCents,
       });
 
       return {
@@ -55,7 +56,7 @@ export async function paymentRoutes(app: FastifyInstance) {
         sessionId: 'dev_mode',
         amountCents,
         buyInCents: league.buyInCents,
-        platformFeeCents: league.platformFeeCents,
+        platformFeeCents,
         devMode: true,
       };
     }
@@ -64,68 +65,86 @@ export async function paymentRoutes(app: FastifyInstance) {
     const [user] = await db.select().from(users).where(eq(users.id, authReq.userId)).limit(1);
 
     let customerId = user.stripeCustomerId;
-    if (!customerId) {
-      const customer = await stripeClient.customers.create({
-        email: user.email,
-        name: user.displayName,
-        metadata: { userId: user.id },
-      });
-      customerId = customer.id;
-      await db.update(users).set({ stripeCustomerId: customerId }).where(eq(users.id, user.id));
-    }
+    try {
+      if (!customerId) {
+        const customer = await stripeClient.customers.create({
+          email: user.email,
+          name: user.displayName,
+          metadata: { userId: user.id },
+        });
+        customerId = customer.id;
+        await db.update(users).set({ stripeCustomerId: customerId }).where(eq(users.id, user.id));
+      }
 
-    const session = await stripeClient.checkout.sessions.create({
-      mode: 'payment',
-      customer: customerId,
-      line_items: [
-        {
-          price_data: {
-            currency: 'usd',
-            product_data: { name: `${league.name} buy-in` },
-            unit_amount: league.buyInCents,
+      const session = await stripeClient.checkout.sessions.create({
+        mode: 'payment',
+        customer: customerId,
+        line_items: [
+          {
+            price_data: {
+              currency: 'usd',
+              product_data: { name: `${league.name} buy-in` },
+              unit_amount: league.buyInCents,
+            },
+            quantity: 1,
           },
-          quantity: 1,
-        },
-        {
-          price_data: {
-            currency: 'usd',
-            product_data: { name: 'Processing fee (5%)' },
-            unit_amount: league.platformFeeCents,
+          {
+            price_data: {
+              currency: 'usd',
+              product_data: { name: 'Processing fee (5%)' },
+              unit_amount: platformFeeCents,
+            },
+            quantity: 1,
           },
-          quantity: 1,
+        ],
+        metadata: {
+          leagueId: id,
+          userId: authReq.userId,
+          buyInCents: String(league.buyInCents),
+          platformFeeCents: String(platformFeeCents),
         },
-      ],
-      metadata: {
+        payment_intent_data: {
+          metadata: {
+            leagueId: id,
+            userId: authReq.userId,
+            buyInCents: String(league.buyInCents),
+            platformFeeCents: String(platformFeeCents),
+          },
+        },
+        success_url: appendCheckoutSessionPlaceholder(body.successUrl),
+        cancel_url: body.cancelUrl,
+      });
+
+      if (!session.url) {
+        return reply.status(500).send({ error: 'Failed to create checkout session' });
+      }
+
+      await db.insert(payments).values({
         leagueId: id,
         userId: authReq.userId,
-        buyInCents: String(league.buyInCents),
-        platformFeeCents: String(league.platformFeeCents),
-      },
-      success_url: appendCheckoutSessionPlaceholder(body.successUrl),
-      cancel_url: body.cancelUrl,
-    });
+        amountCents,
+        buyInCents: league.buyInCents,
+        platformFeeCents,
+        status: 'pending',
+        stripeCheckoutSessionId: session.id,
+      });
 
-    if (!session.url) {
-      return reply.status(500).send({ error: 'Failed to create checkout session' });
+      return {
+        checkoutUrl: session.url,
+        sessionId: session.id,
+        amountCents,
+        buyInCents: league.buyInCents,
+        platformFeeCents,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Stripe checkout failed';
+      if (/invalid api key/i.test(message)) {
+        return reply.status(503).send({
+          error: 'Stripe API key is invalid. Paste your sk_test_ key from dashboard.stripe.com/test/apikeys into apps/api/.env and restart the API.',
+        });
+      }
+      throw err;
     }
-
-    await db.insert(payments).values({
-      leagueId: id,
-      userId: authReq.userId,
-      amountCents,
-      buyInCents: league.buyInCents,
-      platformFeeCents: league.platformFeeCents,
-      status: 'pending',
-      stripeCheckoutSessionId: session.id,
-    });
-
-    return {
-      checkoutUrl: session.url,
-      sessionId: session.id,
-      amountCents,
-      buyInCents: league.buyInCents,
-      platformFeeCents: league.platformFeeCents,
-    };
   });
 
   app.get('/payments/checkout/:sessionId/status', { preHandler: authMiddleware }, async (request, reply) => {

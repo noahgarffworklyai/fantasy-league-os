@@ -11,4 +11,4 @@ dist/
 *.db
 coverage/
 .eas/
-apps/mobile/.env.development
+.tools/

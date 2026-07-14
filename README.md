@@ -52,15 +52,26 @@ Scan the QR code with **Expo Go** on your iPhone or Android phone. Phone and Mac
 
 Buy-ins use **Stripe Web Checkout** in the in-app browser — no native Stripe SDK or dev client build required.
 
-### 5. Stripe (optional)
+### 5. Stripe test cards + webhooks
+
+Works on any Mac/Linux machine — no Homebrew. The CLI downloads into `.tools/stripe/` (gitignored).
+
+**One-time per machine** (after `cp apps/api/.env.example apps/api/.env`):
 
 ```bash
-stripe listen --forward-to http://localhost:3000/webhooks/stripe
+# apps/api/.env — same sk_test_ key works on every machine (dashboard.stripe.com/test/apikeys)
+STRIPE_SECRET_KEY=sk_test_...
+
+pnpm stripe:login          # links this Mac to your Stripe test account
+pnpm stripe:listen         # auto-downloads CLI if missing; keep this terminal open
+# Copy whsec_... → STRIPE_WEBHOOK_SECRET in apps/api/.env, restart API
 ```
 
-Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` in `apps/api/.env`.
+**Every dev session:** run `pnpm stripe:listen` in one terminal, API + mobile in others.
 
-Without Stripe, buy-ins work in **dev mode** (instant confirmation).
+**In the app:** Commissioner sets buy-in → Member pays with `4242 4242 4242 4242`. Tap **Reset payment** to retest.
+
+**No Stripe keys:** leave `STRIPE_SECRET_KEY` empty for instant dev-mode payments (no browser).
 
 ## Project Structure
 

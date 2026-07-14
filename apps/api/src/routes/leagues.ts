@@ -10,6 +10,7 @@ import {
   type EspnCredentials,
 } from '@flos/league-adapters';
 import {
+  computePlatformFeeCents,
   createLeagueSchema,
   patchHostedRosterSchema,
   reconnectEspnCredentialsSchema,
@@ -223,13 +224,18 @@ export async function leagueRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: 'Commissioner access required' });
     }
 
+    const updates: Record<string, unknown> = {
+      ...body,
+      draftDate: body.draftDate === null ? null : body.draftDate ? new Date(body.draftDate) : undefined,
+      updatedAt: new Date(),
+    };
+    if (body.buyInCents !== undefined) {
+      updates.platformFeeCents = computePlatformFeeCents(body.buyInCents);
+    }
+
     const [updated] = await db
       .update(leagues)
-      .set({
-        ...body,
-        draftDate: body.draftDate === null ? null : body.draftDate ? new Date(body.draftDate) : undefined,
-        updatedAt: new Date(),
-      })
+      .set(updates)
       .where(eq(leagues.id, id))
       .returning();
 

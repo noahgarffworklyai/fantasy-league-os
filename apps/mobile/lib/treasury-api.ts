@@ -43,6 +43,7 @@ export type TreasuryData = {
   payoutSlots: TreasuryPayoutSlot[];
   stripeConnectOnboarded: boolean;
   paymentsDevMode?: boolean;
+  paymentsTestMode?: boolean;
   members: TreasuryMember[];
   ledgerActivity?: TreasuryLedgerActivity[];
   rosterSource?: string;
