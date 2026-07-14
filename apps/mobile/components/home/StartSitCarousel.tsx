@@ -18,7 +18,7 @@ import type { PriorityInsight, PriorityPlayer } from '@/lib/start-sit';
 import { useStartSitRecommendations } from '@/lib/use-start-sit';
 import { useColors, useHex, useTheme, useThemeTokens } from '@/lib/theme';
 
-const INSIGHT_CARD_HEIGHT = 340;
+const INSIGHT_CARD_HEIGHT = 380;
 
 function borderForTone(tone: PriorityInsight['tone'], ink: string) {
   switch (tone) {
@@ -55,6 +55,7 @@ function InsightCardShell({
           height: INSIGHT_CARD_HEIGHT,
           borderColor: borderForTone(insight.tone, ink),
           paddingVertical: 20,
+          paddingBottom: 54,
           paddingHorizontal: 18,
         },
       ]}
@@ -499,25 +500,41 @@ export function StartSitCarousel({
         </View>
       ) : (
         <>
-          <ScrollView
-            ref={scrollerRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            snapToInterval={cardW}
-            decelerationRate="fast"
-            onMomentumScrollEnd={onScroll}
-            style={{ height: INSIGHT_CARD_HEIGHT }}
-          >
-            {cards.map((rec) => (
-              <View key={rec.id} style={{ width: cardW, height: INSIGHT_CARD_HEIGHT }}>
-                <PriorityInsightCard insight={rec} onAction={onAction} />
-              </View>
-            ))}
-          </ScrollView>
+          <View style={{ position: 'relative' }}>
+            <ScrollView
+              ref={scrollerRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              snapToInterval={cardW}
+              decelerationRate="fast"
+              onMomentumScrollEnd={onScroll}
+              style={{ height: INSIGHT_CARD_HEIGHT }}
+            >
+              {cards.map((rec) => (
+                <View key={rec.id} style={{ width: cardW, height: INSIGHT_CARD_HEIGHT }}>
+                  <PriorityInsightCard insight={rec} onAction={onAction} />
+                </View>
+              ))}
+            </ScrollView>
 
           {cards.length > 1 ? (
-            <View style={[layout.row, layout.centered, { gap: 6, paddingTop: 10 }]}>
+            <View
+              style={[
+                layout.row,
+                layout.centered,
+                {
+                  position: 'absolute',
+                  bottom: 12,
+                  alignSelf: 'center',
+                  gap: 6,
+                  borderRadius: 9999,
+                  backgroundColor: 'rgba(0,0,0,0.12)',
+                  paddingHorizontal: 10,
+                  paddingVertical: 7,
+                },
+              ]}
+            >
               {cards.map((rec, i) => (
                 <Pressable
                   key={rec.id}
@@ -538,9 +555,10 @@ export function StartSitCarousel({
               ))}
             </View>
           ) : null}
+          </View>
 
           {activeInsight ? (
-            <View style={{ marginTop: cards.length > 1 ? 12 : 10 }}>
+            <View style={{ marginTop: 12 }}>
               <CommissionerInsightsCard insight={activeInsight} />
             </View>
           ) : null}

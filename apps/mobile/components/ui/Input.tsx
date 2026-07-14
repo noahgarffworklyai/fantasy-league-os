@@ -29,7 +29,7 @@ export function Input({ className, style, ...props }: Props) {
   );
 }
 
-/** Compact search input for player lists. */
+/** Accessible search input for player lists. */
 export function SearchInput({ onKeyPress, ...props }: TextInputProps) {
   const c = useColors();
   const hex = useHex();
@@ -48,7 +48,16 @@ export function SearchInput({ onKeyPress, ...props }: TextInputProps) {
   return (
     <TextInput
       placeholderTextColor={c.mutedForeground}
-      style={[type.body, { flex: 1, padding: 0, margin: 0, color: hex.foreground }]}
+      style={[
+        type.body,
+        {
+          flex: 1,
+          paddingVertical: 0,
+          margin: 0,
+          fontSize: 15,
+          color: hex.foreground,
+        },
+      ]}
       blurOnSubmit={false}
       {...webKeyProps}
       {...props}

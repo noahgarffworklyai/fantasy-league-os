@@ -18,6 +18,8 @@ import { Screen } from '@/components/ui/Screen';
 import { Segmented } from '@/components/ui/Segmented';
 import { AvatarImage } from '@/components/ui/AvatarImage';
 import { BackButton } from '@/components/ui/BackButton';
+import { FilterChip } from '@/components/ui/FilterChip';
+import { HeaderAvatarButton } from '@/components/AppChrome';
 import { PageIntro } from '@/components/ui/PageIntro';
 import { useLeague, type League } from '@/lib/league-context';
 import {
@@ -138,6 +140,7 @@ function LeagueHome({
         eyebrow={`Week ${week}`}
         title={active.name}
         subtitle={`${teamCount} teams · ${teams.length ? `${totalW}-${totalL} combined` : 'Loading stats…'} · ${active.type === 'synced' ? `Synced from ${active.platform}` : 'Hosted'}`}
+        trailing={<HeaderAvatarButton />}
       />
 
       {isLoading ? (
@@ -309,39 +312,56 @@ function LivePane({ matchups, onOpenMatchup }: { matchups: Matchup[]; onOpenMatc
         <Text variant="eyebrow">Matchup {active + 1} of {matchups.length}</Text>
         <Text variant="caption">Swipe →</Text>
       </View>
-      <ScrollView
-        ref={scrollerRef}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        snapToInterval={cardW}
-        decelerationRate="fast"
-        onMomentumScrollEnd={onScroll}
-      >
-        {matchups.map((m) => (
-          <View key={m.id} style={{ width: cardW }}>
-            <LiveMatchupCard
-              matchup={m}
-              homeLineup={m.homeLineup}
-              awayLineup={m.awayLineup}
-              onOpen={() => onOpenMatchup(m.id)}
-            />
-          </View>
-        ))}
-      </ScrollView>
-      <View style={[layout.row, layout.centered, { gap: 6, paddingTop: 4 }]}>
-        {matchups.map((_, i) => (
-          <Pressable key={i} onPress={() => scrollerRef.current?.scrollTo({ x: i * cardW, animated: true })}>
-            <View
-              style={{
-                height: 6,
-                borderRadius: 9999,
-                width: i === active ? 20 : 6,
-                backgroundColor: i === active ? hex.foreground : 'rgba(99,99,99,0.4)',
-              }}
-            />
-          </Pressable>
-        ))}
+      <View style={{ position: 'relative' }}>
+        <ScrollView
+          ref={scrollerRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          snapToInterval={cardW}
+          decelerationRate="fast"
+          onMomentumScrollEnd={onScroll}
+        >
+          {matchups.map((m) => (
+            <View key={m.id} style={{ width: cardW }}>
+              <LiveMatchupCard
+                matchup={m}
+                homeLineup={m.homeLineup}
+                awayLineup={m.awayLineup}
+                onOpen={() => onOpenMatchup(m.id)}
+              />
+            </View>
+          ))}
+        </ScrollView>
+        <View
+          style={[
+            layout.row,
+            layout.centered,
+            {
+              position: 'absolute',
+              bottom: 12,
+              alignSelf: 'center',
+              gap: 6,
+              borderRadius: 9999,
+              backgroundColor: 'rgba(0,0,0,0.12)',
+              paddingHorizontal: 10,
+              paddingVertical: 7,
+            },
+          ]}
+        >
+          {matchups.map((_, i) => (
+            <Pressable key={i} onPress={() => scrollerRef.current?.scrollTo({ x: i * cardW, animated: true })}>
+              <View
+                style={{
+                  height: 6,
+                  borderRadius: 9999,
+                  width: i === active ? 20 : 6,
+                  backgroundColor: i === active ? hex.foreground : 'rgba(99,99,99,0.4)',
+                }}
+              />
+            </Pressable>
+          ))}
+        </View>
       </View>
     </View>
   );
@@ -353,7 +373,7 @@ function LiveMatchupCard({ matchup: m, homeLineup, awayLineup, onOpen }: { match
   const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
   const c = useColors();
   return (
-    <View style={surfaces.roundedCardLg}>
+    <View style={[surfaces.roundedCardLg, { paddingBottom: 40 }]}>
       <View style={{ paddingHorizontal: 20, paddingTop: 16 }}>
         <View style={layout.rowBetween}>
           <StateBadge state={m.state} kickoff={m.kickoff} />
@@ -506,21 +526,6 @@ function AnalyticsPane({ active, teams, week }: { active: League; teams: TeamRow
         </Text>
       </Section>
     </View>
-  );
-}
-
-function FilterChip({ active, onPress, label }: { active: boolean; onPress: () => void; label: string }) {
-  const styles = useLeagueStyles();
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
-  return (
-    <Pressable
-      onPress={onPress}
-      style={[styles.filterChip, { backgroundColor: active ? hex.primary : hex.muted }]}
-    >
-      <Text variant="bodyMuted" style={{ fontSize: 12, fontWeight: '600', color: active ? hex.primaryForeground : hex.mutedForeground }}>
-        {label}
-      </Text>
-    </Pressable>
   );
 }
 
@@ -1207,12 +1212,6 @@ function useLeagueStyles() {
     borderRadius: 22,
     backgroundColor: hex.surfaceElevated,
     padding: 16,
-  },
-  filterChip: {
-    flexShrink: 0,
-    borderRadius: 9999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
   },
   metricRow: {
     flexDirection: 'row',

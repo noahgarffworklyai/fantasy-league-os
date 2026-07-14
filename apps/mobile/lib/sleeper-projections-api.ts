@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from './fetch-timeout';
+
 const NFL_STATE_URL = 'https://api.sleeper.app/v1/state/nfl';
 const PROJECTIONS_BASE = 'https://api.sleeper.com/projections/nfl';
 
@@ -20,7 +22,7 @@ type SleeperProjRow = {
 };
 
 export async function fetchNflState(): Promise<NflState> {
-  const res = await fetch(NFL_STATE_URL);
+  const res = await fetchWithTimeout(NFL_STATE_URL);
   if (!res.ok) throw new Error(`Sleeper state error: ${res.status}`);
   return res.json() as Promise<NflState>;
 }

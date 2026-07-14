@@ -21,6 +21,7 @@ import {
   X,
 } from 'lucide-react-native';
 import { Pressable, Text, View } from '@/components/ui/primitives';
+import { HeaderAvatarButton } from '@/components/AppChrome';
 import { Screen } from '@/components/ui/Screen';
 import { Card, Divider } from '@/components/ui/Card';
 import { Segmented } from '@/components/ui/Segmented';
@@ -292,19 +293,24 @@ function TeamHeader({
   const [editing, setEditing] = useState(false);
   return (
     <View style={layout.intro}>
-      {editing && editable ? (
-        <TextInput
-          autoFocus
-          value={name}
-          onChangeText={setName}
-          onBlur={() => setEditing(false)}
-          style={S.heroInput}
-        />
-      ) : (
-        <Text variant="hero" onPress={() => editable && setEditing(true)}>
-          {name}
-        </Text>
-      )}
+      <View style={layout.pageTitleRow}>
+        <View style={[layout.flex1, { minWidth: 0 }]}>
+          {editing && editable ? (
+            <TextInput
+              autoFocus
+              value={name}
+              onChangeText={setName}
+              onBlur={() => setEditing(false)}
+              style={S.heroInput}
+            />
+          ) : (
+            <Text variant="hero" onPress={() => editable && setEditing(true)}>
+              {name}
+            </Text>
+          )}
+        </View>
+        <HeaderAvatarButton />
+      </View>
       <Text variant="subtitle" style={{ marginTop: 8 }}>
         {record} · {projectedFinish} · {rank}
       </Text>
@@ -784,6 +790,7 @@ export function TradePane({
   onPlayer,
   searchActive,
   onSearchFocusChange,
+  onMachineSearchFocusChange,
   onSubViewChange,
 }: {
   synced: boolean;
@@ -792,21 +799,23 @@ export function TradePane({
   onPlayer: (p: PlayerDetail) => void;
   searchActive?: boolean;
   onSearchFocusChange?: (focused: boolean) => void;
+  onMachineSearchFocusChange?: (focused: boolean) => void;
   onSubViewChange?: (active: boolean) => void;
 }) {
   const S = useTeamStyles();
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
-  const { data: tradeData } = useTradePlayers(leagueId, synced);
-  const { data: enrichedIdeas = [], isLoading: ideasLoading } = useEnrichedTradeIdeas(leagueId, synced);
-  const { data: leagueMates = [] } = useLeagueMates(leagueId, synced);
-  const tradeManagers = useMemo(() => resolveTradeManagers(leagueMates), [leagueMates]);
-  const myTradePlayers = tradeData?.myPlayers ?? [];
-  const managerPools = tradeData?.managerPools ?? {};
   const [mode, setMode] = useState<TradeMode>('hub');
   const [chatWith, setChatWith] = useState<string | null>(null);
   const [proposeTo, setProposeTo] = useState<string | null>(null);
   const [prefill, setPrefill] = useState<Prefill>(null);
+  const needsRosterPools = mode === 'pickManager' || !!chatWith || !!proposeTo;
+  const { data: tradeData } = useTradePlayers(leagueId, synced, { loadManagerPools: needsRosterPools });
+  const { data: enrichedIdeas = [] } = useEnrichedTradeIdeas(leagueId, synced);
+  const { data: leagueMates = [] } = useLeagueMates(leagueId, synced);
+  const tradeManagers = useMemo(() => resolveTradeManagers(leagueMates), [leagueMates]);
+  const myTradePlayers = tradeData?.myPlayers ?? [];
+  const managerPools = tradeData?.managerPools ?? {};
 
   useEffect(() => {
     onSubViewChange?.(mode !== 'hub' || !!chatWith || !!proposeTo);
@@ -856,6 +865,7 @@ export function TradePane({
         leagueId={leagueId}
         myPlayers={myTradePlayers}
         onBack={() => setMode('hub')}
+        onSearchFocusChange={onMachineSearchFocusChange}
       />
     );
   }
@@ -908,7 +918,7 @@ export function TradePane({
             </Text>
             <TradeIdeasCarousel
               ideas={enrichedIdeas}
-              isLoading={ideasLoading}
+              isLoading={false}
               onPropose={(idea) => {
                 setPrefill({
                   mgrId: idea.manager.id,

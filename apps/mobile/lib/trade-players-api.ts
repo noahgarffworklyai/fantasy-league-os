@@ -1,12 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { sleeperPlayerImageUrl } from '@flos/shared';
 import {
-  fetchSeasonPlayerRanks,
   formatPosRankLabel,
-  loadCurrentSeasonPlayerRanks,
+  loadCurrentSeasonPlayerRanksShared,
   rankTradeValue,
 } from './sleeper-player-ranks';
-import { fetchNflState, resolveStatsSeason } from './sleeper-projections-api';
 import { fetchMyTeamRoster } from './team-roster-api';
 import { fetchLeagueRosterPools } from './league-rosters-api';
 
@@ -88,16 +86,72 @@ function enrichManagerPools(
   );
 }
 
-export function useTradePlayers(leagueId: string | undefined, isSynced: boolean) {
+function buildDemoTradeData() {
+  const ranks = new Map<string, { posRank: number }>();
+  const board = DEMO_BOARD.map((p) => enrichTradeAsset(p, ranks)).sort(
+    (a, b) => a.posRank - b.posRank,
+  );
+  const myPlayers = DEMO_MY_PLAYERS.map((p) => enrichTradeAsset(p, ranks));
+  return { board, myPlayers, managerPools: enrichManagerPools(ranks) };
+}
+
+const INITIAL_TRADE_DATA = buildDemoTradeData();
+
+export function useTradePlayers(
+  leagueId: string | undefined,
+  isSynced: boolean,
+  options?: { loadManagerPools?: boolean },
+) {
+  const loadManagerPools = options?.loadManagerPools ?? false;
+
   return useQuery({
-    queryKey: ['trade-players', leagueId, isSynced],
+    queryKey: ['trade-players', leagueId, isSynced, loadManagerPools],
+    initialData: INITIAL_TRADE_DATA,
+    initialDataUpdatedAt: 0,
     queryFn: async () => {
-      const state = await fetchNflState();
-      const season = resolveStatsSeason(state);
-      const ranks = await fetchSeasonPlayerRanks(season);
-      const managerPools = leagueId
-        ? await fetchLeagueRosterPools(leagueId, isSynced)
-        : enrichManagerPools(ranks);
+      let ranks = new Map<string, { posRank: number }>();
+      try {
+        ranks = await loadCurrentSeasonPlayerRanksShared();
+      } catch {
+        // Fall back to demo data without live ranks.
+      }
+
+      if (loadManagerPools && leagueId) {
+        const managerPools = await fetchLeagueRosterPools(leagueId, isSynced, undefined).catch(() =>
+          enrichManagerPools(ranks),
+        );
+
+        if (isSynced && leagueId) {
+          try {
+            const res = await fetchMyTeamRoster(leagueId);
+            const rosterPlayers = [...res.roster.starters, ...res.roster.bench].map((p) => ({
+              id: p.id,
+              name: p.name,
+              pos: p.position,
+              team: p.team,
+              imageUrl: p.imageUrl,
+            }));
+
+            const myPlayers = rosterPlayers.map((p) => enrichTradeAsset(p, ranks));
+            const board = [...myPlayers].sort((a, b) => {
+              if (a.posRank <= 0 && b.posRank <= 0) return a.name.localeCompare(b.name);
+              if (a.posRank <= 0) return 1;
+              if (b.posRank <= 0) return -1;
+              return a.posRank - b.posRank;
+            });
+
+            return { board, myPlayers, managerPools };
+          } catch {
+            // Fall through to demo data with live ranks.
+          }
+        }
+
+        const board = DEMO_BOARD.map((p) => enrichTradeAsset(p, ranks)).sort(
+          (a, b) => a.posRank - b.posRank,
+        );
+        const myPlayers = DEMO_MY_PLAYERS.map((p) => enrichTradeAsset(p, ranks));
+        return { board, myPlayers, managerPools };
+      }
 
       if (isSynced && leagueId) {
         try {
@@ -118,7 +172,7 @@ export function useTradePlayers(leagueId: string | undefined, isSynced: boolean)
             return a.posRank - b.posRank;
           });
 
-          return { board, myPlayers, managerPools };
+          return { board, myPlayers, managerPools: enrichManagerPools(ranks) };
         } catch {
           // Fall through to demo data with live ranks.
         }
@@ -129,9 +183,10 @@ export function useTradePlayers(leagueId: string | undefined, isSynced: boolean)
       );
       const myPlayers = DEMO_MY_PLAYERS.map((p) => enrichTradeAsset(p, ranks));
 
-      return { board, myPlayers, managerPools };
+      return { board, myPlayers, managerPools: enrichManagerPools(ranks) };
     },
     staleTime: 5 * 60_000,
+    retry: 1,
     refetchOnWindowFocus: isSynced,
   });
 }
@@ -139,6 +194,11 @@ export function useTradePlayers(leagueId: string | undefined, isSynced: boolean)
 export async function enrichTradeAssetsWithRanks(
   players: Array<{ id: string; name: string; pos: string; team: string; imageUrl?: string }>,
 ): Promise<TradeAsset[]> {
-  const ranks = await loadCurrentSeasonPlayerRanks();
+  let ranks = new Map<string, { posRank: number }>();
+  try {
+    ranks = await loadCurrentSeasonPlayerRanksShared();
+  } catch {
+    // Return assets without live ranks.
+  }
   return players.map((p) => enrichTradeAsset(p, ranks));
 }

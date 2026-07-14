@@ -1,51 +1,51 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Bell,
   CheckCircle2,
   ChevronRight,
   CircleDot,
   CreditCard,
   Landmark,
   Lock,
-  type LucideIcon,
-  Receipt,
-  RefreshCw,
-  Settings,
   ShieldCheck,
   Trophy,
   Wallet,
 } from 'lucide-react-native';
 import { Pressable, Text } from '@/components/ui/primitives';
+import { AvatarImage } from '@/components/ui/AvatarImage';
 import { Screen } from '@/components/ui/Screen';
 import { BackButton } from '@/components/ui/BackButton';
+import { HeaderAvatarButton } from '@/components/AppChrome';
 import { PageIntro } from '@/components/ui/PageIntro';
+import { SegmentedTabLabel } from '@/components/ui/Segmented';
 import { Toggle } from '@/components/ui/Toggle';
-import { AICard, AISection } from '@/components/ui/AICard';
 import { useLeague, type League } from '@/lib/league-context';
-import { treasuryInsights } from '@/lib/ai-intelligence';
 import { useAuthStore } from '@/lib/auth-store';
 import { startBuyInCheckout } from '@/lib/checkout';
 import {
   executePayouts,
   fetchLeagueStandings,
   fetchTreasury,
-  markMemberPaid,
   payoutTemplateToStructure,
-  resetMemberPayment,
   structureToPayoutTemplate,
   updateTreasurySettings,
   type TreasuryData,
+  type TreasuryPayoutSlot,
 } from '@/lib/treasury-api';
 import { useColors, useTheme, useThemeTokens } from '@/lib/theme';
+import { personAvatar } from '@/lib/avatars';
+import { useLeagueMates } from '@/lib/league-mates-api';
 
 type PayState = 'paid' | 'pending' | 'overdue' | 'failed' | 'refunded' | 'unpaid';
 type PayoutStructure = 'all' | 'top2' | 'top3' | 'top4' | 'custom';
 
 interface Member {
   id: string;
+  userId: string | null;
   name: string;
+  teamName: string | null;
+  providerTeamId: string | null;
   handle: string;
   status: PayState;
   paidOn?: string;
@@ -53,6 +53,10 @@ interface Member {
   reminded?: number;
   isMe?: boolean;
   isCommish?: boolean;
+  isAppMember: boolean;
+  rank: number | null;
+  avatarUrl: string | null;
+  ownerExternalId: string | null;
 }
 
 function formatPaidDate(iso: string | null): string | undefined {
@@ -67,28 +71,22 @@ function mapTreasuryMembers(
   devMode?: boolean,
 ): Member[] {
   return data.members.map((m) => ({
-    id: m.userId,
+    id: m.id,
+    userId: m.userId,
     name: m.displayName,
-    handle: `@${m.displayName.split(/\s+/)[0]?.toLowerCase() ?? 'member'}`,
+    teamName: m.teamName,
+    providerTeamId: m.providerTeamId,
+    handle: `@${(m.displayName.split(/\s+/)[0] ?? 'member').toLowerCase()}`,
     status: m.paid ? ('paid' as PayState) : ('unpaid' as PayState),
     paidOn: formatPaidDate(m.paidAt),
-    method: m.paid ? (devMode ? 'Dev mode' : 'Card') : undefined,
+    method: m.paid ? (devMode ? 'Dev mode' : 'Stripe') : undefined,
     isMe: m.userId === currentUserId,
     isCommish: m.userId === currentUserId && isCommissioner,
+    isAppMember: m.isAppMember,
+    rank: m.rank,
+    avatarUrl: m.ownerAvatarUrl,
+    ownerExternalId: m.ownerExternalId,
   }));
-}
-
-interface ActivityItem { id: string; title: string; when: string }
-
-function formatActivityWhen(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 60) return mins <= 1 ? 'Just now' : `${mins}m`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 48) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  if (days < 14) return `${days}d`;
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 type TreasuryView = { kind: 'home' } | { kind: 'pay'; memberId: string } | { kind: 'review' } | { kind: 'settings' };
@@ -102,14 +100,16 @@ export default function TreasuryPage() {
   const [buyIn, setBuyIn] = useState<number>(active?.buyIn ?? 100);
   const [savingSettings, setSavingSettings] = useState(false);
 
+  const isSynced = active?.type === 'synced';
+
   const {
     data: treasury,
     isLoading,
     isError,
     refetch,
   } = useQuery({
-    queryKey: ['treasury', active?.id],
-    queryFn: () => fetchTreasury(active!.id),
+    queryKey: ['treasury', active?.id, isSynced],
+    queryFn: () => fetchTreasury(active!.id, { sync: isSynced }),
     enabled: !!active?.id,
   });
 
@@ -118,21 +118,14 @@ export default function TreasuryPage() {
     return mapTreasuryMembers(treasury, currentUserId, active?.role === 'commissioner', treasury.paymentsDevMode);
   }, [treasury, currentUserId, active?.role]);
 
-  const activity = useMemo<ActivityItem[]>(() => {
-    if (!treasury?.ledgerActivity?.length) return [];
-    return treasury.ledgerActivity.map((a) => ({
-      id: a.id,
-      title: a.title,
-      when: formatActivityWhen(a.when),
-    }));
-  }, [treasury?.ledgerActivity]);
-
   if (!active) return null;
 
   const buyInUsd = treasury ? treasury.buyInCents / 100 : buyIn;
-  const platformFeeUsd = treasury ? treasury.platformFeeCents / 100 : Math.round(buyInUsd * 0.05);
+  const platformFeeUsd = buyInUsd > 0 ? processingFeeFromBuyIn(buyInUsd) : 0;
   const collected = treasury ? treasury.potCents / 100 : 0;
-  const totalDue = treasury ? buyInUsd * treasury.totalMemberCount : buyInUsd * (active.size ?? active.members ?? 12);
+  const memberCount = treasury?.totalMemberCount ?? active.size ?? active.members ?? members.length;
+  const paidCount = treasury?.paidMemberCount ?? members.filter((m) => m.status === 'paid').length;
+  const totalDue = treasury ? buyInUsd * memberCount : buyInUsd * (active.size ?? active.members ?? 12);
   const remaining = Math.max(0, totalDue - collected);
   const fee = treasury ? (treasury.platformFeeCents * treasury.paidMemberCount) / 100 : 0;
   const net = collected - fee;
@@ -141,35 +134,10 @@ export default function TreasuryPage() {
   const paymentsDevMode = treasury?.paymentsDevMode ?? false;
   const payoutsExecuted = treasury?.ledgerActivity?.some((a) => a.type === 'payout') ?? false;
 
-  const markPaid = async (userId: string) => {
-    if (active.role !== 'commissioner') return;
-    try {
-      await markMemberPaid(active.id, userId);
-      await refetch();
-      await refreshLeagues();
-    } catch (e) {
-      Alert.alert('Could not mark paid', e instanceof Error ? e.message : 'Try again.');
-    }
-  };
-  const sendReminder = (_id: string) =>
-    Alert.alert('Reminder sent', 'Push notifications for reminders are coming soon.');
-  const refund = (_id: string) =>
-    Alert.alert('Refunds', 'Stripe refunds will be available when live payments are enabled.');
-
-  const resetPayment = async (userId: string) => {
-    try {
-      await resetMemberPayment(active.id, userId);
-      await refetch();
-      await refreshLeagues();
-    } catch (e) {
-      Alert.alert('Could not reset', e instanceof Error ? e.message : 'Try again.');
-    }
-  };
-
   const handlePay = async () => {
     if (view.kind !== 'pay') return;
     const member = members.find((m) => m.id === view.memberId);
-    if (!member?.isMe) return;
+    if (!member?.isMe || !member.userId) return;
 
     if (buyInUsd <= 0) {
       Alert.alert(
@@ -203,11 +171,6 @@ export default function TreasuryPage() {
       );
     }
   };
-
-  const platformFeePct =
-    treasury && treasury.buyInCents > 0
-      ? ((treasury.platformFeeCents / treasury.buyInCents) * 100).toFixed(1)
-      : '2.9';
 
   const goBack = () => {
     if (view.kind !== 'home') setView({ kind: 'home' });
@@ -245,7 +208,7 @@ export default function TreasuryPage() {
     <Screen>
       <View style={layout.screen}>
         {view.kind === 'home' ? (
-          <PageIntro title="Treasury" />
+          <PageIntro title="Treasury" trailing={<HeaderAvatarButton />} />
         ) : (
           <TreasuryBar onBack={goBack} showBack />
         )}
@@ -262,25 +225,21 @@ export default function TreasuryPage() {
             net={net}
             fullyFunded={fullyFunded}
             structure={payoutStructure}
+            payoutSlots={treasury?.payoutSlots ?? []}
+            paidCount={paidCount}
+            memberCount={memberCount}
+            platformFee={platformFeeUsd}
             paymentsDevMode={paymentsDevMode}
-            activity={activity}
-            onMarkPaid={markPaid}
-            onRemind={sendReminder}
-            onRefund={refund}
-            onResetPayment={resetPayment}
             onPay={(id) => setView({ kind: 'pay', memberId: id })}
             onReview={() => setView({ kind: 'review' })}
             onSettings={() => setView({ kind: 'settings' })}
             payoutsExecuted={payoutsExecuted}
-            platformFeePct={platformFeePct}
           />
         ) : null}
 
         {view.kind === 'pay' ? (
           <PaymentPage
-            member={members.find((m) => m.id === view.memberId)!}
             buyIn={buyInUsd}
-            fee={platformFeeUsd}
             devMode={paymentsDevMode}
             onComplete={handlePay}
           />
@@ -295,6 +254,8 @@ export default function TreasuryPage() {
             net={net}
             structure={payoutStructure}
             payoutPreview={treasury?.payoutPreview ?? []}
+            payoutSlots={treasury?.payoutSlots ?? []}
+            members={members}
             paymentsDevMode={paymentsDevMode}
             payoutsExecuted={payoutsExecuted}
             onComplete={async () => {
@@ -316,7 +277,7 @@ export default function TreasuryPage() {
                 await updateTreasurySettings(active.id, {
                   buyInCents: Math.round(nextBuyIn * 100),
                   payoutTemplate: structureToPayoutTemplate(nextStructure),
-                  platformFeeCents: Math.max(500, Math.round(nextBuyIn * 100 * 0.05)),
+                  platformFeeCents: platformFeeCentsFromBuyIn(nextBuyIn),
                 });
                 setBuyIn(nextBuyIn);
                 setStructure(nextStructure);
@@ -339,6 +300,77 @@ export default function TreasuryPage() {
 /* ------------------------------ HOME ------------------------------ */
 type PotTab = 'pot' | 'payout';
 
+const TREASURY_GOLD = '#D4AF37';
+const TREASURY_GOLD_RING = 'rgba(212, 175, 55, 0.35)';
+const TREASURY_GOLD_FILL = 'rgba(212, 175, 55, 0.12)';
+const LIVE_POT_SIZE = 220;
+
+function LivePotCircle({
+  amount,
+  paidCount,
+  totalCount,
+}: {
+  amount: number;
+  paidCount: number;
+  totalCount: number;
+}) {
+  return (
+    <View
+      style={{
+        width: LIVE_POT_SIZE,
+        height: LIVE_POT_SIZE,
+        borderRadius: LIVE_POT_SIZE / 2,
+        borderWidth: 3,
+        borderColor: TREASURY_GOLD,
+        backgroundColor: TREASURY_GOLD_FILL,
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: TREASURY_GOLD,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.22,
+        shadowRadius: 16,
+        elevation: 6,
+      }}
+    >
+      <View
+        style={{
+          position: 'absolute',
+          width: LIVE_POT_SIZE - 18,
+          height: LIVE_POT_SIZE - 18,
+          borderRadius: (LIVE_POT_SIZE - 18) / 2,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: TREASURY_GOLD_RING,
+        }}
+      />
+      <Text variant="eyebrow" style={{ color: TREASURY_GOLD, letterSpacing: 1.4 }}>
+        Live pot
+      </Text>
+      <Text
+        variant="potAmount"
+        style={{
+          marginTop: 6,
+          fontVariant: ['tabular-nums'],
+          textAlign: 'center',
+          color: TREASURY_GOLD,
+        }}
+      >
+        ${amount.toLocaleString()}
+      </Text>
+      <Text
+        variant="bodySm"
+        style={{
+          marginTop: 10,
+          fontVariant: ['tabular-nums'],
+          color: TREASURY_GOLD,
+          opacity: 0.85,
+        }}
+      >
+        {paidCount}/{totalCount} paid
+      </Text>
+    </View>
+  );
+}
+
 function TreasuryHome({
   active,
   members,
@@ -350,17 +382,15 @@ function TreasuryHome({
   net,
   fullyFunded,
   structure,
+  payoutSlots,
+  paidCount,
+  memberCount,
+  platformFee,
   paymentsDevMode,
-  activity,
-  onMarkPaid,
-  onRemind,
-  onRefund,
-  onResetPayment,
   onPay,
   onReview,
   onSettings,
   payoutsExecuted,
-  platformFeePct,
 }: {
   active: League;
   members: Member[];
@@ -372,64 +402,27 @@ function TreasuryHome({
   net: number;
   fullyFunded: boolean;
   structure: PayoutStructure;
+  payoutSlots: TreasuryPayoutSlot[];
+  paidCount: number;
+  memberCount: number;
+  platformFee: number;
   paymentsDevMode: boolean;
-  activity: ActivityItem[];
-  onMarkPaid: (id: string) => void;
-  onRemind: (id: string) => void;
-  onRefund: (id: string) => void;
-  onResetPayment: (id: string) => void;
   onPay: (id: string) => void;
   onReview: () => void;
   onSettings: () => void;
   payoutsExecuted: boolean;
-  platformFeePct: string;
 }) {
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
   const [tab, setTab] = useState<PotTab>('pot');
-  const paidCount = members.filter((m) => m.status === 'paid').length;
-  const pct = totalDue ? collected / totalDue : 0;
   const splits = computeSplits(net, structure);
   const seasonComplete = active.stage === 'offseason';
   const isCommish = active.role === 'commissioner';
 
   return (
     <>
-      {paymentsDevMode ? (
-        <View style={[surfaces.roundedCard, { borderWidth: StyleSheet.hairlineWidth, borderColor: toneFg.warning, backgroundColor: toneBg.warning, padding: 14 }]}>
-          <Text variant="eyebrow" style={{ color: toneFg.warning }}>Dev mode · no real charges</Text>
-          <Text variant="bodyMuted" style={{ marginTop: 4, lineHeight: 18 }}>
-            Payments complete instantly for testing. Leave STRIPE_SECRET_KEY empty on the API.
-          </Text>
-        </View>
-      ) : null}
-
-      <View style={surfaces.roundedCardLg}>
-        <View style={[layout.rowStart, { justifyContent: 'space-between' }]}>
-          <View style={[layout.flex1, { minWidth: 0 }]}>
-            <Text variant="eyebrow">{active.name} · Live pot</Text>
-            <Text variant="potAmount" style={{ marginTop: 4, fontVariant: ['tabular-nums'] }}>${collected.toLocaleString()}</Text>
-            <Text variant="subtitle" style={{ marginTop: 4, fontVariant: ['tabular-nums'] }}>of ${totalDue.toLocaleString()} · {paidCount} of {members.length} paid</Text>
-          </View>
-          {isCommish ? (
-            <Pressable onPress={onSettings} style={layout.iconButtonSm}>
-              <Settings size={16} color={c.foreground} />
-            </Pressable>
-          ) : null}
-        </View>
-        <View style={[surfaces.progressTrack, { marginTop: 20, height: 6, backgroundColor: hex.background }]}>
-          <View style={[surfaces.progressFill, { width: `${Math.min(100, pct * 100)}%`, backgroundColor: hex.success }]} />
-        </View>
-        <View style={[layout.rowWrap, { marginTop: 12, alignItems: 'center', gap: 8 }]}>
-          <View style={[layout.row, { gap: 4, borderRadius: 9999, paddingHorizontal: 10, paddingVertical: 4 }, fullyFunded ? { backgroundColor: toneBg.success } : { borderWidth: StyleSheet.hairlineWidth, borderColor: hex.hairline, backgroundColor: hex.background }]}>
-            {fullyFunded ? <CheckCircle2 size={12} color={c.success} /> : <CircleDot size={12} color={c.mutedForeground} />}
-            <Text variant="eyebrow" style={{ color: fullyFunded ? hex.success : hex.mutedForeground }}>{fullyFunded ? 'Fully funded' : 'Collecting dues'}</Text>
-          </View>
-          <View style={{ borderRadius: 9999, borderWidth: StyleSheet.hairlineWidth, borderColor: hex.hairline, backgroundColor: hex.background, paddingHorizontal: 10, paddingVertical: 4 }}>
-            <Text variant="eyebrow">Week {active.week || '—'}</Text>
-          </View>
-          <Text variant="caption" muted>{seasonComplete ? 'Season complete' : 'Updates weekly'}</Text>
-        </View>
+      <View style={{ alignItems: 'center', paddingTop: 8, paddingBottom: 28 }}>
+        <LivePotCircle amount={collected} paidCount={paidCount} totalCount={memberCount} />
       </View>
 
       <View style={surfaces.segmented}>
@@ -440,19 +433,27 @@ function TreasuryHome({
           const isActive = t.key === tab;
           return (
             <Pressable key={t.key} onPress={() => setTab(t.key)} style={isActive ? surfaces.segmentedTabActive : surfaces.segmentedTab}>
-              <Text variant="tab" style={{ color: isActive ? hex.primaryForeground : hex.mutedForeground }}>{t.label}</Text>
+              <SegmentedTabLabel active={isActive}>{t.label}</SegmentedTabLabel>
             </Pressable>
           );
         })}
       </View>
 
       {tab === 'pot' ? (
-        <PotPane active={active} members={members} buyIn={buyIn} collected={collected} remaining={remaining} fee={fee} net={net} isCommish={isCommish} paymentsDevMode={paymentsDevMode} activity={activity} platformFeePct={platformFeePct} onMarkPaid={onMarkPaid} onRemind={onRemind} onRefund={onRefund} onResetPayment={onResetPayment} onPay={onPay} />
+        <PotPane
+          active={active}
+          members={members}
+          buyIn={buyIn}
+          platformFee={platformFee}
+          paymentsDevMode={paymentsDevMode}
+          onPay={onPay}
+        />
       ) : (
         <PayoutPane
           active={active}
           members={members}
           splits={splits}
+          payoutSlots={payoutSlots}
           net={net}
           seasonComplete={seasonComplete}
           isCommish={isCommish}
@@ -463,11 +464,226 @@ function TreasuryHome({
         />
       )}
 
-      <View style={[layout.rowStart, { paddingHorizontal: 8, paddingTop: 4 }]}>
+      <View style={[layout.rowStart, { paddingHorizontal: 8, paddingTop: 8 }]}>
         <Lock size={12} color={c.mutedForeground} style={{ marginTop: 2 }} />
         <Text variant="caption" muted style={[layout.flex1, { lineHeight: 16 }]}>Payments processed securely. Receipts and transaction history are saved to every member's profile.</Text>
       </View>
+
+      {paymentsDevMode ? (
+        <View
+          style={[
+            surfaces.roundedCard,
+            {
+              marginTop: 16,
+              borderWidth: StyleSheet.hairlineWidth,
+              borderColor: toneFg.warning,
+              backgroundColor: toneBg.warning,
+              padding: 14,
+            },
+          ]}
+        >
+          <Text variant="eyebrow" style={{ color: toneFg.warning }}>Dev mode · no real charges</Text>
+          <Text variant="bodyMuted" style={{ marginTop: 4, lineHeight: 18 }}>
+            Payments complete instantly for testing. Leave STRIPE_SECRET_KEY empty on the API.
+          </Text>
+        </View>
+      ) : null}
     </>
+  );
+}
+
+const PROCESSING_FEE_RATE = 0.05;
+
+function processingFeeFromBuyIn(buyInUsd: number) {
+  return Math.round(buyInUsd * 100 * PROCESSING_FEE_RATE) / 100;
+}
+
+function platformFeeCentsFromBuyIn(buyInUsd: number) {
+  return Math.round(buyInUsd * 100 * PROCESSING_FEE_RATE);
+}
+
+function formatDuesAmount(amount: number) {
+  if (amount >= 1000) return `$${(amount / 1000).toFixed(amount % 1000 === 0 ? 0 : 1)}k`;
+  return `$${amount.toLocaleString()}`;
+}
+
+function DuesAmountIndicator({ amount, tone }: { amount: number; tone: 'danger' | 'success' }) {
+  const { hex } = useThemeTokens();
+  const color = tone === 'danger' ? hex.danger : hex.success;
+
+  return (
+    <Text variant="titleMd" style={{ fontVariant: ['tabular-nums'], color }}>
+      {formatDuesAmount(amount)}
+    </Text>
+  );
+}
+
+function DuesCardShell({
+  tone,
+  onPress,
+  children,
+}: {
+  tone: 'danger' | 'success' | 'neutral';
+  onPress?: () => void;
+  children: ReactNode;
+}) {
+  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+  const toneStyle =
+    tone === 'danger'
+      ? { backgroundColor: toneBg.danger, borderColor: toneFg.danger }
+      : tone === 'success'
+        ? { backgroundColor: toneBg.success, borderColor: toneFg.success }
+        : { backgroundColor: hex.surfaceElevated, borderColor: hex.hairline };
+
+  const content = (
+    <View
+      style={[
+        surfaces.cardBorder,
+        layout.row,
+        {
+          alignItems: 'center',
+          gap: 14,
+          paddingHorizontal: 16,
+          paddingVertical: 16,
+          borderWidth: StyleSheet.hairlineWidth,
+          ...toneStyle,
+        },
+      ]}
+    >
+      {children}
+    </View>
+  );
+
+  if (onPress) {
+    return (
+      <Pressable onPress={onPress} style={{ width: '100%' }}>
+        {content}
+      </Pressable>
+    );
+  }
+
+  return content;
+}
+
+function DuesStatusCard({
+  title,
+  subtitle,
+  amount,
+  tone,
+  onPress,
+}: {
+  title: string;
+  subtitle: string;
+  amount: number;
+  tone: 'danger' | 'success';
+  onPress?: () => void;
+}) {
+  const { layout } = useThemeTokens();
+
+  return (
+    <DuesCardShell tone={tone} onPress={onPress}>
+      <View style={[layout.flex1, { minWidth: 0, gap: 4, paddingRight: 12 }]}>
+        <Text variant="body" style={{ fontSize: 16 }}>
+          {title}
+        </Text>
+        <Text variant="bodyMuted" numberOfLines={3}>
+          {subtitle}
+        </Text>
+      </View>
+      <DuesAmountIndicator amount={amount} tone={tone} />
+    </DuesCardShell>
+  );
+}
+
+function MyLeagueDuesCard({
+  member,
+  buyIn,
+  platformFee,
+  paymentsDevMode,
+  onPay,
+}: {
+  member: Member | undefined;
+  buyIn: number;
+  platformFee: number;
+  paymentsDevMode: boolean;
+  onPay: () => void;
+}) {
+  const { hex, layout, surfaces } = useThemeTokens();
+  const c = useColors();
+  const total = buyIn + platformFee;
+
+  if (!member) {
+    return (
+      <DuesCardShell tone="neutral">
+        <View style={[layout.flex1, { minWidth: 0, gap: 4 }]}>
+          <Text variant="body" style={{ fontSize: 16 }}>
+            Your roster slot was not found
+          </Text>
+          <Text variant="bodyMuted">
+            Sync the league or join with the invite link to pay dues here.
+          </Text>
+        </View>
+      </DuesCardShell>
+    );
+  }
+
+  if (member.status === 'paid') {
+    return (
+      <DuesStatusCard
+        title="You’re all set"
+        subtitle="Your league dues have been paid. You’re ready for the season."
+        amount={total}
+        tone="success"
+      />
+    );
+  }
+
+  if (!member.isAppMember) {
+    return (
+      <DuesCardShell tone="neutral">
+        <View style={[surfaces.iconBoxSm, { borderRadius: 9999, backgroundColor: hex.background }]}>
+          <Wallet size={18} color={c.mutedForeground} />
+        </View>
+        <View style={[layout.flex1, { minWidth: 0, gap: 4 }]}>
+          <Text variant="body" style={{ fontSize: 16 }}>
+            Join to pay league dues
+          </Text>
+          <Text variant="bodyMuted">
+            Accept your league invite in the app to pay {formatDuesAmount(total)} into the pot.
+          </Text>
+        </View>
+      </DuesCardShell>
+    );
+  }
+
+  if (buyIn <= 0) {
+    return (
+      <DuesCardShell tone="neutral">
+        <View style={[surfaces.iconBoxSm, { borderRadius: 9999, backgroundColor: hex.background }]}>
+          <CircleDot size={18} color={c.mutedForeground} />
+        </View>
+        <View style={[layout.flex1, { minWidth: 0, gap: 4 }]}>
+          <Text variant="body" style={{ fontSize: 16 }}>
+            Buy-in not set
+          </Text>
+          <Text variant="bodyMuted">The commissioner needs to set a buy-in before you can pay.</Text>
+        </View>
+      </DuesCardShell>
+    );
+  }
+
+  return (
+    <DuesStatusCard
+      title="Time to pay your dues"
+      subtitle={
+        paymentsDevMode
+          ? 'Complete your payment and get ready for kickoff. (Dev mode — no charge.)'
+          : 'Complete your payment and get ready for kickoff.'
+      }
+      amount={total}
+      tone="danger"
+      onPress={onPay}
+    />
   );
 }
 
@@ -475,78 +691,52 @@ function PotPane({
   active,
   members,
   buyIn,
-  collected,
-  remaining,
-  fee,
-  net,
-  isCommish,
+  platformFee,
   paymentsDevMode,
-  activity,
-  platformFeePct,
-  onMarkPaid,
-  onRemind,
-  onRefund,
-  onResetPayment,
   onPay,
 }: {
   active: League;
   members: Member[];
   buyIn: number;
-  collected: number;
-  remaining: number;
-  fee: number;
-  net: number;
-  isCommish: boolean;
+  platformFee: number;
   paymentsDevMode: boolean;
-  activity: ActivityItem[];
-  platformFeePct: string;
-  onMarkPaid: (id: string) => void;
-  onRemind: (id: string) => void;
-  onRefund: (id: string) => void;
-  onResetPayment: (id: string) => void;
   onPay: (id: string) => void;
 }) {
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+  const { hex, layout, surfaces } = useThemeTokens();
+  const myMember = members.find((m) => m.isMe);
+  const isSynced = active.type === 'synced';
+  const { data: mates } = useLeagueMates(active.id, isSynced);
+
+  const membersWithAvatars = useMemo(() => {
+    if (!mates?.length) return members;
+    const avatarByTeam = new Map(mates.map((mate) => [mate.id, mate.avatarUrl]));
+    const avatarByUser = new Map(mates.map((mate) => [mate.userId, mate.avatarUrl]));
+    return members.map((member) => ({
+      ...member,
+      avatarUrl:
+        member.avatarUrl ??
+        (member.providerTeamId ? avatarByTeam.get(member.providerTeamId) ?? null : null) ??
+        (member.ownerExternalId ? avatarByUser.get(member.ownerExternalId) ?? null : null),
+    }));
+  }, [members, mates]);
+
   return (
     <>
-      <AISection title="Treasury insights" caption="AI-powered">
-        {treasuryInsights(active).map((r) => (
-          <AICard key={r.id} rec={r} />
-        ))}
-      </AISection>
-
-      <Section title="Finances">
-        <View style={[layout.rowWrap, { gap: 8 }]}>
-          <Stat label="Collected" value={`$${collected.toLocaleString()}`} />
-          <Stat label="Remaining" value={`$${remaining.toLocaleString()}`} accent={remaining > 0} />
-          <Stat label={`Platform Fee (${platformFeePct}%)`} value={`-$${fee.toLocaleString()}`} />
-          <Stat label="Net prize pool" value={`$${net.toLocaleString()}`} />
-        </View>
-      </Section>
+      <MyLeagueDuesCard
+        member={myMember}
+        buyIn={buyIn}
+        platformFee={platformFee}
+        paymentsDevMode={paymentsDevMode}
+        onPay={() => {
+          if (myMember) onPay(myMember.id);
+        }}
+      />
 
       <Section title="Member payments">
         <View style={[surfaces.roundedCard, { borderWidth: StyleSheet.hairlineWidth, borderColor: hex.hairline }]}>
-          {members.map((m, i) => (
-            <MemberRow key={m.id} member={m} buyIn={buyIn} isCommish={isCommish} paymentsDevMode={paymentsDevMode} onMarkPaid={() => onMarkPaid(m.id)} onRemind={() => onRemind(m.id)} onRefund={() => onRefund(m.id)} onResetPayment={() => onResetPayment(m.id)} onPay={() => onPay(m.id)} isFirst={i === 0} />
+          {membersWithAvatars.map((m, i) => (
+            <MemberPaymentRow key={m.id} member={m} isFirst={i === 0} />
           ))}
-        </View>
-      </Section>
-
-      <Section title="Recent activity">
-        <View style={[surfaces.roundedCard, { borderWidth: StyleSheet.hairlineWidth, borderColor: hex.hairline }]}>
-          {activity.length === 0 ? (
-            <View style={{ paddingHorizontal: 16, paddingVertical: 14 }}>
-              <Text variant="bodyMuted">No payments yet. Set a buy-in in Settings, then tap Pay.</Text>
-            </View>
-          ) : (
-            activity.map((a, i) => (
-              <View key={a.id} style={[layout.rowStart, { paddingHorizontal: 16, paddingVertical: 12 }, i > 0 && layout.listRowBorder]}>
-                <View style={{ marginTop: 4, height: 8, width: 8, flexShrink: 0, borderRadius: 9999, backgroundColor: hex.success }} />
-                <Text variant="bodySm" style={[layout.flex1, { minWidth: 0 }]}>{a.title}</Text>
-                <Text variant="caption" muted>{a.when}</Text>
-              </View>
-            ))
-          )}
         </View>
       </Section>
     </>
@@ -557,6 +747,7 @@ function PayoutPane({
   active,
   members,
   splits,
+  payoutSlots,
   net,
   seasonComplete,
   isCommish,
@@ -568,6 +759,7 @@ function PayoutPane({
   active: League;
   members: Member[];
   splits: { place: string; amount: number; pct: number }[];
+  payoutSlots: TreasuryPayoutSlot[];
   net: number;
   seasonComplete: boolean;
   isCommish: boolean;
@@ -578,10 +770,27 @@ function PayoutPane({
 }) {
   const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
   const c = useColors();
-  const ranked = useMemo(
-    () => members.map((m, i) => ({ id: m.id, name: m.isMe ? (active.teamName ?? m.name) : m.name, isMe: !!m.isMe, seed: i })),
-    [members, active.teamName],
-  );
+
+  const projectionRows = payoutSlots.length
+    ? payoutSlots.map((slot, i) => ({
+        place: splits[i]?.place ?? `${slot.place}${slot.place === 1 ? 'st' : slot.place === 2 ? 'nd' : slot.place === 3 ? 'rd' : 'th'}`,
+        name: slot.ownerName ?? slot.teamName ?? `Place ${slot.place}`,
+        teamName: slot.teamName,
+        pct: slot.percent,
+        amount: slot.amountCents / 100,
+        isMe: members.some((m) => m.isMe && m.userId && m.userId === slot.userId),
+      }))
+    : splits.map((s, i) => {
+        const m = members[i];
+        return {
+          place: s.place,
+          name: m?.isMe ? (active.teamName ?? m.name) : m?.name ?? `Place ${i + 1}`,
+          teamName: m?.teamName ?? null,
+          pct: s.pct,
+          amount: s.amount,
+          isMe: !!m?.isMe,
+        };
+      });
 
   return (
     <>
@@ -591,24 +800,24 @@ function PayoutPane({
             <Text variant="bodyMuted">Net prize pool</Text>
             <Text variant="body" style={{ fontVariant: ['tabular-nums'] }}>${net.toLocaleString()}</Text>
           </View>
-          {splits.map((s, i) => {
-            const m = ranked[i];
-            return (
-              <View key={s.place} style={[layout.row, { gap: 12, paddingHorizontal: 16, paddingVertical: 14 }, i > 0 && layout.listRowBorder]}>
+          {projectionRows.map((row, i) => (
+              <View key={row.place} style={[layout.row, { gap: 12, paddingHorizontal: 16, paddingVertical: 14 }, i > 0 && layout.listRowBorder]}>
                 <View style={[layout.iconButtonSm, { width: 36, height: 36 }]}>
                   <Text variant="bodySm" style={{ fontVariant: ['tabular-nums'] }}>{i + 1}</Text>
                 </View>
                 <View style={[layout.flex1, { minWidth: 0 }]}>
                   <Text variant="body" numberOfLines={1}>
-                    {m?.name ?? `Place ${i + 1}`}
-                    {m?.isMe ? <Text variant="eyebrow" style={{ textTransform: 'none' }}> You</Text> : null}
+                    {row.name}
+                    {row.isMe ? <Text variant="eyebrow" style={{ textTransform: 'none' }}> You</Text> : null}
                   </Text>
-                  <Text variant="bodyMuted">{s.pct}% of pool · {s.place}</Text>
+                  <Text variant="bodyMuted" numberOfLines={1}>
+                    {row.teamName && row.teamName !== row.name ? `${row.teamName} · ` : ''}
+                    {row.pct}% of pool · {row.place}
+                  </Text>
                 </View>
-                <Text variant="titleMd" style={{ fontVariant: ['tabular-nums'] }}>${s.amount.toLocaleString()}</Text>
+                <Text variant="titleMd" style={{ fontVariant: ['tabular-nums'] }}>${row.amount.toLocaleString()}</Text>
               </View>
-            );
-          })}
+            ))}
           <View style={[layout.rowStart, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: hex.hairline, paddingHorizontal: 16, paddingVertical: 12 }]}>
             <CircleDot size={12} color={c.mutedForeground} style={{ marginTop: 2 }} />
             <Text variant="caption" muted style={[layout.flex1, { lineHeight: 16 }]}>
@@ -690,129 +899,81 @@ function PayoutPane({
   );
 }
 
-function MemberRow({
-  member: m,
-  buyIn,
-  isCommish,
-  paymentsDevMode,
-  isFirst,
-  onMarkPaid,
-  onRemind,
-  onRefund,
-  onResetPayment,
-  onPay,
-}: {
-  member: Member;
-  buyIn: number;
-  isCommish: boolean;
-  paymentsDevMode: boolean;
-  isFirst: boolean;
-  onMarkPaid: () => void;
-  onRemind: () => void;
-  onRefund: () => void;
-  onResetPayment: () => void;
-  onPay: () => void;
-}) {
+function MemberPaymentRow({ member, isFirst }: { member: Member; isFirst: boolean }) {
   const { hex, layout, surfaces, toneBg } = useThemeTokens();
-  const [open, setOpen] = useState(false);
-  const isPaid = m.status === 'paid';
-
-  const actions: { key: string; node: ReactNode }[] = [];
-  if (m.isMe && !isPaid && m.status !== 'refunded') {
-    actions.push({
-      key: 'pay',
-      node: <ChipBtn primary onPress={onPay} icon={Wallet}>Pay ${buyIn}</ChipBtn>,
-    });
-  }
-  if (isPaid) {
-    actions.push({ key: 'receipt', node: <ChipBtn icon={Receipt}>View receipt</ChipBtn> });
-  }
-  if (paymentsDevMode && isPaid) {
-    actions.push({
-      key: 'reset',
-      node: <ChipBtn icon={RefreshCw} onPress={onResetPayment}>Reset payment (dev)</ChipBtn>,
-    });
-  }
-  if (isCommish && !isPaid && m.status !== 'refunded') {
-    actions.push({ key: 'remind', node: <ChipBtn icon={Bell} onPress={onRemind}>Send reminder</ChipBtn> });
-    actions.push({
-      key: 'mark',
-      node: <ChipBtn icon={CheckCircle2} onPress={onMarkPaid}>Mark offline payment</ChipBtn>,
-    });
-  }
-  if (isCommish && isPaid) {
-    actions.push({ key: 'refund', node: <ChipBtn icon={RefreshCw} onPress={onRefund}>Issue refund</ChipBtn> });
-  }
-  actions.push({ key: 'history', node: <ChipBtn icon={Receipt}>Payment history</ChipBtn> });
+  const isPaid = member.status === 'paid';
+  const avatarSeed = member.ownerExternalId ?? member.providerTeamId ?? member.id;
 
   return (
-    <View style={!isFirst ? layout.listRowBorder : undefined}>
-      <Pressable onPress={() => setOpen((o) => !o)}>
-        <View style={[layout.rowBetween, { gap: 12, paddingHorizontal: 16, paddingVertical: 14 }]}>
-          <Text variant="body" numberOfLines={1} style={[layout.flex1, { minWidth: 0 }]}>
-            {m.name}
-          </Text>
-          <View
-            style={[
-              surfaces.pill,
-              {
-                paddingHorizontal: 10,
-                paddingVertical: 4,
-                backgroundColor: isPaid ? toneBg.success : toneBg.danger,
-              },
-            ]}
-          >
-            <Text
-              variant="eyebrow"
-              style={{
-                color: isPaid ? hex.success : hex.danger,
-                textTransform: 'capitalize',
-                letterSpacing: 0.5,
-              }}
-            >
-              {isPaid ? 'Paid' : 'Unpaid'}
+    <View
+      style={[
+        layout.row,
+        {
+          alignItems: 'center',
+          gap: 14,
+          paddingHorizontal: 16,
+          paddingVertical: 18,
+        },
+        !isFirst && layout.listRowBorder,
+      ]}
+    >
+      <AvatarImage
+        src={personAvatar(avatarSeed + member.name, member.avatarUrl ?? undefined)}
+        name={member.name}
+        size={48}
+      />
+      <View style={[layout.flex1, { minWidth: 0 }]}>
+        <Text variant="body" numberOfLines={1} style={{ fontSize: 16 }}>
+          {member.name}
+          {member.isMe ? (
+            <Text variant="eyebrow" style={{ textTransform: 'none' }}>
+              {' '}
+              · You
             </Text>
-          </View>
-        </View>
-      </Pressable>
-
-      {open && actions.length > 0 ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 8, paddingHorizontal: 16, paddingVertical: 12 }}
+          ) : null}
+        </Text>
+      </View>
+      <View
+        style={[
+          surfaces.pill,
+          {
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            backgroundColor: isPaid ? toneBg.success : toneBg.danger,
+          },
+        ]}
+      >
+        <Text
+          variant="eyebrow"
           style={{
-            borderTopWidth: StyleSheet.hairlineWidth,
-            borderTopColor: hex.hairline,
+            color: isPaid ? hex.success : hex.danger,
+            textTransform: 'capitalize',
+            letterSpacing: 0.5,
           }}
         >
-          {actions.map((action) => (
-            <View key={action.key}>{action.node}</View>
-          ))}
-        </ScrollView>
-      ) : null}
+          {isPaid ? 'Paid' : 'Unpaid'}
+        </Text>
+      </View>
     </View>
   );
 }
 
 /* ------------------------------ PAYMENT PAGE ------------------------------ */
 function PaymentPage({
-  member,
   buyIn,
-  fee,
   devMode,
   onComplete,
 }: {
-  member: Member;
   buyIn: number;
-  fee: number;
   devMode?: boolean;
   onComplete: () => Promise<void>;
 }) {
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
+  const { hex, layout, surfaces } = useThemeTokens();
   const c = useColors();
   const [method, setMethod] = useState<'apple' | 'google' | 'card' | 'ach'>('apple');
   const [processing, setProcessing] = useState(false);
+  const processingFee = processingFeeFromBuyIn(buyIn);
+  const total = buyIn + processingFee;
 
   const submit = async () => {
     setProcessing(true);
@@ -825,12 +986,39 @@ function PaymentPage({
 
   return (
     <View style={layout.screenStack}>
-      <View style={[surfaces.roundedCardLg, { borderWidth: 0, backgroundColor: hex.foreground, padding: 24 }]}>
-        <Text variant="eyebrow" style={{ color: 'rgba(252,252,252,0.6)' }}>Pay league dues</Text>
-        <Text variant="bodySm" style={{ marginTop: 4, color: 'rgba(252,252,252,0.7)' }}>{member.name}</Text>
-        <Text variant="potAmount" style={{ marginTop: 16, color: hex.background, fontVariant: ['tabular-nums'] }}>${buyIn + fee}</Text>
-        <Text variant="bodyMuted" style={{ marginTop: 8, color: 'rgba(252,252,252,0.6)', fontVariant: ['tabular-nums'] }}>Buy-in ${buyIn} + processing ${fee}</Text>
-      </View>
+      <DuesStatusCard
+        title="Time to pay your dues"
+        subtitle={
+          devMode
+            ? 'Complete your payment and get ready for kickoff. (Dev mode — no charge.)'
+            : 'Complete your payment and get ready for kickoff.'
+        }
+        amount={total}
+        tone="danger"
+      />
+
+      <Section title="Payment summary">
+        <View style={[surfaces.roundedCard, { borderWidth: StyleSheet.hairlineWidth, borderColor: hex.hairline }]}>
+          <View style={[layout.rowBetween, { paddingHorizontal: 16, paddingVertical: 14 }]}>
+            <Text variant="bodyMuted">League buy-in</Text>
+            <Text variant="body" style={{ fontVariant: ['tabular-nums'] }}>
+              ${buyIn.toLocaleString()}
+            </Text>
+          </View>
+          <View style={[layout.rowBetween, layout.listRowBorder, { paddingHorizontal: 16, paddingVertical: 14 }]}>
+            <Text variant="bodyMuted">Processing fee (5%)</Text>
+            <Text variant="body" style={{ fontVariant: ['tabular-nums'] }}>
+              ${processingFee.toLocaleString()}
+            </Text>
+          </View>
+          <View style={[layout.rowBetween, layout.listRowBorder, { paddingHorizontal: 16, paddingVertical: 14 }]}>
+            <Text variant="body">Total due</Text>
+            <Text variant="titleMd" style={{ fontVariant: ['tabular-nums'] }}>
+              ${total.toLocaleString()}
+            </Text>
+          </View>
+        </View>
+      </Section>
 
       <Section title="Payment method">
         <View style={surfaces.roundedCard}>
@@ -859,21 +1047,6 @@ function PaymentPage({
         </View>
       </Section>
 
-      <Section title="Timeline">
-        <View style={surfaces.roundedCard}>
-          {[
-            { t: 'Now', what: 'Submit payment' },
-            { t: 'Instant', what: 'Receipt issued and recorded' },
-            { t: 'End of season', what: 'Auto payout if you place' },
-          ].map((row, i) => (
-            <View key={i} style={[layout.rowStart, { paddingHorizontal: 16, paddingVertical: 12 }, i > 0 && layout.listRowBorder]}>
-              <Text variant="eyebrow" style={{ width: 80, flexShrink: 0 }}>{row.t}</Text>
-              <Text variant="bodyMuted" style={[layout.flex1, { fontSize: 13 }]}>{row.what}</Text>
-            </View>
-          ))}
-        </View>
-      </Section>
-
       <View style={[layout.rowStart, { paddingHorizontal: 8 }]}>
         <ShieldCheck size={12} color={c.mutedForeground} style={{ marginTop: 2 }} />
         <Text variant="caption" muted style={[layout.flex1, { lineHeight: 16 }]}>
@@ -883,9 +1056,9 @@ function PaymentPage({
         </Text>
       </View>
 
-      <Pressable onPress={submit} disabled={processing} style={[surfaces.primaryButton, { height: 52, opacity: processing ? 0.5 : 1 }]}>
+      <Pressable onPress={submit} disabled={processing} style={[surfaces.primaryButton, { opacity: processing ? 0.5 : 1 }]}>
         <Text variant="body" style={{ color: hex.background }}>
-          {processing ? 'Processing…' : devMode ? `Record $${buyIn + fee} (dev)` : `Pay $${buyIn + fee}`}
+          {processing ? 'Processing…' : devMode ? `Record $${total.toLocaleString()} (dev)` : `Pay $${total.toLocaleString()}`}
         </Text>
       </Pressable>
     </View>
@@ -901,6 +1074,8 @@ function PayoutReview({
   net,
   structure,
   payoutPreview,
+  payoutSlots,
+  members,
   paymentsDevMode,
   payoutsExecuted,
   onComplete,
@@ -912,6 +1087,8 @@ function PayoutReview({
   net: number;
   structure: PayoutStructure;
   payoutPreview: Array<{ place: number; percent: number; amountCents: number }>;
+  payoutSlots: TreasuryPayoutSlot[];
+  members: Member[];
   paymentsDevMode: boolean;
   payoutsExecuted: boolean;
   onComplete: () => Promise<void>;
@@ -929,6 +1106,15 @@ function PayoutReview({
   });
 
   const podium = useMemo(() => {
+    if (payoutSlots.length) {
+      return payoutSlots.map((slot) => ({
+        place: `${slot.place}${slot.place === 1 ? 'st' : slot.place === 2 ? 'nd' : slot.place === 3 ? 'rd' : 'th'}`,
+        name: slot.ownerName ?? slot.teamName ?? `Place ${slot.place}`,
+        pct: slot.percent,
+        amount: slot.amountCents / 100,
+      }));
+    }
+
     const standings = standingsData?.standings ?? [];
     const previewByPlace = new Map(payoutPreview.map((p) => [p.place, p]));
     return splits.map((split, i) => {
@@ -939,10 +1125,9 @@ function PayoutReview({
         name: standing?.teamName ?? standing?.ownerName ?? `Place ${i + 1}`,
         pct: split.pct,
         amount: preview ? preview.amountCents / 100 : split.amount,
-        userId: standing?.teamExternalId,
       };
     });
-  }, [standingsData?.standings, splits, payoutPreview]);
+  }, [payoutSlots, standingsData?.standings, splits, payoutPreview]);
 
   const handleApprove = async () => {
     const standings = standingsData?.standings ?? [];
@@ -951,13 +1136,23 @@ function PayoutReview({
       return;
     }
 
-    const payload = standings
-      .slice(0, splits.length)
-      .map((s) => ({
+    const payload: Array<{ place: number; userId: string; teamName?: string }> = [];
+    for (const s of standings.slice(0, splits.length)) {
+      const slot = payoutSlots.find((p) => p.place === s.rank);
+      const rosterMember = members.find((m) => m.providerTeamId === s.teamExternalId);
+      const userId = rosterMember?.userId ?? slot?.userId;
+      if (!userId) continue;
+      payload.push({
         place: s.rank,
-        userId: s.teamExternalId,
-        teamName: s.teamName ?? s.ownerName ?? undefined,
-      }));
+        userId,
+        teamName: s.teamName ?? s.ownerName ?? rosterMember?.teamName ?? undefined,
+      });
+    }
+
+    if (payload.length === 0) {
+      Alert.alert('No app members to pay', 'Winners must join the league in the app before payouts can be recorded.');
+      return;
+    }
 
     setExecuting(true);
     try {
@@ -1040,7 +1235,7 @@ function PayoutReview({
       <Pressable
         onPress={handleApprove}
         disabled={approved || executing || isLoading || isError}
-        style={[surfaces.primaryButton, { height: 52, backgroundColor: approved ? hex.success : hex.foreground, opacity: approved || executing ? 0.7 : 1 }]}
+        style={[surfaces.primaryButton, { backgroundColor: approved ? hex.success : hex.foreground, opacity: approved || executing ? 0.7 : 1 }]}
       >
         <Text variant="body" style={{ color: hex.background }}>
           {approved ? 'Payouts distributed' : executing ? 'Distributing…' : 'Approve payouts'}
@@ -1128,7 +1323,7 @@ function TreasurySettings({
               onPress={() => setReminder(o.id as typeof reminder)}
               style={reminder === o.id ? surfaces.segmentedTabActive : surfaces.segmentedTab}
             >
-              <Text variant="tab" style={{ color: reminder === o.id ? hex.primaryForeground : hex.mutedForeground }}>{o.label}</Text>
+              <SegmentedTabLabel active={reminder === o.id}>{o.label}</SegmentedTabLabel>
             </Pressable>
           ))}
         </View>
@@ -1151,7 +1346,7 @@ function TreasurySettings({
       <Pressable
         onPress={() => onSave(localBuyIn, localStructure)}
         disabled={saving}
-        style={[surfaces.primaryButton, { height: 52, opacity: saving ? 0.5 : 1 }]}
+        style={[surfaces.primaryButton, { opacity: saving ? 0.5 : 1 }]}
       >
         <Text variant="body" style={{ color: hex.background }}>{saving ? 'Saving…' : 'Save treasury settings'}</Text>
       </Pressable>
@@ -1179,30 +1374,6 @@ function Section({ title, children, action }: { title: string; children: ReactNo
       </View>
       {children}
     </View>
-  );
-}
-
-function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
-  const { hex, surfaces } = useThemeTokens();
-  return (
-    <View style={[surfaces.roundedCard, { width: '48%', padding: 16, borderRadius: 20 }]}>
-      <Text variant="eyebrow" style={{ fontSize: 10 }}>{label}</Text>
-      <Text variant="statValue" style={{ marginTop: 4, fontVariant: ['tabular-nums'], color: accent ? hex.warning : hex.foreground }}>{value}</Text>
-    </View>
-  );
-}
-
-function ChipBtn({ children, onPress, icon: Icon, primary }: { children: ReactNode; onPress?: () => void; icon: LucideIcon; primary?: boolean }) {
-  const { hex, layout, surfaces, toneBg, toneFg } = useThemeTokens();
-  const c = useColors();
-  return (
-    <Pressable
-      onPress={onPress}
-      style={[layout.row, { gap: 6, borderRadius: 9999, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: primary ? hex.foreground : hex.background }]}
-    >
-      <Icon size={14} color={primary ? c.background : c.foreground} />
-      <Text variant="button" style={{ color: primary ? hex.background : hex.foreground }}>{children}</Text>
-    </Pressable>
   );
 }
 

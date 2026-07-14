@@ -1,6 +1,13 @@
 import { useQueries, useQuery, keepPreviousData } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { sleeperPlayerImageUrl } from '@flos/shared';
 import { api } from './api';
+import {
+  formatPosRankLabel,
+  normalizeTradePos,
+  rankTradeValue,
+  useSeasonPlayerStats,
+} from './sleeper-player-ranks';
 
 export type ApiPlayerSearchRow = {
   id: string;
@@ -68,6 +75,67 @@ function useDebouncedValue<T>(value: T, delayMs = 300): T {
   return debounced;
 }
 
+export type PoolPreviewPlayer = {
+  id: string;
+  name: string;
+  pos: string;
+  team: string;
+  imageUrl: string;
+  posRank: number;
+  posRankLabel: string;
+  tradeValue: number;
+};
+
+const POOL_PREVIEW_LIMIT = 10;
+
+export function usePoolValuePreview(options?: {
+  limit?: number;
+  position?: string;
+  excludeIds?: Set<string>;
+}) {
+  const limit = options?.limit ?? POOL_PREVIEW_LIMIT;
+  const { data: stats, isLoading, isError } = useSeasonPlayerStats();
+
+  const players = useMemo(() => {
+    if (!stats) return [] as PoolPreviewPlayer[];
+    const { ranks, directory } = stats;
+    const exclude = options?.excludeIds ?? new Set<string>();
+    const posFilter =
+      options?.position && options.position !== 'All'
+        ? normalizeTradePos(options.position)
+        : null;
+
+    const rows: PoolPreviewPlayer[] = [];
+    for (const [id, rankInfo] of ranks) {
+      if (rankInfo.posRank <= 0) continue;
+      if (exclude.has(id)) continue;
+      const info = directory.get(id);
+      if (!info) continue;
+      const pos = info.pos || rankInfo.position || '—';
+      if (posFilter && pos !== posFilter) continue;
+      rows.push({
+        id,
+        name: info.name,
+        pos,
+        team: info.team,
+        imageUrl: sleeperPlayerImageUrl(id),
+        posRank: rankInfo.posRank,
+        posRankLabel: formatPosRankLabel(pos, rankInfo.posRank),
+        tradeValue: rankTradeValue(rankInfo.posRank),
+      });
+    }
+
+    rows.sort((a, b) => a.posRank - b.posRank || a.name.localeCompare(b.name));
+    return rows.slice(0, limit);
+  }, [stats, limit, options?.excludeIds, options?.position]);
+
+  return {
+    players,
+    isLoading: isLoading && !stats,
+    isError,
+  };
+}
+
 export function usePlayerSearch(
   leagueId: string | undefined,
   input: { search: string; position: string; tab: PlayerTab },
@@ -75,6 +143,8 @@ export function usePlayerSearch(
 ) {
   const debouncedSearch = useDebouncedValue(input.search.trim(), 300);
   const apiTab = input.tab === 'watchlist' ? undefined : input.tab;
+  const poolTab = apiTab === 'pool';
+  const poolReady = !poolTab || debouncedSearch.length >= 1;
 
   return useQuery({
     queryKey: ['player-search', leagueId, debouncedSearch, input.position, apiTab],
@@ -82,10 +152,10 @@ export function usePlayerSearch(
       fetchPlayerSearch(leagueId!, {
         search: debouncedSearch || undefined,
         position: input.position,
-        tab: apiTab === 'pool' ? 'pool' : debouncedSearch ? undefined : apiTab,
-        limit: apiTab === 'pool' ? undefined : debouncedSearch ? 100 : 40,
+        tab: poolTab ? 'pool' : debouncedSearch ? undefined : apiTab,
+        limit: poolTab ? 80 : debouncedSearch ? 100 : 40,
       }),
-    enabled: (options?.enabled ?? true) && !!leagueId && input.tab !== 'watchlist',
+    enabled: (options?.enabled ?? true) && !!leagueId && input.tab !== 'watchlist' && poolReady,
     staleTime: 60_000,
     placeholderData: keepPreviousData,
   });

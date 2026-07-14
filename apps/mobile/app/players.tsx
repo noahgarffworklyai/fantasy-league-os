@@ -9,12 +9,10 @@ import {
   Plus,
   Search,
   Share2,
-  SlidersHorizontal,
   Sparkles,
   Star,
   TrendingDown,
   TrendingUp,
-  X,
 } from 'lucide-react-native';
 import { PlayerProfilePanelContent } from '@/components/player/PlayerProfilePanels';
 import { PlayerHeaderProjection } from '@/components/player/PlayerHeaderProjection';
@@ -23,7 +21,7 @@ import { PlayerProfileDataProvider } from '@/lib/use-player-sleeper-stats';
 import type { PlayerProfileTab } from '@/components/player/PlayerProfileTabs';
 import { BackButton } from '@/components/ui/BackButton';
 import { AvatarImage } from '@/components/ui/AvatarImage';
-import { SearchInput } from '@/components/ui/Input';
+import { PositionFilterPanel, SearchFilterRow } from '@/components/ui/SearchFilterRow';
 import { Pressable, Text } from '@/components/ui/primitives';
 import { Screen } from '@/components/ui/Screen';
 import { Segmented } from '@/components/ui/Segmented';
@@ -288,50 +286,26 @@ function PlayersHome({
         <Text variant="subtitle" style={{ marginTop: 8 }}>Trending, injuries, and waiver targets across the league.</Text>
       </View>
 
-      <View style={layout.tight}>
-        <View style={[layout.row, layout.tight]}>
-          <View style={layout.searchBar}>
-            <Search size={16} color={c.mutedForeground} />
-            <SearchInput value={q} onChangeText={setQ} placeholder="Search players" />
-            {q ? (
-              <Pressable onPress={() => setQ('')}>
-                <X size={16} color={c.mutedForeground} />
-              </Pressable>
-            ) : null}
-          </View>
-          <Pressable
-            onPress={() => setFilterOpen((s) => !s)}
-            style={[
-              layout.iconButton,
-              (pos !== 'All' || filterOpen) && { backgroundColor: hex.foreground },
-            ]}
-          >
-            <SlidersHorizontal size={16} color={pos !== 'All' || filterOpen ? hex.background : c.foreground} />
-            {pos !== 'All' ? (
-              <View style={surfaces.badge}>
-                <Text variant="pill" style={{ color: hex.background, fontSize: 9, fontWeight: '600' }}>{pos}</Text>
-              </View>
-            ) : null}
-          </Pressable>
-        </View>
-
-        {filterOpen ? (
-          <View style={[surfaces.roundedCard, { marginTop: spacing.tight, padding: 12 }]}>
-            <Text variant="eyebrow" style={{ paddingHorizontal: 4, paddingBottom: 8 }}>Position</Text>
-            <View style={[layout.rowWrap, { gap: 6 }]}>
-              {FILTERS.map((f) => (
-                <Pressable
-                  key={f}
-                  onPress={() => { setPos(f); setFilterOpen(false); }}
-                  style={[surfaces.pill, { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: f === pos ? hex.foreground : hex.background }]}
-                >
-                  <Text variant="caption" style={{ color: f === pos ? hex.background : hex.mutedForeground }}>{f}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        ) : null}
-      </View>
+      <SearchFilterRow
+        value={q}
+        onChangeValue={setQ}
+        filterActive={pos !== 'All'}
+        filterOpen={filterOpen}
+        onToggleFilter={() => setFilterOpen((s) => !s)}
+        positionBadge={pos !== 'All' ? pos : null}
+        filterPanel={
+          filterOpen ? (
+            <PositionFilterPanel
+              options={FILTERS}
+              value={pos}
+              onChange={(f) => {
+                setPos(f);
+                setFilterOpen(false);
+              }}
+            />
+          ) : null
+        }
+      />
 
       <Segmented
         value={tab}

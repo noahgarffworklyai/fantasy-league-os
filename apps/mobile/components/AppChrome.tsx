@@ -9,6 +9,7 @@ import {
   Check,
   ChevronDown,
   CircleHelp,
+  DollarSign,
   Home,
   LogOut,
   Plus,
@@ -17,7 +18,6 @@ import {
   User,
   UserPlus,
   Users,
-  Wallet,
   Wifi,
 } from 'lucide-react-native';
 import { Pressable, Text, View } from './ui/primitives';
@@ -27,124 +27,165 @@ import { useCommissionerSheet } from '@/lib/commissioner-sheet-context';
 import { leagueSubtitle, useLeague, type League } from '@/lib/league-context';
 import { personAvatar } from '@/lib/avatars';
 import { isTabActive } from '@/lib/nav';
-import { useColors, useHex, useTheme, useThemeStyles } from '@/lib/theme';
+import { NAV_ICON_SIZE, PAGE_TITLE_LINE_HEIGHT } from '@/lib/tokens';
+import { useColors, useHex, useThemeStyles, useThemeTokens } from '@/lib/theme';
 
-const NAV = [
+const NAV_MAIN = [
   { to: '/', label: 'Home', icon: Home, exact: true },
-  { to: '/treasury', label: 'Treasury', icon: Wallet, exact: false },
+  { to: '/treasury', label: 'Treasury', icon: DollarSign, exact: false },
   { to: '/trades', label: 'Trades', icon: ArrowLeftRight, exact: false },
   { to: '/analytics', label: 'Stats', icon: BarChart3, exact: false },
 ] as const;
 
-/* ------------------------------ Top Chrome ------------------------------ */
+const HEADER_AVATAR_SIZE = PAGE_TITLE_LINE_HEIGHT;
 
-export function TopChrome() {
-  const insets = useSafeAreaInsets();
+/** Combined profile + league switcher, inline with page headers. */
+export function HeaderAvatarButton() {
   const { user, leagues, active, setActiveId, signOut } = useLeague();
-  const c = useColors();
   const hex = useHex();
-  const { scheme } = useTheme();
-  const { layout, surfaces } = useThemeStyles();
-  const [switcher, setSwitcher] = useState(false);
-  const [menu, setMenu] = useState(false);
-  if (!active) return null;
+  const [open, setOpen] = useState(false);
+  if (!active || !user) return null;
 
   return (
-    <View style={{ width: '100%', paddingTop: Math.max(insets.top, 12), backgroundColor: hex.background }}>
-      <View style={[layout.rowBetween, { width: '100%', paddingHorizontal: 16, paddingBottom: 8 }]}>
-        <Pressable
-          onPress={() => setSwitcher(true)}
-          style={[
-            layout.row,
-            layout.flex1,
-            surfaces.pill,
-            {
-              height: 36,
-              gap: 6,
-              paddingHorizontal: 14,
-              marginRight: 12,
-              minWidth: 0,
-              backgroundColor: scheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(13,13,13,0.06)',
-            },
-          ]}
-        >
-          <Text variant="link" numberOfLines={1} style={{ flex: 1, minWidth: 0, opacity: 0.9 }}>
-            {active.name}
-          </Text>
-          <ChevronDown size={14} color={c.foreground} strokeWidth={2} />
-        </Pressable>
-        <Pressable
-          onPress={() => setMenu(true)}
-          style={{
-            height: 36,
-            width: 36,
-            overflow: 'hidden',
-            borderRadius: 9999,
-            borderWidth: StyleSheet.hairlineWidth,
-            borderColor: 'rgba(13,13,13,0.1)',
-          }}
-        >
-          <AvatarImage
-            src={personAvatar(user?.email || user?.name || 'me')}
-            name={user?.name ?? 'Me'}
-            size={36}
-          />
-        </Pressable>
-      </View>
+    <>
+      <Pressable
+        onPress={() => setOpen(true)}
+        style={{
+          height: HEADER_AVATAR_SIZE,
+          width: HEADER_AVATAR_SIZE,
+          marginLeft: 12,
+          flexShrink: 0,
+        }}
+      >
+        <View style={{ position: 'relative', height: HEADER_AVATAR_SIZE, width: HEADER_AVATAR_SIZE }}>
+          <View
+            style={{
+              height: HEADER_AVATAR_SIZE,
+              width: HEADER_AVATAR_SIZE,
+              overflow: 'hidden',
+              borderRadius: 9999,
+              borderWidth: StyleSheet.hairlineWidth,
+              borderColor: hex.hairline,
+            }}
+          >
+            <AvatarImage
+              src={personAvatar(user.email || user.name || 'me')}
+              name={user.name ?? 'Me'}
+              size={HEADER_AVATAR_SIZE}
+            />
+          </View>
+          <View
+            style={{
+              position: 'absolute',
+              right: 0,
+              bottom: 0,
+              height: 16,
+              width: 16,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 9999,
+              borderWidth: 1.5,
+              borderColor: hex.background,
+              backgroundColor: hex.foreground,
+            }}
+          >
+            <ChevronDown size={9} color={hex.background} strokeWidth={2.5} />
+          </View>
+        </View>
+      </Pressable>
 
-      <LeagueSwitcherSheet
-        open={switcher}
-        onClose={() => setSwitcher(false)}
+      <AccountMenuSheet
+        open={open}
+        onClose={() => setOpen(false)}
         leagues={leagues}
         activeId={active.id}
-        onSelect={(id) => {
+        onSelectLeague={(id) => {
           setActiveId(id);
-          setSwitcher(false);
+          setOpen(false);
         }}
-      />
-
-      <ProfileMenuSheet
-        open={menu}
-        onClose={() => setMenu(false)}
         signOut={signOut}
-        name={user?.name ?? 'Marc Jackson'}
-        email={user?.email ?? ''}
+        name={user.name ?? 'Member'}
+        email={user.email ?? ''}
       />
-    </View>
+    </>
   );
 }
 
-function LeagueSwitcherSheet({
+function AccountMenuSheet({
   open,
   onClose,
   leagues,
   activeId,
-  onSelect,
+  onSelectLeague,
+  signOut,
+  name,
+  email,
 }: {
   open: boolean;
   onClose: () => void;
   leagues: League[];
   activeId: string;
-  onSelect: (id: string) => void;
+  onSelectLeague: (id: string) => void;
+  signOut: () => Promise<void>;
+  name: string;
+  email: string;
 }) {
   const router = useRouter();
   const c = useColors();
   const hex = useHex();
   const { layout, surfaces } = useThemeStyles();
+  const { open: openCommissioner } = useCommissionerSheet();
+
   const go = (to: string) => {
     onClose();
     router.push(to as never);
   };
+
+  const menuItems = [
+    { icon: User, label: 'Profile', onPress: () => go('/profile') },
+    { icon: Shield, label: 'Commissioner', onPress: () => { onClose(); openCommissioner(); } },
+    { icon: Plus, label: 'Create a League', onPress: () => go('/onboarding/create') },
+    { icon: UserPlus, label: 'Join a League', onPress: () => go('/onboarding/join') },
+    { icon: Bell, label: 'Notifications', onPress: () => go('/profile') },
+    { icon: Settings, label: 'Settings', onPress: () => go('/commissioner/settings') },
+    { icon: CircleHelp, label: 'Help', onPress: () => go('/profile') },
+    {
+      icon: LogOut,
+      label: 'Logout',
+      onPress: async () => {
+        onClose();
+        await signOut();
+      },
+    },
+  ];
+
   return (
-    <Sheet open={open} onClose={onClose} title="Switch League" scroll={false}>
+    <Sheet open={open} onClose={onClose} scroll={false}>
       <View style={{ paddingHorizontal: 16 }}>
+        <View style={[layout.row, { gap: 12, paddingHorizontal: 8, paddingBottom: 16 }]}>
+          <AvatarImage src={personAvatar(email || name)} name={name} size={48} />
+          <View style={[layout.flex1, { minWidth: 0 }]}>
+            <Text variant="titleMd" numberOfLines={1}>
+              {name}
+            </Text>
+            {email ? (
+              <Text variant="bodyMuted" numberOfLines={1}>
+                {email}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+
+        <Text variant="eyebrow" style={{ paddingHorizontal: 8, marginBottom: 8 }}>
+          Switch league
+        </Text>
         <View style={surfaces.sheetGroup}>
           {leagues.map((l, i) => {
             const selected = l.id === activeId;
             return (
               <Pressable
                 key={l.id}
-                onPress={() => onSelect(l.id)}
+                onPress={() => onSelectLeague(l.id)}
                 style={[
                   layout.row,
                   { gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
@@ -185,6 +226,31 @@ function LeagueSwitcherSheet({
           <SheetAction icon={UserPlus} label="Join" onPress={() => go('/onboarding/join')} />
           <SheetAction icon={Wifi} label="Sync" onPress={() => go('/onboarding/sync')} />
         </View>
+
+        <View style={[surfaces.sheetGroup, { marginTop: 16 }]}>
+          {menuItems.map((it, i) => (
+            <Pressable
+              key={it.label}
+              onPress={it.onPress}
+              style={[
+                layout.row,
+                { gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
+                i > 0 ? layout.listRowBorder : null,
+              ]}
+            >
+              <it.icon size={16} color={it.label === 'Logout' ? c.destructive : c.foreground} />
+              <Text
+                variant="body"
+                style={[
+                  layout.flex1,
+                  it.label === 'Logout' ? { color: hex.danger } : null,
+                ]}
+              >
+                {it.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
       </View>
     </Sheet>
   );
@@ -222,103 +288,43 @@ function SheetAction({
   );
 }
 
-function ProfileMenuSheet({
-  open,
-  onClose,
-  signOut,
-  name,
-  email,
-}: {
-  open: boolean;
-  onClose: () => void;
-  signOut: () => Promise<void>;
-  name: string;
-  email: string;
-}) {
-  const router = useRouter();
-  const c = useColors();
-  const hex = useHex();
-  const { layout, surfaces } = useThemeStyles();
-  const go = (to: string) => {
-    onClose();
-    router.push(to as never);
-  };
-  const { open: openCommissioner } = useCommissionerSheet();
-  const items = [
-    { icon: User, label: 'Profile', onPress: () => go('/profile') },
-    { icon: Shield, label: 'Commissioner', onPress: () => { onClose(); openCommissioner(); } },
-    { icon: Plus, label: 'Create a League', onPress: () => go('/onboarding/create') },
-    { icon: UserPlus, label: 'Join a League', onPress: () => go('/onboarding/join') },
-    { icon: Bell, label: 'Notifications', onPress: () => go('/profile') },
-    { icon: Settings, label: 'Settings', onPress: () => go('/commissioner/settings') },
-    { icon: CircleHelp, label: 'Help', onPress: () => go('/profile') },
-    {
-      icon: LogOut,
-      label: 'Logout',
-      onPress: async () => {
-        onClose();
-        await signOut();
-      },
-    },
-  ];
-  return (
-    <Sheet open={open} onClose={onClose} scroll={false}>
-      <View style={{ paddingHorizontal: 16 }}>
-        <View style={[layout.row, { gap: 12, paddingHorizontal: 8, paddingBottom: 16 }]}>
-          <AvatarImage src={personAvatar(email || name)} name={name} size={48} />
-          <View style={[layout.flex1, { minWidth: 0 }]}>
-            <Text variant="titleMd" numberOfLines={1}>
-              {name}
-            </Text>
-            {email ? (
-              <Text variant="bodyMuted" numberOfLines={1}>
-                {email}
-              </Text>
-            ) : null}
-          </View>
-        </View>
-        <View style={surfaces.sheetGroup}>
-          {items.map((it, i) => (
-            <Pressable
-              key={it.label}
-              onPress={it.onPress}
-              style={[
-                layout.row,
-                { gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
-                i > 0 ? layout.listRowBorder : null,
-              ]}
-            >
-              <it.icon size={16} color={it.label === 'Logout' ? c.destructive : c.foreground} />
-              <Text
-                variant="body"
-                style={[
-                  layout.flex1,
-                  it.label === 'Logout' ? { color: hex.danger } : null,
-                ]}
-              >
-                {it.label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-    </Sheet>
-  );
-}
-
 /* ------------------------------ Bottom Bar ------------------------------ */
 
 export function BottomBar() {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const router = useRouter();
-  const c = useColors();
-  const hex = useHex();
-  const { scheme } = useTheme();
-  const { layout } = useThemeStyles();
+  const { surfaces, navFg } = useThemeTokens();
   const teamActive = isTabActive(pathname, '/team');
 
-  const barBg = scheme === 'dark' ? 'rgba(8,8,8,0.92)' : 'rgba(242,242,242,0.92)';
+  const renderNavItem = (n: (typeof NAV_MAIN)[number]) => {
+    const active = isTabActive(pathname, n.to);
+    return (
+      <Pressable
+        key={n.to}
+        onPress={() => {
+          if (active) return;
+          router.replace(n.to as never);
+        }}
+        style={[
+          surfaces.navTab,
+          { minWidth: 0 },
+          active ? surfaces.navTabActive : null,
+        ]}
+      >
+        <n.icon size={NAV_ICON_SIZE} color={navFg} strokeWidth={active ? 2 : 1.75} />
+        <Text
+          variant="navLabel"
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.85}
+          style={{ width: '100%', textAlign: 'center', color: navFg }}
+        >
+          {n.label}
+        </Text>
+      </Pressable>
+    );
+  };
 
   return (
     <View
@@ -333,100 +339,24 @@ export function BottomBar() {
       }}
       pointerEvents="box-none"
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, width: '100%' }}>
-        <View
-          style={{
-            flex: 1,
-            minWidth: 0,
-            flexDirection: 'row',
-            borderRadius: 9999,
-            borderWidth: StyleSheet.hairlineWidth,
-            borderColor: hex.hairline,
-            backgroundColor: barBg,
-            paddingHorizontal: 8,
-            paddingVertical: 6,
-            overflow: 'hidden',
-          }}
-        >
-          {NAV.map((n) => {
-            const active = isTabActive(pathname, n.to);
-            return (
-              <Pressable
-                key={n.to}
-                onPress={() => {
-                  if (active) return;
-                  router.replace(n.to as never);
-                }}
-                style={[
-                  layout.flex1,
-                  layout.centered,
-                  {
-                    gap: 3,
-                    borderRadius: 9999,
-                    paddingVertical: 8,
-                    paddingHorizontal: 2,
-                    minWidth: 0,
-                  },
-                  active ? { backgroundColor: scheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(13,13,13,0.05)' } : null,
-                ]}
-              >
-                <n.icon
-                  size={18}
-                  color={active ? c.foreground : c.mutedForeground}
-                  strokeWidth={active ? 2.4 : 1.8}
-                />
-                <Text
-                  variant="pill"
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.8}
-                  style={{
-                    width: '100%',
-                    textAlign: 'center',
-                    color: active ? hex.foreground : hex.mutedForeground,
-                  }}
-                >
-                  {n.label}
-                </Text>
-              </Pressable>
-            );
-          })}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, width: '100%' }}>
+        <View style={[surfaces.navBarFloat, { minWidth: 0 }]}>
+          {NAV_MAIN.map(renderNavItem)}
         </View>
         <Pressable
           onPress={() => {
             if (teamActive) return;
             router.replace('/team' as never);
           }}
-          style={[
-            layout.centered,
-            {
-              height: 58,
-              minWidth: 58,
-              paddingHorizontal: 6,
-              flexShrink: 0,
-              borderRadius: 9999,
-              borderWidth: StyleSheet.hairlineWidth,
-              borderColor: hex.hairline,
-              backgroundColor: barBg,
-              gap: 3,
-            },
-            teamActive ? { backgroundColor: scheme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(13,13,13,0.08)' } : null,
-          ]}
+          style={[surfaces.navTeamCircle, teamActive ? surfaces.navTabActive : null]}
         >
-          <Users
-            size={20}
-            color={teamActive ? c.foreground : c.mutedForeground}
-            strokeWidth={teamActive ? 2.4 : 1.8}
-          />
+          <Users size={NAV_ICON_SIZE} color={navFg} strokeWidth={teamActive ? 2 : 1.75} />
           <Text
-            variant="pill"
+            variant="navLabel"
             numberOfLines={1}
             adjustsFontSizeToFit
             minimumFontScale={0.85}
-            style={{
-              textAlign: 'center',
-              color: teamActive ? hex.foreground : hex.mutedForeground,
-            }}
+            style={{ color: navFg }}
           >
             Team
           </Text>

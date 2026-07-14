@@ -2,13 +2,14 @@ import { useCallback, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { View } from '@/components/ui/primitives';
+import { HeaderAvatarButton } from '@/components/AppChrome';
 import { PageIntro } from '@/components/ui/PageIntro';
 import { BOTTOM_BAR_SPACE } from '@/components/ui/WorkflowShell';
 import { useLeague } from '@/lib/league-context';
 import { useHex, useThemeTokens } from '@/lib/theme';
 import { PlayerSheet, TradePane, type PlayerDetail } from './team';
 
-const TOP_CHROME_HEIGHT = 44;
+const KEYBOARD_TOP_OFFSET = 12;
 
 export default function TradesPage() {
   const { active } = useLeague();
@@ -19,11 +20,13 @@ export default function TradesPage() {
   const scrollY = useRef(0);
   const savedScrollY = useRef(0);
   const [searchActive, setSearchActive] = useState(false);
+  const [machineSearchActive, setMachineSearchActive] = useState(false);
   const [tradeSubView, setTradeSubView] = useState(false);
   const [player, setPlayer] = useState<PlayerDetail | null>(null);
   const isSynced = active?.type === 'synced';
+  const keyboardActive = searchActive || machineSearchActive;
 
-  const topChromeOffset = Math.max(insets.top, 12) + TOP_CHROME_HEIGHT;
+  const topOffset = Math.max(insets.top, KEYBOARD_TOP_OFFSET);
 
   const handleSearchFocusChange = useCallback((focused: boolean) => {
     if (focused) {
@@ -44,23 +47,42 @@ export default function TradesPage() {
     });
   }, []);
 
+  const handleMachineSearchFocusChange = useCallback((focused: boolean) => {
+    if (focused) {
+      savedScrollY.current = scrollY.current;
+      setMachineSearchActive(true);
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+      });
+      return;
+    }
+
+    setMachineSearchActive(false);
+    const restoreY = savedScrollY.current;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollTo({ y: restoreY, animated: false });
+      });
+    });
+  }, []);
+
   if (!active) return null;
 
   return (
     <>
       <KeyboardAvoidingView
         style={{ flex: 1, backgroundColor: hex.background }}
-        behavior={searchActive ? (Platform.OS === 'ios' ? 'padding' : 'height') : undefined}
-        keyboardVerticalOffset={topChromeOffset}
+        behavior={keyboardActive ? (Platform.OS === 'ios' ? 'padding' : 'height') : undefined}
+        keyboardVerticalOffset={topOffset}
       >
         <ScrollView
           ref={scrollRef}
           style={{ flex: 1, backgroundColor: hex.background }}
           contentContainerStyle={[
-            { paddingBottom: BOTTOM_BAR_SPACE + insets.bottom },
-            searchActive && { flexGrow: 1 },
+            { paddingTop: topOffset, paddingBottom: BOTTOM_BAR_SPACE + insets.bottom },
+            keyboardActive && { flexGrow: 1 },
           ]}
-          scrollEnabled={!searchActive}
+          scrollEnabled={!keyboardActive}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
@@ -69,8 +91,10 @@ export default function TradesPage() {
             scrollY.current = e.nativeEvent.contentOffset.y;
           }}
         >
-          <View style={[layout.screen, searchActive && { flex: 1 }]}>
-            {!searchActive && !tradeSubView ? <PageIntro title="Trades" /> : null}
+          <View style={[layout.screen, keyboardActive && { flex: 1 }]}>
+            {!keyboardActive && !tradeSubView ? (
+              <PageIntro title="Trades" trailing={<HeaderAvatarButton />} />
+            ) : null}
             <TradePane
               synced={isSynced}
               platform={active.platform}
@@ -78,6 +102,7 @@ export default function TradesPage() {
               onPlayer={setPlayer}
               searchActive={searchActive}
               onSearchFocusChange={handleSearchFocusChange}
+              onMachineSearchFocusChange={handleMachineSearchFocusChange}
               onSubViewChange={setTradeSubView}
             />
           </View>

@@ -16,7 +16,7 @@ import type { EnrichedTradeIdea, EnrichedTradeIdeaPlayer } from '@/lib/trade-ide
 import { useColors, useHex, useTheme, useThemeTokens } from '@/lib/theme';
 import { spacing } from '@/lib/tokens';
 
-const TRADE_CARD_HEIGHT = 340;
+const TRADE_CARD_HEIGHT = 380;
 const PLAYER_SLOT_HEIGHT = 136;
 const HEADER_GAP = 18;
 const SECTION_GAP = 18;
@@ -111,6 +111,7 @@ function TradeIdeaCard({
           height: TRADE_CARD_HEIGHT,
           borderColor: borderForTone(idea.tone, ink),
           paddingVertical: 20,
+          paddingBottom: 54,
           paddingHorizontal: 18,
         },
       ]}
@@ -268,7 +269,7 @@ export function TradeIdeasCarousel({
   }
 
   return (
-    <View>
+    <View style={{ position: 'relative' }}>
       <ScrollView
         ref={scrollerRef}
         horizontal
@@ -292,8 +293,14 @@ export function TradeIdeasCarousel({
             layout.row,
             layout.centered,
             {
+              position: 'absolute',
+              bottom: 12,
+              alignSelf: 'center',
               gap: 6,
-              paddingTop: spacing.screen,
+              borderRadius: 9999,
+              backgroundColor: 'rgba(0,0,0,0.12)',
+              paddingHorizontal: 10,
+              paddingVertical: 7,
             },
           ]}
         >

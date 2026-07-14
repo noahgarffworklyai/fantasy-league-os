@@ -58,14 +58,13 @@ export type CreateHostedLeagueInput = {
 
 export async function createHostedLeagueOnApi(input: CreateHostedLeagueInput) {
   const season = new Date().getFullYear();
-  const potCents = input.buyIn * 100 * input.size;
   return api.post<{ league: { id: string; name: string; buyInCents: number; platformFeeCents: number } }>(
     '/leagues',
     {
       name: input.name,
       season,
       buyInCents: input.buyIn * 100,
-      platformFeeCents: Math.max(500, Math.round(potCents * 0.03)),
+      platformFeeCents: Math.round(input.buyIn * 100 * 0.05),
       payoutTemplate: 'standard',
       draftDate: input.draftDate,
       customRules: JSON.stringify({
@@ -99,8 +98,6 @@ export type CreateSyncedLeagueInput = {
 
 export async function createSyncedLeagueOnApi(input: CreateSyncedLeagueInput) {
   const buyIn = input.buyIn ?? 0;
-  const size = input.teamCount ?? 12;
-  const potCents = buyIn * 100 * size;
   return api.post<{ league: { id: string; name: string; buyInCents: number; platformFeeCents: number } }>(
     '/leagues',
     {
@@ -109,7 +106,7 @@ export async function createSyncedLeagueOnApi(input: CreateSyncedLeagueInput) {
       name: input.name,
       season: input.season,
       buyInCents: buyIn * 100,
-      platformFeeCents: buyIn > 0 ? Math.max(500, Math.round(potCents * 0.03)) : 0,
+      platformFeeCents: buyIn > 0 ? Math.round(buyIn * 100 * 0.05) : 0,
       payoutTemplate: 'standard',
       customRules: JSON.stringify({
         synced: true,

@@ -1,3 +1,5 @@
+import { useQuery } from '@tanstack/react-query';
+import { fetchWithTimeout } from './fetch-timeout';
 import { fetchNflState, resolveStatsSeason } from './sleeper-projections-api';
 
 const STATS_BASE = 'https://api.sleeper.com/stats/nfl';
@@ -34,7 +36,7 @@ async function fetchSeasonStatRows(season: number | string): Promise<SleeperStat
     params.append('position[]', pos);
   }
 
-  const res = await fetch(`${STATS_BASE}/${season}?${params.toString()}`);
+  const res = await fetchWithTimeout(`${STATS_BASE}/${season}?${params.toString()}`, undefined, 20_000);
   if (!res.ok) throw new Error(`Sleeper stats error: ${res.status}`);
   return (await res.json()) as SleeperStatRow[];
 }
@@ -84,6 +86,84 @@ export async function loadCurrentSeasonPlayerRanks(): Promise<Map<string, Player
   const state = await fetchNflState();
   const season = resolveStatsSeason(state);
   return fetchSeasonPlayerRanks(season);
+}
+
+let ranksInflight: Promise<Map<string, PlayerRankInfo>> | null = null;
+let ranksMemo: Map<string, PlayerRankInfo> | null = null;
+let ranksMemoAt = 0;
+const RANKS_MEMO_MS = 5 * 60_000;
+
+/** Dedupes concurrent rank fetches across trade tab hooks. */
+export async function loadCurrentSeasonPlayerRanksShared(): Promise<Map<string, PlayerRankInfo>> {
+  const now = Date.now();
+  if (ranksMemo && now - ranksMemoAt < RANKS_MEMO_MS) return ranksMemo;
+  if (ranksInflight) return ranksInflight;
+
+  ranksInflight = loadCurrentSeasonPlayerRanks()
+    .then((ranks) => {
+      ranksMemo = ranks;
+      ranksMemoAt = Date.now();
+      return ranks;
+    })
+    .finally(() => {
+      ranksInflight = null;
+    });
+
+  return ranksInflight;
+}
+
+export async function loadCurrentSeasonPlayerDirectory(): Promise<Map<string, PlayerDirectoryEntry>> {
+  const state = await fetchNflState();
+  const season = resolveStatsSeason(state);
+  return fetchSeasonPlayerDirectory(season);
+}
+
+/** One Sleeper stats request — builds both rank and directory maps. */
+export async function loadCurrentSeasonPlayerStats(): Promise<{
+  ranks: Map<string, PlayerRankInfo>;
+  directory: Map<string, PlayerDirectoryEntry>;
+}> {
+  const state = await fetchNflState();
+  const season = resolveStatsSeason(state);
+  const rows = await fetchSeasonStatRows(season);
+  const ranks = new Map<string, PlayerRankInfo>();
+  const directory = new Map<string, PlayerDirectoryEntry>();
+
+  for (const row of rows ?? []) {
+    if (!row.player_id || !row.player) continue;
+    const id = String(row.player_id);
+    const first = row.player.first_name ?? '';
+    const last = row.player.last_name ?? '';
+    const name = `${first} ${last}`.trim() || `Player ${id}`;
+    const pos = normalizeTradePos(row.player.position ?? '—');
+    directory.set(id, { name, pos, team: row.player.team ?? 'FA' });
+
+    const posRank =
+      row.stats?.pos_rank_ppr ?? row.stats?.pos_rank_half_ppr ?? row.stats?.pos_rank_std;
+    if (posRank != null && posRank > 0) {
+      ranks.set(id, { posRank, position: row.player.position });
+    }
+  }
+
+  return { ranks, directory };
+}
+
+export function useSeasonPlayerRanks() {
+  return useQuery({
+    queryKey: ['season-player-ranks'],
+    queryFn: loadCurrentSeasonPlayerRanksShared,
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
+}
+
+export function useSeasonPlayerStats() {
+  return useQuery({
+    queryKey: ['season-player-stats'],
+    queryFn: loadCurrentSeasonPlayerStats,
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
 }
 
 export function normalizeTradePos(position: string): string {

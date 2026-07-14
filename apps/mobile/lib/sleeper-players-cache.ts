@@ -1,5 +1,7 @@
 import type { SleeperPlayerProfile } from './sleeper-player-profile';
 
+import { fetchWithTimeout } from './fetch-timeout';
+
 const BASE = 'https://api.sleeper.app/v1';
 
 export type SleeperPlayerRecord = {
@@ -94,7 +96,7 @@ export async function loadSleeperPlayersCache(): Promise<Map<string, SleeperPlay
     return playersCache;
   }
 
-  const res = await fetch(`${BASE}/players/nfl`);
+  const res = await fetchWithTimeout(`${BASE}/players/nfl`, undefined, 20_000);
   if (!res.ok) throw new Error(`Sleeper players cache error: ${res.status}`);
   const raw = (await res.json()) as Record<string, SleeperPlayerRecord>;
   playersCache = new Map(Object.entries(raw));
