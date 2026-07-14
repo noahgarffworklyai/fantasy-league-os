@@ -8,7 +8,10 @@
     "typecheck": "turbo typecheck",
     "db:generate": "pnpm --filter @flos/api db:generate",
     "db:migrate": "pnpm --filter @flos/api db:migrate",
-    "db:studio": "pnpm --filter @flos/api db:studio"
+    "db:studio": "pnpm --filter @flos/api db:studio",
+    "stripe:setup": "node scripts/install-stripe-cli.mjs",
+    "stripe:login": "node scripts/stripe-login.mjs",
+    "stripe:listen": "node scripts/stripe-listen.mjs"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

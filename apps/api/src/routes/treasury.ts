@@ -1,4 +1,4 @@
-import { executePayoutSchema } from '@flos/shared';
+import { executePayoutSchema, computePlatformFeeCents } from '@flos/shared';
 import { and, eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { CanonicalLeague } from '@flos/shared';
@@ -163,7 +163,8 @@ export async function treasuryRoutes(app: FastifyInstance) {
       payoutPreview,
       payoutSlots,
       stripeConnectOnboarded: league.connectOnboarded,
-      paymentsDevMode: !config.stripeSecretKey,
+      paymentsDevMode: config.paymentsDevMode,
+      paymentsTestMode: config.paymentsTestMode,
       members,
       ledgerActivity,
       rosterSource: teams.length > 0 ? (link?.provider ?? 'snapshot') : 'hosted',
@@ -193,14 +194,15 @@ export async function treasuryRoutes(app: FastifyInstance) {
     if (!target) return reply.status(404).send({ error: 'Member not found' });
     if (target.paid) return reply.status(400).send({ error: 'Member already paid' });
 
-    const amountCents = league.buyInCents + league.platformFeeCents;
+    const platformFeeCents = computePlatformFeeCents(league.buyInCents);
+    const amountCents = league.buyInCents + platformFeeCents;
 
     await db.insert(payments).values({
       leagueId: id,
       userId: targetUserId,
       amountCents,
       buyInCents: league.buyInCents,
-      platformFeeCents: league.platformFeeCents,
+      platformFeeCents,
       status: 'completed',
     });
 
@@ -208,16 +210,16 @@ export async function treasuryRoutes(app: FastifyInstance) {
       leagueId: id,
       userId: targetUserId,
       buyInCents: league.buyInCents,
-      platformFeeCents: league.platformFeeCents,
+      platformFeeCents,
     });
 
     return { ok: true, userId: targetUserId };
   });
 
-  /** Dev/testing only — undo a recorded buy-in so payment flow can be retried. */
+  /** Dev/test only — undo a recorded buy-in so payment flow can be retried. */
   app.post('/leagues/:id/treasury/reset-payment', { preHandler: authMiddleware }, async (request, reply) => {
-    if (config.stripeSecretKey) {
-      return reply.status(403).send({ error: 'Only available in payments dev mode' });
+    if (config.stripeSecretKey && !config.paymentsTestMode) {
+      return reply.status(403).send({ error: 'Only available in payments dev or Stripe test mode' });
     }
 
     const authReq = request as AuthenticatedRequest;

@@ -1,6 +1,7 @@
 export * from './schemas/league.js';
 export * from './schemas/auth.js';
 export * from './schemas/treasury.js';
+export * from './treasury-fees.js';
 export * from './schemas/engagement.js';
 export * from './schemas/ai.js';
 export * from './constants.js';

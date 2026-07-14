@@ -1,11 +1,11 @@
 import { useState, type ReactNode } from 'react';
-import { Image, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 import { Text } from './primitives';
 import { initialsOf } from '@/lib/avatars';
-import { useHex, useTheme } from '@/lib/theme';
+import { useHex } from '@/lib/theme';
 
 type Props = {
-  src: string;
+  src?: string | null;
   name: string;
   /** Diameter in px (default 40). */
   size?: number;
@@ -13,30 +13,31 @@ type Props = {
 };
 
 /**
- * Circular avatar image with graceful fallback to initials if the
- * remote image fails to load.
+ * Circular avatar image with graceful fallback to initials if no image
+ * is provided or the remote image fails to load.
  */
 export function AvatarImage({ src, name, size = 40, badge }: Props) {
   const hex = useHex();
-  const { scheme } = useTheme();
   const [failed, setFailed] = useState(false);
   const dim = { width: size, height: size, borderRadius: size / 2 };
-  const ink = scheme === 'dark' ? '255,255,255' : '13,13,13';
+  const showFallback = !src || failed;
 
   return (
     <View style={[{ position: 'relative', flexShrink: 0 }, dim]}>
-      {failed ? (
+      {showFallback ? (
         <View
           style={[
             dim,
             {
               alignItems: 'center',
               justifyContent: 'center',
-              backgroundColor: `rgba(${ink},0.1)`,
+              backgroundColor: hex.muted,
+              borderWidth: StyleSheet.hairlineWidth,
+              borderColor: hex.hairline,
             },
           ]}
         >
-          <Text variant="caption" style={{ color: `rgba(${ink},0.8)` }}>
+          <Text variant="caption" style={{ color: hex.mutedForeground, fontWeight: '600' }}>
             {initialsOf(name)}
           </Text>
         </View>
@@ -44,7 +45,7 @@ export function AvatarImage({ src, name, size = 40, badge }: Props) {
         <Image
           source={{ uri: src }}
           onError={() => setFailed(true)}
-          style={[dim, { backgroundColor: `rgba(${ink},0.05)` }]}
+          style={[dim, { backgroundColor: hex.muted, borderWidth: StyleSheet.hairlineWidth, borderColor: hex.hairline }]}
           resizeMode="cover"
         />
       )}
